@@ -1,0 +1,4 @@
+# Control-plane local secrets & data
+/data/*.sqlite
+/keys/*.key
+/archive/
