@@ -139,10 +139,12 @@ app.post('/api/wa/start', async (req, res) => {
     const instance = getInstanceById(db, delivery.instance_id);
     if (!instance?.public_ip) return send(res, 500, { ok: false, error: 'instance_missing_ip' });
 
+    const force = Boolean(req.body?.force);
+
     const r = await poolFetch(instance, '/api/wa/start', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ uuid }),
+      body: JSON.stringify({ uuid, force }),
       timeoutMs: 12000,
     });
 

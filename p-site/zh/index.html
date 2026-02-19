@@ -62,6 +62,7 @@
       </div>
       <div class="btns" style="margin-top:12px;">
         <button class="primary" id="getQrBtn" type="button" disabled>获取二维码</button>
+        <button id="restartBtn" type="button" disabled style="display:none;">重新获取</button>
       </div>
       <p class="hint" id="qrStatus" style="margin-top:10px;"></p>
     </div>
@@ -102,6 +103,7 @@
       const hasOtherDevice = document.getElementById('hasOtherDevice');
       const continueBtn = document.getElementById('continueBtn');
       const getQrBtn = document.getElementById('getQrBtn');
+      const restartBtn = document.getElementById('restartBtn');
       const qrStatus = document.getElementById('qrStatus');
       let turnstileToken = null;
 
@@ -224,11 +226,11 @@
 
       async function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
-      async function startProvision(uuid){
+      async function startProvision(uuid, force=false){
         const r = await fetch('/api/wa/start', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ uuid, turnstileToken })
+          body: JSON.stringify({ uuid, turnstileToken, force })
         });
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || '启动失败');
@@ -251,6 +253,25 @@
       }
 
       // 二维码获取（已接入）：请求池机侧 WhatsApp 网关生成并返回二维码
+
+      restartBtn.addEventListener('click', async () => {
+        // Force a fresh WhatsApp QR session for this UUID
+        const uuid = el.textContent.trim();
+        restartBtn.disabled = true;
+        qrStatus.textContent = '正在生成新的二维码…';
+
+        // Require re-verification each restart
+        turnstileToken = null;
+        getQrBtn.disabled = true;
+        try { if (window.turnstile) window.turnstile.reset(); } catch {}
+
+        // Hide old QR if any
+        const img = document.getElementById('qrImg');
+        if (img) img.style.display = 'none';
+
+        qrStatus.textContent = '请重新完成人机验证，然后点击“获取二维码”。';
+        restartBtn.style.display = 'none';
+      });
       getQrBtn.addEventListener('click', async () => {
         if (!turnstileToken) {
           qrStatus.textContent = '请先完成人机验证。';
@@ -310,7 +331,11 @@
               break;
             }
             if (st.status === 'closed') {
-              qrStatus.textContent = '二维码会话已结束，请刷新页面并重新验证生成新的二维码。';
+              qrStatus.textContent = '二维码已过期（会话已结束）。请点击“重新获取”，并重新完成人机验证。';
+              const img = document.getElementById('qrImg');
+              if (img) img.style.display = 'none';
+              restartBtn.style.display = 'inline-flex';
+              restartBtn.disabled = false;
               break;
             }
             await sleep(1200);
