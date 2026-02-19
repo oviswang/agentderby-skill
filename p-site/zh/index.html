@@ -167,7 +167,7 @@
 
         // 必须先通过人机验证才能获取二维码
         getQrBtn.disabled = true;
-        qrStatus.textContent = '请先完成人机验证，才能获取二维码。';
+        qrStatus.textContent = '请先完成人机验证。验证通过后，再点击下方“获取二维码”。';
 
         if (!document.getElementById('ts-script')) {
           const s = document.createElement('script');
@@ -204,7 +204,7 @@
                   turnstileToken = token;
                   getQrBtn.disabled = false;
                   restartBtn.style.display='none';
-                  qrStatus.textContent='';
+                  qrStatus.textContent='✅ 人机验证已通过，请点击下方“获取二维码”。';
                   // hide verification UI after success
                   const box=document.getElementById('turnstileBox'); if(box) box.style.display='none';
                 },

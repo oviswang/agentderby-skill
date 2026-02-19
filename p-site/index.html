@@ -178,7 +178,7 @@
 
         // Turnstile must pass before enabling QR
         getQrBtn.disabled = true;
-        qrStatus.textContent = 'Complete verification to enable “Get QR code”.';
+        qrStatus.textContent = 'Complete verification first. After it passes, click “Get QR code”.';
 
         // Load Turnstile lazily (optional signal for later enforcement)
         if (!document.getElementById('ts-script')) {
@@ -216,7 +216,7 @@
                   turnstileToken = token;
                   getQrBtn.disabled = false;
                   restartBtn.style.display='none';
-                  qrStatus.textContent = '';
+                  qrStatus.textContent = '✅ Verification passed. Click “Get QR code”.';
                   // hide verification UI after success
                   const box=document.getElementById('turnstileBox'); if(box) box.style.display='none';
                 },
