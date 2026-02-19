@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Contact — BOTHook</title>
+  <meta name="description" content="Contact BOTHook support." />
+  <link rel="icon" href="/assets/logo.jpg" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="canonical" href="https://bothook.me/th/contact.html" />
+</head>
+<body>
+  <header class="header">
+    <a class="brand" href="/" aria-label="BOTHook home">
+      <img src="/assets/logo.jpg" alt="BOTHook logo" />
+      <strong>BOTHook</strong>
+    </a>
+  </header>
+
+  <main class="main">
+    <div class="content-wrap" id="contentWrap">
+      <section class="card" style="max-width:760px; margin:0 auto;">
+        <h1 class="h1" style="font-size:32px; margin-bottom:8px;">Contact</h1>
+        <p class="p">Send us a message and we’ll reply by email.</p>
+
+        <div id="sent" class="card" style="display:none; background:rgba(90,255,209,.10);">
+          <strong>Thanks — we got it.</strong>
+          <div class="p" style="margin-top:8px;">We’ll reply to your email as soon as possible.</div>
+        </div>
+
+        <form id="form" class="card" style="margin-top:14px;" autocomplete="on">
+          <label class="label" for="email">Email</label>
+          <input id="email" name="email" type="email" required placeholder="you@company.com" class="input" />
+
+          <div style="height:12px"></div>
+
+          <label class="label" for="uuid">Provisioning UUID (optional)</label>
+          <input id="uuid" name="uuid" type="text" placeholder="From p.bothook.me" class="input" />
+
+          <div style="height:12px"></div>
+
+          <label class="label" for="message">Message</label>
+          <textarea id="message" name="message" rows="6" required placeholder="How can we help?" class="input"></textarea>
+
+          <div class="btns">
+            <button class="cta primary" type="submit">Send</button>
+            <a class="cta ghost" href="/">Back</a>
+          </div>
+          <p class="hint" style="margin-top:10px;">Tip: If you’re provisioning WhatsApp linking, include your UUID so we can find your session quickly.</p>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">© <span id="year"></span> BOTHook.</footer>
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // Prefill UUID from querystring (e.g. /contact.html?uuid=...)
+    const params = new URLSearchParams(location.search);
+    const uuid = params.get('uuid');
+    if (uuid) document.getElementById('uuid').value = uuid;
+
+    const form = document.getElementById('form');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        email: form.email.value,
+        uuid: form.uuid.value,
+        message: form.message.value,
+        pageLang: document.documentElement.lang || 'en',
+      };
+
+      try {
+        const r = await fetch('/api/support/ticket', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const j = await r.json().catch(() => null);
+        if (!r.ok || !j || !j.ok) throw new Error(j?.error || 'Failed');
+
+        const sent = document.getElementById('sent');
+        sent.style.display = 'block';
+        sent.innerHTML = `<strong>Thanks — we got it.</strong><div class="p" style="margin-top:8px;">Ticket: <strong>${j.ticket_id}</strong>. We’ll reply to your email as soon as possible.</div>`;
+        form.style.display = 'none';
+        sent.scrollIntoView({behavior:'smooth', block:'start'});
+      } catch (err) {
+        alert('Could not submit. Please try again in a moment.');
+      }
+    });
+  </script>
+
+  <style>
+    .input{width:100%;border:0;border-radius:14px;padding:12px 12px;background:rgba(255,255,255,.06);color:var(--text);outline:none}
+    .input::placeholder{color:rgba(169,182,214,.7)}
+    textarea.input{resize:vertical;min-height:120px}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  </style>
+</body>
+</html>

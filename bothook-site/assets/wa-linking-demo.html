@@ -175,7 +175,16 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI"
   // i18n for embedded demo (follows parent by query param: ?lang=...)
   const params = new URLSearchParams(location.search);
   const raw = (params.get('lang') || (navigator.language || 'en')).toLowerCase();
-  const lang = (raw.startsWith('zh-tw') || raw.startsWith('zh-hant') || raw.startsWith('zh-hk')) ? 'zh-tw' : (raw.startsWith('zh') ? 'zh' : 'en');
+  function pickLang(raw){
+    const supported = new Set(['en','zh','zh-tw','ja','ko','fr','de','es','pt-br','ru','ar','hi','id','th','vi']);
+    if (supported.has(raw)) return raw;
+    if (raw.startsWith('zh-tw') || raw.startsWith('zh-hant') || raw.startsWith('zh-hk')) return 'zh-tw';
+    if (raw.startsWith('zh')) return 'zh';
+    if (raw.startsWith('pt-br')) return 'pt-br';
+    const base = raw.split('-')[0];
+    return supported.has(base) ? base : 'en';
+  }
+  const lang = pickLang(raw);
 
   const dict = {
     en: {
@@ -222,11 +231,106 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI"
       phoneHint: '휴대폰을 QR 코드에 대세요',
       caption: 'WhatsApp에서 <strong>연결된 기기</strong> → <strong>기기 연결</strong>을 열고 화면의 QR 코드를 스캔하세요.',
       aria: 'WhatsApp 기기 연결 데모: PC에 QR 코드가 표시되고, 휴대폰이 스캔한 뒤 체크 표시가 나타납니다.'
+    },
+    fr: {
+      title: 'Lier un appareil',
+      subtitle: 'Scannez un QR code pour vous connecter',
+      domain: 'p.bothook.me',
+      scanHint: 'Scannez le QR code à l’écran',
+      phoneHint: 'Pointez votre téléphone vers le QR code',
+      caption: 'Dans WhatsApp, ouvrez <strong>Appareils connectés</strong> → <strong>Lier un appareil</strong>, puis scannez le QR code à l’écran.',
+      aria: 'Démo WhatsApp : un ordinateur affiche un QR code, un téléphone le scanne, puis une coche apparaît.'
+    },
+    de: {
+      title: 'Gerät verknüpfen',
+      subtitle: 'QR‑Code scannen, um zu verbinden',
+      domain: 'p.bothook.me',
+      scanHint: 'Scanne den QR‑Code auf dem Bildschirm',
+      phoneHint: 'Richte dein Handy auf den QR‑Code',
+      caption: 'In WhatsApp: <strong>Verknüpfte Geräte</strong> → <strong>Gerät verknüpfen</strong>, dann den QR‑Code auf dem Bildschirm scannen.',
+      aria: 'WhatsApp‑Demo: Ein Desktop zeigt einen QR‑Code, ein Handy scannt ihn, dann erscheint ein Haken.'
+    },
+    es: {
+      title: 'Vincular un dispositivo',
+      subtitle: 'Escanea un QR para conectar',
+      domain: 'p.bothook.me',
+      scanHint: 'Escanea el QR en la pantalla',
+      phoneHint: 'Apunta tu teléfono al QR',
+      caption: 'En WhatsApp, abre <strong>Dispositivos vinculados</strong> → <strong>Vincular un dispositivo</strong> y escanea el QR en tu pantalla.',
+      aria: 'Demo de WhatsApp: un ordenador muestra un QR, un teléfono lo escanea y aparece una marca de verificación.'
+    },
+    'pt-br': {
+      title: 'Vincular um dispositivo',
+      subtitle: 'Escaneie um QR code para conectar',
+      domain: 'p.bothook.me',
+      scanHint: 'Escaneie o QR code na tela',
+      phoneHint: 'Aponte o celular para o QR code',
+      caption: 'No WhatsApp, abra <strong>Aparelhos conectados</strong> → <strong>Vincular um aparelho</strong> e escaneie o QR code na tela.',
+      aria: 'Demonstração do WhatsApp: um desktop mostra um QR code, um celular escaneia e aparece um check.'
+    },
+    ru: {
+      title: 'Подключить устройство',
+      subtitle: 'Отсканируйте QR‑код для подключения',
+      domain: 'p.bothook.me',
+      scanHint: 'Сканируйте QR‑код на экране',
+      phoneHint: 'Наведите телефон на QR‑код',
+      caption: 'В WhatsApp откройте <strong>Связанные устройства</strong> → <strong>Подключить устройство</strong>, затем отсканируйте QR‑код на экране.',
+      aria: 'Демо WhatsApp: на компьютере показан QR‑код, телефон сканирует его, затем появляется галочка.'
+    },
+    ar: {
+      title: 'ربط جهاز',
+      subtitle: 'امسح رمز QR للاتصال',
+      domain: 'p.bothook.me',
+      scanHint: 'امسح رمز QR على الشاشة',
+      phoneHint: 'وجّه هاتفك نحو رمز QR',
+      caption: 'في WhatsApp افتح <strong>الأجهزة المرتبطة</strong> → <strong>ربط جهاز</strong> ثم امسح رمز QR على الشاشة.',
+      aria: 'عرض توضيحي لـ WhatsApp: يعرض الكمبيوتر رمز QR، ويقوم الهاتف بمسحه ثم تظهر علامة صح.'
+    },
+    hi: {
+      title: 'डिवाइस लिंक करें',
+      subtitle: 'कनेक्ट करने के लिए QR कोड स्कैन करें',
+      domain: 'p.bothook.me',
+      scanHint: 'स्क्रीन पर QR कोड स्कैन करें',
+      phoneHint: 'फ़ोन को QR कोड की तरफ़ करें',
+      caption: 'WhatsApp में <strong>Linked devices</strong> → <strong>Link a device</strong> खोलें और स्क्रीन पर QR कोड स्कैन करें।',
+      aria: 'WhatsApp डेमो: डेस्कटॉप पर QR कोड दिखता है, फ़ोन स्कैन करता है और चेकमार्क आता है।'
+    },
+    id: {
+      title: 'Tautkan perangkat',
+      subtitle: 'Pindai QR untuk terhubung',
+      domain: 'p.bothook.me',
+      scanHint: 'Pindai QR di layar',
+      phoneHint: 'Arahkan ponsel ke QR',
+      caption: 'Di WhatsApp, buka <strong>Perangkat tertaut</strong> → <strong>Tautkan perangkat</strong>, lalu pindai QR di layar.',
+      aria: 'Demo WhatsApp: desktop menampilkan QR, ponsel memindai, lalu muncul tanda centang.'
+    },
+    th: {
+      title: 'เชื่อมโยงอุปกรณ์',
+      subtitle: 'สแกน QR เพื่อเชื่อมต่อ',
+      domain: 'p.bothook.me',
+      scanHint: 'สแกน QR บนหน้าจอ',
+      phoneHint: 'เล็งโทรศัพท์ไปที่ QR',
+      caption: 'ใน WhatsApp ไปที่ <strong>อุปกรณ์ที่เชื่อมโยง</strong> → <strong>เชื่อมโยงอุปกรณ์</strong> แล้วสแกน QR บนหน้าจอ',
+      aria: 'เดโม WhatsApp: คอมพิวเตอร์แสดง QR โทรศัพท์สแกน แล้วมีเครื่องหมายถูกปรากฏ'
+    },
+    vi: {
+      title: 'Liên kết thiết bị',
+      subtitle: 'Quét mã QR để kết nối',
+      domain: 'p.bothook.me',
+      scanHint: 'Quét mã QR trên màn hình',
+      phoneHint: 'Hướng điện thoại vào mã QR',
+      caption: 'Trong WhatsApp, mở <strong>Thiết bị đã liên kết</strong> → <strong>Liên kết thiết bị</strong>, rồi quét mã QR trên màn hình.',
+      aria: 'Demo WhatsApp: máy tính hiển thị QR, điện thoại quét và hiện dấu tích.'
     }
   };
 
   const t = dict[lang] || dict.en;
-  document.documentElement.lang = (lang === 'zh') ? 'zh-CN' : (lang === 'zh-tw' ? 'zh-TW' : 'en');
+  const htmlLang = {
+    'en':'en','zh':'zh-CN','zh-tw':'zh-TW','ja':'ja','ko':'ko','fr':'fr','de':'de','es':'es','pt-br':'pt-BR',
+    'ru':'ru','ar':'ar','hi':'hi','id':'id','th':'th','vi':'vi'
+  };
+  document.documentElement.lang = htmlLang[lang] || 'en';
+  if (lang === 'ar') document.documentElement.dir = 'rtl';
   const demo = document.querySelector('.wa-demo');
   if (demo) demo.setAttribute('aria-label', t.aria);
 
