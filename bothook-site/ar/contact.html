@@ -1,17 +1,19 @@
 <!doctype html>
-<html lang="ar">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Contact — BOTHook</title>
-  <meta name="description" content="Contact BOTHook support." />
+  <title>تواصل — BOTHook</title>
+  <meta name="description" content="تواصل مع دعم BOTHook." />
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="canonical" href="https://bothook.me/ar/contact.html" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/contact.html" />
+  <link rel="alternate" hreflang="ar" href="https://bothook.me/ar/contact.html" />
 </head>
 <body>
   <header class="header">
-    <a class="brand" href="/ar/" aria-label="BOTHook home">
+    <a class="brand" href="/ar/" aria-label="الصفحة الرئيسية لـ BOTHook">
       <img src="/assets/logo.jpg" alt="BOTHook logo" />
       <strong>BOTHook</strong>
     </a>
@@ -20,48 +22,39 @@
   <main class="main">
     <div class="content-wrap" id="contentWrap">
       <section class="card" style="max-width:760px; margin:0 auto;">
-        <h1 class="h1" style="font-size:32px; margin-bottom:8px;">Contact</h1>
-        <p class="p">Send us a message and we’ll reply by email.</p>
+        <h1 class="h1" style="font-size:32px; margin-bottom:8px;">تواصل</h1>
+        <p class="p">أرسل لنا رسالة وسنرد عليك عبر البريد الإلكتروني.</p>
 
         <div id="sent" class="card" style="display:none; background:rgba(90,255,209,.10);">
-          <strong>Thanks — we got it.</strong>
-          <div class="p" style="margin-top:8px;">We’ll reply to your email as soon as possible.</div>
+          <strong>شكرًا — تم الاستلام.</strong>
+          <div class="p" style="margin-top:8px;">سنرد على بريدك الإلكتروني في أقرب وقت ممكن.</div>
         </div>
 
         <form id="form" class="card" style="margin-top:14px;" autocomplete="on">
-          <label class="label" for="email">Email</label>
+          <label class="label" for="email">البريد الإلكتروني</label>
           <input id="email" name="email" type="email" required placeholder="you@company.com" class="input" />
 
           <div style="height:12px"></div>
 
-          <label class="label" for="uuid">Provisioning UUID (optional)</label>
-          <input id="uuid" name="uuid" type="text" placeholder="From p.bothook.me" class="input" />
+          <label class="label" for="uuid">Provisioning UUID (اختياري)</label>
+          <input id="uuid" name="uuid" type="text" placeholder="من p.bothook.me" class="input" />
 
           <div style="height:12px"></div>
 
-          <label class="label" for="message">Message</label>
-          <textarea id="message" name="message" rows="6" required placeholder="How can we help?" class="input"></textarea>
+          <label class="label" for="message">الرسالة</label>
+          <textarea id="message" name="message" rows="6" required placeholder="كيف يمكننا مساعدتك؟" class="input"></textarea>
 
           <div class="btns">
-            <button class="cta primary" type="submit">Send</button>
-            <a class="cta ghost" href="/">Back</a>
+            <button class="cta primary" type="submit">إرسال</button>
+            <a class="cta ghost" href="/ar/">رجوع</a>
           </div>
-          <p class="hint" style="margin-top:10px;">Tip: If you’re provisioning WhatsApp linking, include your UUID so we can find your session quickly.</p>
+          <p class="hint" style="margin-top:10px;">نصيحة: إذا كنت تقوم بعملية ربط WhatsApp (provisioning)، أضف UUID الخاص بك حتى نتمكن من العثور على جلستك بسرعة.</p>
         </form>
       </section>
     </div>
   </main>
 
-  <footer class="footer">© <span id="year"></span> BOTHook.</footer>
-
   <script>
-    const wrap = document.getElementById('contentWrap');
-    wrap.style.opacity = '0';
-    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
-
-    document.getElementById('year').textContent = new Date().getFullYear();
-
-    // Prefill UUID from querystring (e.g. /contact.html?uuid=...)
     const params = new URLSearchParams(location.search);
     const uuid = params.get('uuid');
     if (uuid) document.getElementById('uuid').value = uuid;
@@ -73,7 +66,7 @@
         email: form.email.value,
         uuid: form.uuid.value,
         message: form.message.value,
-        pageLang: document.documentElement.lang || 'en',
+        pageLang: document.documentElement.lang || 'ar',
       };
 
       try {
@@ -83,15 +76,15 @@
           body: JSON.stringify(payload),
         });
         const j = await r.json().catch(() => null);
-        if (!r.ok || !j || !j.ok) throw new Error(j?.error || 'Failed');
+        if (!r.ok || !j || !j.ok) throw new Error(j?.error || 'فشل');
 
         const sent = document.getElementById('sent');
         sent.style.display = 'block';
-        sent.innerHTML = `<strong>Thanks — we got it.</strong><div class="p" style="margin-top:8px;">Ticket: <strong>${j.ticket_id}</strong>. We’ll reply to your email as soon as possible.</div>`;
+        sent.innerHTML = `<strong>شكرًا — تم الاستلام.</strong><div class="p" style="margin-top:8px;">Ticket: <strong>${j.ticket_id}</strong>. سنرد على بريدك الإلكتروني في أقرب وقت ممكن.</div>`;
         form.style.display = 'none';
         sent.scrollIntoView({behavior:'smooth', block:'start'});
       } catch (err) {
-        alert('Could not submit. Please try again in a moment.');
+        alert('تعذر الإرسال. يرجى المحاولة مرة أخرى بعد قليل.');
       }
     });
   </script>
@@ -102,5 +95,30 @@
     textarea.input{resize:vertical;min-height:120px}
     .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
   </style>
+
+  <footer class="footer">
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/ar/contact.html">تواصل</a>
+        <span class="dot">·</span>
+        <a href="/ar/terms.html">الشروط</a>
+        <span class="dot">·</span>
+        <a href="/ar/privacy.html">الخصوصية</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    if (wrap) {
+      wrap.style.opacity = '0';
+      requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
+    }
+    const y = document.getElementById('year');
+    if (y) y.textContent = new Date().getFullYear();
+    const d = document.getElementById('d');
+    if (d) d.textContent = new Date().toISOString().slice(0,10);
+  </script>
 </body>
 </html>
