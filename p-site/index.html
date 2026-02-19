@@ -310,6 +310,7 @@
         }
         const uuid = el.textContent.trim();
         let hadQr = false;
+        let linked = false;
         getQrBtn.disabled = true;
         qrStatus.textContent = 'Requesting QR code…';
 
@@ -385,7 +386,11 @@
             statusErrs = 0;
             setDiag({ uuid, instance_id: st.instance_id, status: st.status, connected: st.connected, reason: st.reason, restartCount: st.restartCount, lastUpdateAt: st.lastUpdateAt });
             if (st.connected) {
+              linked = true;
               qrStatus.textContent = '✅ Linked! This delivery machine is now connected.';
+              if (img) img.style.display = 'none';
+              getQrBtn.style.display = 'none';
+              restartBtn.style.display = 'none';
               break;
             }
             if (st.status === 'closed') {
@@ -402,7 +407,7 @@
         } catch (e) {
           qrStatus.textContent = `Failed: ${e.message || e}`;
         } finally {
-          getQrBtn.disabled = false;
+          if (!linked) getQrBtn.disabled = false;
         }
       });
     </script>
