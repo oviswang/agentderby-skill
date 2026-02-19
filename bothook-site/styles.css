@@ -50,9 +50,9 @@ a{color:inherit}
 /* (kept intentionally minimal — avoid repeated copy) */
 
 .priceBig{font-size:30px;line-height:1.05;margin:8px 0 10px;color:rgba(232,238,252,.98);font-weight:900;letter-spacing:.2px}
-.priceBig .currency{opacity:.92;font-weight:900;font-size:15px}
+.priceBig .currency{opacity:.92;font-weight:900;font-size:17px}
 .priceBig .amount{font-size:44px}
-.priceBig .unit{opacity:.88;font-weight:800;font-size:15px;margin-left:6px}
+.priceBig .unit{opacity:.88;font-weight:800;font-size:17px;margin-left:6px}
 
 
 .ctaRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
