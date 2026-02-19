@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Contact — BOTHook</title>
-  <meta name="description" content="Contact BOTHook support." />
+  <title>문의 — BOTHook</title>
+  <meta name="description" content="BOTHook 지원 문의." />
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="canonical" href="https://bothook.me/ko/contact.html" />
@@ -20,30 +20,30 @@
   <main class="main">
     <div class="content-wrap" id="contentWrap">
       <section class="card" style="max-width:760px; margin:0 auto;">
-        <h1 class="h1" style="font-size:32px; margin-bottom:8px;">Contact</h1>
-        <p class="p">Send us a message and we’ll reply by email.</p>
+        <h1 class="h1" style="font-size:32px; margin-bottom:8px;">문의</h1>
+        <p class="p">메시지를 보내주시면 이메일로 답변드립니다.</p>
 
         <div id="sent" class="card" style="display:none; background:rgba(90,255,209,.10);">
-          <strong>Thanks — we got it.</strong>
-          <div class="p" style="margin-top:8px;">We’ll reply to your email as soon as possible.</div>
+          <strong>접수되었습니다. 감사합니다.</strong>
+          <div class="p" style="margin-top:8px;">가능한 빨리 이메일로 답변드리겠습니다.</div>
         </div>
 
         <form id="form" class="card" style="margin-top:14px;" autocomplete="on">
-          <label class="label" for="email">Email</label>
+          <label class="label" for="email">이메일</label>
           <input id="email" name="email" type="email" required placeholder="you@company.com" class="input" />
 
           <div style="height:12px"></div>
 
-          <label class="label" for="uuid">Provisioning UUID (optional)</label>
-          <input id="uuid" name="uuid" type="text" placeholder="From p.bothook.me" class="input" />
+          <label class="label" for="uuid">UUID(선택)</label>
+          <input id="uuid" name="uuid" type="text" placeholder="p.bothook.me 링크에서" class="input" />
 
           <div style="height:12px"></div>
 
-          <label class="label" for="message">Message</label>
+          <label class="label" for="message">메시지</label>
           <textarea id="message" name="message" rows="6" required placeholder="How can we help?" class="input"></textarea>
 
           <div class="btns">
-            <button class="cta primary" type="submit">Send</button>
+            <button class="cta primary" type="submit">보내기</button>
             <a class="cta ghost" href="/">Back</a>
           </div>
           <p class="hint" style="margin-top:10px;">Tip: If you’re provisioning WhatsApp linking, include your UUID so we can find your session quickly.</p>
@@ -87,7 +87,7 @@
 
         const sent = document.getElementById('sent');
         sent.style.display = 'block';
-        sent.innerHTML = `<strong>Thanks — we got it.</strong><div class="p" style="margin-top:8px;">Ticket: <strong>${j.ticket_id}</strong>. We’ll reply to your email as soon as possible.</div>`;
+        sent.innerHTML = `<strong>접수되었습니다. 감사합니다.</strong><div class="p" style="margin-top:8px;">Ticket: <strong>${j.ticket_id}</strong>. 가능한 빨리 이메일로 답변드리겠습니다.</div>`;
         form.style.display = 'none';
         sent.scrollIntoView({behavior:'smooth', block:'start'});
       } catch (err) {
