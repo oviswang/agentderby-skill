@@ -56,8 +56,9 @@
     <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
       <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">获取二维码</div>
       <p class="hint">请先完成人机验证，才能获取二维码。</p>
-      <div id="turnstile" style="margin-top:10px; min-height:72px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);">
-        <span class="hint" id="turnstileHint">正在加载人机验证…</span>
+      <div id="turnstileBox" style="margin-top:10px; min-height:72px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);">
+        <div id="turnstileWidget"></div>
+        <span class="hint" id="turnstileHint" style="position:absolute;">正在加载人机验证…</span>
       </div>
       <div class="btns" style="margin-top:12px;">
         <button class="primary" id="getQrBtn" type="button" disabled>获取二维码</button>
@@ -193,7 +194,7 @@
             if (!window.turnstile) return failLoad('人机验证初始化失败，请刷新页面。');
 
             try {
-              window.turnstile.render('#turnstile', {
+              window.turnstile.render('#turnstileWidget', {
                 sitekey: '0x4AAAAAACa0PQ3rbwIf9090',
                 theme: 'dark',
                 callback: (token) => {
