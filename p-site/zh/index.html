@@ -258,6 +258,13 @@
         return j;
       }
 
+      async function fetchDeliveryStatus(uuid){
+        const r = await fetch(`/api/delivery/status?uuid=${encodeURIComponent(uuid)}`);
+        const j = await r.json().catch(()=> ({}));
+        if (!r.ok) throw new Error(j.error || `delivery http ${r.status}`);
+        return j;
+      }
+
       async function fetchStatus(uuid){
         const r = await fetch(`/api/wa/status?uuid=${encodeURIComponent(uuid)}`);
         const j = await r.json().catch(()=> ({}));
@@ -346,6 +353,32 @@
               }
             } catch (e) {
               // 忽略暂时未就绪的情况
+            }            let deliveryStatus;
+            try {
+              deliveryStatus = await fetchDeliveryStatus(uuid);
+              // Authoritative: once wa_jid is set, consider it linked even if the pool status endpoint is flaky.
+              if (deliveryStatus && deliveryStatus.ok && deliveryStatus.wa_jid) {
+                linked = true;
+                qrStatus.textContent = '✅ 已关联！这台交付机器已成功连接到你的 WhatsApp。';
+                if (img) img.style.display = 'none';
+                getQrBtn.style.display = 'none';
+                restartBtn.style.display = 'none';
+                verifyCard.style.display = 'none';
+                if (linkedCard) linkedCard.style.display = 'block';
+                break;
+              }
+              // If expired/recycled, show expired UI
+              const stx = (deliveryStatus && deliveryStatus.status) ? String(deliveryStatus.status) : '';
+              if (stx === 'QR_EXPIRED' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNBOUND') {
+                qrStatus.textContent = '❌ 本次链接已过期，请点击“重试”重新生成。';
+                if (img) img.style.display = 'none';
+                getQrBtn.style.display = 'none';
+                restartBtn.style.display = 'inline-flex';
+                restartBtn.disabled = false;
+                break;
+              }
+            } catch (e) {
+              // ignore delivery-status errors and fall back to pool status
             }
 
             let st;
