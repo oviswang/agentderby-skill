@@ -47,27 +47,13 @@ a{color:inherit}
 }
 .priceCard > *{position:relative}
 
-.priceTag{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  font-size:12px;
-  letter-spacing:.14em;
-  text-transform:uppercase;
-  color:rgba(232,238,252,.9);
-  background:rgba(255,255,255,.06);
-  border:1px solid rgba(255,255,255,.10);
-  padding:8px 10px;
-  border-radius:999px;
-}
+/* (kept intentionally minimal — avoid repeated copy) */
 
-.priceBig{font-size:30px;line-height:1.05;margin:14px 0 12px;color:rgba(232,238,252,.98);font-weight:900;letter-spacing:.2px}
+.priceBig{font-size:30px;line-height:1.05;margin:8px 0 10px;color:rgba(232,238,252,.98);font-weight:900;letter-spacing:.2px}
 .priceBig .currency{opacity:.92;font-weight:900}
 .priceBig .amount{font-size:56px}
 .priceBig .unit{opacity:.88;font-weight:800;font-size:18px;margin-left:6px}
 
-.priceCardBottom{display:flex;flex-direction:column;gap:6px;margin-top:10px}
-.mini{font-size:13px;color:rgba(169,182,214,.95);line-height:1.4}
 
 .ctaRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
 .cta{display:inline-flex;align-items:center;justify-content:center;padding:12px 14px;border-radius:14px;text-decoration:none;font-weight:600}
