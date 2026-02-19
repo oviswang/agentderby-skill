@@ -149,3 +149,11 @@ CREATE TABLE IF NOT EXISTS shortlinks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_shortlinks_expires ON shortlinks(expires_at);
+
+
+-- Shortlink generation locks (provision_uuid+kind)
+CREATE TABLE IF NOT EXISTS shortlink_locks (
+  lock_key TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  code TEXT
+);

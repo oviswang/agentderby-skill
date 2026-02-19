@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openDb, nowIso } from './lib/db.mjs';
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 function readSchemaSql() {
   const p = path.join(process.cwd(), 'schema.sql');

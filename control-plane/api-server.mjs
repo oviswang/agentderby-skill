@@ -24,6 +24,17 @@ import { openDb, nowIso } from './lib/db.mjs';
 const PORT = parseInt(process.env.BOTHOOK_API_PORT || '18998', 10);
 const POOL_HTTP_PORT = parseInt(process.env.BOTHOOK_POOL_HTTP_PORT || '80', 10);
 
+function normalizeWaBase(waJid){
+  try {
+    if (!waJid) return null;
+    const left = String(waJid).split('@')[0];
+    const num = left.split(':')[0];
+    return num + '@s.whatsapp.net';
+  } catch {
+    return null;
+  }
+}
+
 function jsonMeta(s) {
   try { return s ? JSON.parse(s) : null; } catch { return null; }
 }
@@ -181,6 +192,20 @@ function upsertShortlink(db, { code, long_url, created_at, expires_at, kind, del
     .run(code, long_url, created_at, expires_at, kind, delivery_id, provision_uuid, meta ? JSON.stringify(meta) : null);
 }
 
+function tryAcquireShortlinkLock(db, lockKey, ts){
+  // Returns existing code if lock already exists, else creates lock row and returns null.
+  const ex = db.prepare('SELECT code FROM shortlink_locks WHERE lock_key=?').get(lockKey);
+  if (ex) return ex.code || '';
+  db.prepare('INSERT OR IGNORE INTO shortlink_locks(lock_key, created_at, code) VALUES (?,?,?)').run(lockKey, ts, null);
+  const ex2 = db.prepare('SELECT code FROM shortlink_locks WHERE lock_key=?').get(lockKey);
+  return ex2.code || null;
+}
+
+function setShortlinkLockCode(db, lockKey, code){
+  db.prepare('UPDATE shortlink_locks SET code=? WHERE lock_key=?').run(code, lockKey);
+}
+
+
 
 function isDebug(req) {
   return req.query?.debug === '1' || req.headers['x-bothook-debug'] === '1' || process.env.BOTHOOK_DEBUG === '1';
@@ -318,12 +343,21 @@ app.get('/api/wa/status', async (req, res) => {
             crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'UUID_BOUND', JSON.stringify({ uuid, wa_jid: waJid, instance_id: instance.instance_id })
           );
         } else if (bound && waJid && bound !== waJid) {
-          // takeover attempt: keep delivery inactive and report mismatch
-          db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-            crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'UUID_BIND_MISMATCH', JSON.stringify({ uuid, expected: bound, got: waJid, instance_id: instance.instance_id })
-          );
-          db.exec('COMMIT');
-          return send(res, 403, { ok: false, error: 'uuid_bound_to_another_account' });
+          // allow device id change for same number (e.g. :46 -> :47)
+          const expectedBase = normalizeWaBase(bound);
+          const gotBase = normalizeWaBase(waJid);
+          if (expectedBase && gotBase && expectedBase === gotBase) {
+            db.prepare('UPDATE deliveries SET wa_jid=?, updated_at=? WHERE delivery_id=?').run(waJid, ts, delivery.delivery_id);
+            db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+              crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'UUID_BIND_DEVICE_CHANGED', JSON.stringify({ uuid, expected: bound, got: waJid, base: expectedBase, instance_id: instance.instance_id })
+            );
+          } else {
+            db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+              crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'UUID_BIND_MISMATCH', JSON.stringify({ uuid, expected: bound, got: waJid, instance_id: instance.instance_id })
+            );
+            db.exec('COMMIT');
+            return send(res, 403, { ok: false, error: 'uuid_bound_to_another_account' });
+          }
         } else {
           // Either already bound to same jid, or jid missing; just mark active.
           db.prepare('UPDATE deliveries SET status=?, updated_at=? WHERE delivery_id=?').run('ACTIVE', ts, delivery.delivery_id);
@@ -355,10 +389,38 @@ app.post('/api/pay/link', async (req, res) => {
     const delivery = getOrCreateDeliveryForUuid(db, uuid);    // Determine expiry: 15m window from link creation time
     const now = Date.now();
     const expiresAt = new Date(now + 15*60*1000).toISOString();
+    // Pay link idempotency (lock + reuse)
+    const lockKey = `stripe_checkout:${uuid}`;
+    const ts = nowIso();
+
+    db.exec('BEGIN IMMEDIATE');
+    let lockedCode = null;
+    try {
+      lockedCode = tryAcquireShortlinkLock(db, lockKey, ts);
+      db.exec('COMMIT');
+    } catch (e) {
+      try { db.exec('ROLLBACK'); } catch {}
+      lockedCode = null;
+    }
+
+    // If a code is already locked/assigned, reuse it (if unexpired)
+    if (lockedCode) {
+      const row = db.prepare('SELECT expires_at FROM shortlinks WHERE code=?').get(lockedCode);
+      if (!row || !row.expires_at || Date.parse(row.expires_at) > now) {
+        db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+          crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_LINK_REUSED', JSON.stringify({ uuid, code: lockedCode })
+        );
+        return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, payUrl: baseUrlForShortlinks()+lockedCode, expiresAt: (row && row.expires_at) ? row.expires_at : expiresAt });
+      }
+    }
 
     // If an unexpired shortlink already exists for this uuid, reuse it
-    const existing = db.prepare(`SELECT code, long_url, expires_at FROM shortlinks WHERE provision_uuid=? AND kind='stripe_checkout' ORDER BY created_at DESC LIMIT 1`).get(uuid);
+    const existing = db.prepare(`SELECT code, expires_at FROM shortlinks WHERE provision_uuid=? AND kind='stripe_checkout' ORDER BY created_at DESC LIMIT 1`).get(uuid);
     if (existing?.code && (!existing.expires_at || Date.parse(existing.expires_at) > now)) {
+      setShortlinkLockCode(db, lockKey, existing.code);
+      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+        crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_LINK_REUSED', JSON.stringify({ uuid, code: existing.code })
+      );
       return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, payUrl: baseUrlForShortlinks()+existing.code, expiresAt: existing.expires_at || expiresAt });
     }
 
@@ -372,11 +434,11 @@ app.post('/api/pay/link', async (req, res) => {
     }
     if (!code) throw new Error('shortlink_code_exhausted');
 
-    const ts = nowIso();
+    const ts2 = nowIso();
     upsertShortlink(db, {
       code,
       long_url: checkout.url,
-      created_at: ts,
+      created_at: ts2,
       expires_at: expiresAt,
       kind: 'stripe_checkout',
       delivery_id: delivery.delivery_id,
@@ -384,8 +446,12 @@ app.post('/api/pay/link', async (req, res) => {
       meta: { stripe_session_id: checkout.id },
     });
 
+    // persist lock code
+    try { setShortlinkLockCode(db, lockKey, code); } catch {}
+
+
     db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-      crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_LINK_CREATED', JSON.stringify({ uuid, code, expires_at: expiresAt })
+      crypto.randomUUID(), ts2, 'delivery', delivery.delivery_id, 'PAY_LINK_CREATED', JSON.stringify({ uuid, code, expires_at: expiresAt })
     );
 
     return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, payUrl: baseUrlForShortlinks()+code, expiresAt });
