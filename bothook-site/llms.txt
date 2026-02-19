@@ -1,0 +1,18 @@
+# BOTHook (bothook.me)
+
+BOTHook helps you use OpenClaw directly inside WhatsApp.
+
+Key facts:
+- Price: $9.8/month
+- Where to use: WhatsApp (Message yourself / self-chat)
+- OpenAI API key: bring your own
+- Cancel: anytime inside WhatsApp (no charge next month)
+- Relink: paid + active only, must match the same WhatsApp account
+
+Important URLs:
+- Home (EN): https://bothook.me/
+- Home (ZH): https://bothook.me/zh/
+- Get started / status: https://p.bothook.me/
+- Terms: https://bothook.me/terms.html
+- Privacy: https://bothook.me/privacy.html
+- Contact: https://bothook.me/contact.html
