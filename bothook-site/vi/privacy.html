@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Privacy — BOTHook</title>
-  <meta name="description" content="BOTHook Privacy Policy." />
+  <title>Quyền riêng tư — BOTHook</title>
+  <meta name="description" content="Chính sách quyền riêng tư của BOTHook." />
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="canonical" href="https://bothook.me/vi/privacy.html" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/privacy.html" />
+  <link rel="alternate" hreflang="vi" href="https://bothook.me/vi/privacy.html" />
 </head>
 <body>
   <header class="header">
-    <a class="brand" href="/vi/" aria-label="BOTHook home">
+    <a class="brand" href="/vi/" aria-label="Trang chủ BOTHook">
       <img src="/assets/logo.jpg" alt="BOTHook logo" />
       <strong>BOTHook</strong>
     </a>
@@ -28,7 +30,7 @@
         <h2 class="h2">1. Dữ liệu chúng tôi thu thập</h2>
         <ul class="list">
           <li><strong>Dữ liệu sử dụng website</strong>: log cơ bản cho vận hành/bảo mật (ví dụ: thời gian, IP, user agent).</li>
-          <li><strong>Gửi form liên hệ</strong>: email bạn cung cấp, tin nhắn, và (tuỳ chọn) UUID provisioning.</li>
+          <li><strong>Gửi form liên hệ</strong>: email bạn cung cấp, tin nhắn, và (tuỳ chọn) Provisioning UUID.</li>
           <li><strong>Metadata dịch vụ</strong>: dữ liệu tối thiểu để provision/quản lý instance (ví dụ: mã đơn hàng/phiên, trạng thái).</li>
         </ul>
 
@@ -48,21 +50,40 @@
         <h2 class="h2">5. Lưu giữ dữ liệu</h2>
         <p class="p">Chúng tôi chỉ lưu dữ liệu trong thời gian cần thiết cho vận hành/hỗ trợ, sau đó sẽ xoá hoặc ẩn danh khi phù hợp.</p>
 
-        <h2 class="h2">6. Liên hệ</h2>
-        <p class="p">Nếu bạn có câu hỏi về quyền riêng tư, hãy liên hệ qua trang Contact.</p>
+        <h2 class="h2">6. Bảo mật</h2>
+        <p class="p">Chúng tôi áp dụng các biện pháp hợp lý để bảo vệ thông tin (kiểm soát truy cập, mã hoá khi truyền, và nguyên tắc least‑privilege). Tuy nhiên, không có hệ thống nào an toàn tuyệt đối.</p>
 
+        <h2 class="h2">7. Lựa chọn của bạn</h2>
+        <ul class="list">
+          <li>Bạn có thể liên hệ để yêu cầu truy cập, chỉnh sửa, hoặc xoá thông tin liên hệ bạn đã gửi.</li>
+          <li>Bạn có thể ngừng sử dụng dịch vụ bất kỳ lúc nào bằng cách không gia hạn.</li>
+        </ul>
+
+        <h2 class="h2">8. Liên hệ</h2>
+        <p class="p">Có câu hỏi về quyền riêng tư? Hãy dùng <a href="/vi/contact.html">trang liên hệ</a>.</p>
       </section>
     </div>
   </main>
 
   <footer class="footer">
-    <div class="footer-inner">
-      <a class="footer-link" href="/vi/">Home</a>
-      <a class="footer-link" href="/vi/terms.html">Terms</a>
-      <a class="footer-link" href="/vi/privacy.html">Privacy</a>
-      <a class="footer-link" href="/vi/contact.html">Contact</a>
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/vi/contact.html">Liên hệ</a>
+        <span class="dot">·</span>
+        <a href="/vi/terms.html">Điều khoản</a>
+        <span class="dot">·</span>
+        <a href="/vi/privacy.html">Quyền riêng tư</a>
+      </nav>
     </div>
   </footer>
-  <script>document.getElementById('d').textContent = new Date().toISOString().slice(0, 10);</script>
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
+    document.getElementById('year').textContent = new Date().getFullYear();
+    document.getElementById('d').textContent = new Date().toISOString().slice(0,10);
+  </script>
 </body>
 </html>

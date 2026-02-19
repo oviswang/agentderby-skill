@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Terms — BOTHook</title>
-  <meta name="description" content="BOTHook Terms of Service." />
+  <title>Điều khoản — BOTHook</title>
+  <meta name="description" content="Điều khoản dịch vụ của BOTHook." />
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="canonical" href="https://bothook.me/vi/terms.html" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/terms.html" />
+  <link rel="alternate" hreflang="vi" href="https://bothook.me/vi/terms.html" />
 </head>
 <body>
   <header class="header">
-    <a class="brand" href="/vi/" aria-label="BOTHook home">
+    <a class="brand" href="/vi/" aria-label="Trang chủ BOTHook">
       <img src="/assets/logo.jpg" alt="BOTHook logo" />
       <strong>BOTHook</strong>
     </a>
@@ -49,20 +51,30 @@
         <p class="p">Trong phạm vi pháp luật cho phép, bothook không chịu trách nhiệm cho tổn thất gián tiếp/phát sinh. Trách nhiệm của chúng tôi được giới hạn theo số tiền bạn đã trả cho kỳ hiện tại.</p>
 
         <h2 class="h2">6. Liên hệ</h2>
-        <p class="p">Cần hỗ trợ? Hãy dùng trang Contact.</p>
-
+        <p class="p">Cần hỗ trợ? Hãy dùng <a href="/vi/contact.html">trang liên hệ</a>.</p>
       </section>
     </div>
   </main>
 
   <footer class="footer">
-    <div class="footer-inner">
-      <a class="footer-link" href="/vi/">Home</a>
-      <a class="footer-link" href="/vi/terms.html">Terms</a>
-      <a class="footer-link" href="/vi/privacy.html">Privacy</a>
-      <a class="footer-link" href="/vi/contact.html">Contact</a>
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/vi/contact.html">Liên hệ</a>
+        <span class="dot">·</span>
+        <a href="/vi/terms.html">Điều khoản</a>
+        <span class="dot">·</span>
+        <a href="/vi/privacy.html">Quyền riêng tư</a>
+      </nav>
     </div>
   </footer>
-  <script>document.getElementById('d').textContent = new Date().toISOString().slice(0, 10);</script>
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
+    document.getElementById('year').textContent = new Date().getFullYear();
+    document.getElementById('d').textContent = new Date().toISOString().slice(0,10);
+  </script>
 </body>
 </html>
