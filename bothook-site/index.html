@@ -23,8 +23,21 @@
   <link rel="canonical" href="https://bothook.me/" />
   <link rel="alternate" hreflang="en" href="https://bothook.me/" />
   <link rel="alternate" hreflang="zh" href="https://bothook.me/zh/" />
-
-  <script type="application/ld+json">
+  <link rel="alternate" hreflang="zh-TW" href="https://bothook.me/zh-tw/" />
+  <link rel="alternate" hreflang="ja" href="https://bothook.me/ja/" />
+  <link rel="alternate" hreflang="ko" href="https://bothook.me/ko/" />
+  <link rel="alternate" hreflang="fr" href="https://bothook.me/fr/" />
+  <link rel="alternate" hreflang="de" href="https://bothook.me/de/" />
+  <link rel="alternate" hreflang="es" href="https://bothook.me/es/" />
+  <link rel="alternate" hreflang="pt-BR" href="https://bothook.me/pt-br/" />
+  <link rel="alternate" hreflang="ru" href="https://bothook.me/ru/" />
+  <link rel="alternate" hreflang="ar" href="https://bothook.me/ar/" />
+  <link rel="alternate" hreflang="hi" href="https://bothook.me/hi/" />
+  <link rel="alternate" hreflang="id" href="https://bothook.me/id/" />
+  <link rel="alternate" hreflang="th" href="https://bothook.me/th/" />
+  <link rel="alternate" hreflang="vi" href="https://bothook.me/vi/" />
+  <link rel="alternate" hreflang="x-default" href="https://bothook.me/" />
+<script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "Product",
@@ -137,6 +150,19 @@
       <div class="langPanel" id="langPanel" role="menu" aria-label="Language">
         <a class="langItem" href="/" data-locale="en" role="menuitem"><span class="native">English</span><span class="en">English</span></a>
         <a class="langItem" href="/zh/" data-locale="zh" role="menuitem"><span class="native">中文</span><span class="en">Chinese</span></a>
+        <a class="langItem" href="/zh-tw/" data-locale="zh-tw" role="menuitem"><span class="native">繁體中文</span><span class="en">Chinese (Traditional)</span></a>
+        <a class="langItem" href="/ja/" data-locale="ja" role="menuitem"><span class="native">日本語</span><span class="en">Japanese</span></a>
+        <a class="langItem" href="/ko/" data-locale="ko" role="menuitem"><span class="native">한국어</span><span class="en">Korean</span></a>
+        <a class="langItem" href="/fr/" data-locale="fr" role="menuitem"><span class="native">Français</span><span class="en">French</span></a>
+        <a class="langItem" href="/de/" data-locale="de" role="menuitem"><span class="native">Deutsch</span><span class="en">German</span></a>
+        <a class="langItem" href="/es/" data-locale="es" role="menuitem"><span class="native">Español</span><span class="en">Spanish</span></a>
+        <a class="langItem" href="/pt-br/" data-locale="pt-br" role="menuitem"><span class="native">Português (Brasil)</span><span class="en">Portuguese (Brazil)</span></a>
+        <a class="langItem" href="/ru/" data-locale="ru" role="menuitem"><span class="native">Русский</span><span class="en">Russian</span></a>
+        <a class="langItem" href="/ar/" data-locale="ar" role="menuitem"><span class="native">العربية</span><span class="en">Arabic</span></a>
+        <a class="langItem" href="/hi/" data-locale="hi" role="menuitem"><span class="native">हिन्दी</span><span class="en">Hindi</span></a>
+        <a class="langItem" href="/id/" data-locale="id" role="menuitem"><span class="native">Bahasa Indonesia</span><span class="en">Indonesian</span></a>
+        <a class="langItem" href="/th/" data-locale="th" role="menuitem"><span class="native">ไทย</span><span class="en">Thai</span></a>
+        <a class="langItem" href="/vi/" data-locale="vi" role="menuitem"><span class="native">Tiếng Việt</span><span class="en">Vietnamese</span></a>
       </div>
     </div>
   </header>
@@ -316,7 +342,15 @@
 
     function currentLocale(){
       const p = location.pathname;
-      return p.startsWith('/zh/') ? 'zh' : 'en';
+      const supported = ['en','zh','zh-tw','ja','ko','fr','de','es','pt-br','ru','ar','hi','id','th','vi'];
+      for (const lc of supported) {
+        const prefix = lc === 'en' ? '/' : `/${lc}/`;
+        if (lc === 'en') {
+          if (p === '/' || !/^\/([a-z]{2}(?:-[a-z]{2})?)\//i.test(p)) return 'en';
+        }
+        if (lc !== 'en' && p.startsWith(prefix)) return lc;
+      }
+      return 'en';
     }
 
     function openPanel(open){
@@ -360,7 +394,16 @@
     const pref = localStorage.getItem('bothook_lang_pref');
     const navLang = (navigator.language || '').toLowerCase();
     const cur = currentLocale();
-    const best = pref ? pref : (navLang.startsWith('zh') ? 'zh' : 'en');
+    function mapNavToLocale(lang){
+      if (!lang) return 'en';
+      if (lang.startsWith('zh-tw') || lang.startsWith('zh-hk') || lang.startsWith('zh-mo')) return 'zh-tw';
+      if (lang.startsWith('zh')) return 'zh';
+      if (lang.startsWith('pt-br')) return 'pt-br';
+      const base = lang.split('-')[0];
+      const supported = new Set(['en','zh','zh-tw','ja','ko','fr','de','es','pt-br','ru','ar','hi','id','th','vi']);
+      return supported.has(base) ? base : 'en';
+    }
+    const best = pref ? pref : mapNavToLocale(navLang);
 
     // Auto-redirect only when user has NOT explicitly chosen a language yet.
     if (!pref && !dismissed && cur === 'en' && best === 'zh' && location.pathname === '/') {
