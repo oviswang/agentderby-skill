@@ -355,30 +355,71 @@
               // 忽略暂时未就绪的情况
             }            let deliveryStatus;
             try {
+              deliveryStatus = await fetchDeliveryStatus(uuid);            // Delivery status (authoritative for: has ever been linked; also provides recycle/expiry states)
+            let deliveryStatus;
+            try {
               deliveryStatus = await fetchDeliveryStatus(uuid);
-              // Authoritative: once wa_jid is set, consider it linked even if the pool status endpoint is flaky.
-              if (deliveryStatus && deliveryStatus.ok && deliveryStatus.wa_jid) {
-                linked = true;
-                qrStatus.textContent = '✅ 已关联！这台交付机器已成功连接到你的 WhatsApp。';
-                if (img) img.style.display = 'none';
-                getQrBtn.style.display = 'none';
-                restartBtn.style.display = 'none';
-                verifyCard.style.display = 'none';
-                if (linkedCard) linkedCard.style.display = 'block';
-                break;
-              }
-              // If expired/recycled, show expired UI
-              const stx = (deliveryStatus && deliveryStatus.status) ? String(deliveryStatus.status) : '';
-              if (stx === 'QR_EXPIRED' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNBOUND') {
-                qrStatus.textContent = '❌ 本次链接已过期，请点击“重试”重新生成。';
+            } catch (e) {
+              deliveryStatus = null;
+            }
+
+            // If expired/recycled, show expired UI
+            const stx = (deliveryStatus && deliveryStatus.status) ? String(deliveryStatus.status) : '';
+            if (stx === 'QR_EXPIRED' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNBOUND' || stx === 'QR_EXPIRED') {
+              qrStatus.textContent = '❌ 本次链接已过期，请点击“重试”重新生成。';
+              if (img) img.style.display = 'none';
+              getQrBtn.style.display = 'none';
+              restartBtn.style.display = 'inline-flex';
+              restartBtn.disabled = false;
+              break;
+            }
+
+            // Pool status determines whether it is currently connected
+            let st;
+            try {
+              st = await fetchStatus(uuid);
+            } catch (e) {
+              st = null;
+            }
+
+            // Three-state decision
+            const everLinked = Boolean(deliveryStatus && deliveryStatus.ok && deliveryStatus.wa_jid);
+            const isConnected = Boolean(st && st.connected);
+
+            if (everLinked && isConnected) {
+              linked = true;
+              qrStatus.textContent = '✅ 已关联！这台交付机器已成功连接到你的 WhatsApp。';
+              if (img) img.style.display = 'none';
+              getQrBtn.style.display = 'none';
+              restartBtn.style.display = 'none';
+              verifyCard.style.display = 'none';
+              if (linkedCard) linkedCard.style.display = 'block';
+              break;
+            }
+
+            if (everLinked && !isConnected) {
+              qrStatus.textContent = '⚠️ 检测到你之前关联过，但当前连接已断开。请点击“重试”重新生成二维码进行 relink。';
+              if (img) img.style.display = 'none';
+              getQrBtn.style.display = 'none';
+              restartBtn.style.display = 'inline-flex';
+              restartBtn.disabled = false;
+              break;
+            }
+
+            // Not linked yet: continue polling using st (if available)
+            if (!st) {
+              statusErrs++;
+              if (statusErrs >= 10) {
+                qrStatus.textContent = '暂时连接不上交付机器（状态获取失败）。请点击“重试”。';
                 if (img) img.style.display = 'none';
                 getQrBtn.style.display = 'none';
                 restartBtn.style.display = 'inline-flex';
                 restartBtn.disabled = false;
                 break;
               }
-            } catch (e) {
-              // ignore delivery-status errors and fall back to pool status
+              qrStatus.textContent = '连接中…（状态获取失败，正在重试）';
+              await sleep(1200);
+              continue;
             }
 
             let st;

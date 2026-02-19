@@ -391,30 +391,71 @@
               // ignore transient qr_not_ready
             }            let deliveryStatus;
             try {
+              deliveryStatus = await fetchDeliveryStatus(uuid);            // Delivery status (authoritative for: has ever been linked; also provides recycle/expiry states)
+            let deliveryStatus;
+            try {
               deliveryStatus = await fetchDeliveryStatus(uuid);
-              // Authoritative: once wa_jid is set, consider it linked even if the pool status endpoint is flaky.
-              if (deliveryStatus && deliveryStatus.ok && deliveryStatus.wa_jid) {
-                linked = true;
-                qrStatus.textContent = '✅ Linked! This delivery machine is now connected.';
-                if (img) img.style.display = 'none';
-                getQrBtn.style.display = 'none';
-                restartBtn.style.display = 'none';
-                verifyCard.style.display = 'none';
-                if (linkedCard) linkedCard.style.display = 'block';
-                break;
-              }
-              // If expired/recycled, show expired UI
-              const stx = (deliveryStatus && deliveryStatus.status) ? String(deliveryStatus.status) : '';
-              if (stx === 'QR_EXPIRED' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNBOUND') {
-                qrStatus.textContent = '❌ This link has expired. Please click Retry to generate a new one.';
+            } catch (e) {
+              deliveryStatus = null;
+            }
+
+            // If expired/recycled, show expired UI
+            const stx = (deliveryStatus && deliveryStatus.status) ? String(deliveryStatus.status) : '';
+            if (stx === 'QR_EXPIRED' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNBOUND' || stx === 'QR_EXPIRED') {
+              qrStatus.textContent = '❌ This link has expired. Please click Retry to generate a new one.';
+              if (img) img.style.display = 'none';
+              getQrBtn.style.display = 'none';
+              restartBtn.style.display = 'inline-flex';
+              restartBtn.disabled = false;
+              break;
+            }
+
+            // Pool status determines whether it is currently connected
+            let st;
+            try {
+              st = await fetchStatus(uuid);
+            } catch (e) {
+              st = null;
+            }
+
+            // Three-state decision
+            const everLinked = Boolean(deliveryStatus && deliveryStatus.ok && deliveryStatus.wa_jid);
+            const isConnected = Boolean(st && st.connected);
+
+            if (everLinked && isConnected) {
+              linked = true;
+              qrStatus.textContent = '✅ Linked! This delivery machine is now connected.';
+              if (img) img.style.display = 'none';
+              getQrBtn.style.display = 'none';
+              restartBtn.style.display = 'none';
+              verifyCard.style.display = 'none';
+              if (linkedCard) linkedCard.style.display = 'block';
+              break;
+            }
+
+            if (everLinked && !isConnected) {
+              qrStatus.textContent = '⚠️ Previously linked, but currently disconnected. Click “Retry” to relink and generate a new QR.';
+              if (img) img.style.display = 'none';
+              getQrBtn.style.display = 'none';
+              restartBtn.style.display = 'inline-flex';
+              restartBtn.disabled = false;
+              break;
+            }
+
+            // Not linked yet: continue polling using st (if available)
+            if (!st) {
+              statusErrs++;
+              if (statusErrs >= 10) {
+                qrStatus.textContent = 'Cannot reach the delivery machine (status failed). Click “Retry”.';
                 if (img) img.style.display = 'none';
                 getQrBtn.style.display = 'none';
                 restartBtn.style.display = 'inline-flex';
                 restartBtn.disabled = false;
                 break;
               }
-            } catch (e) {
-              // ignore delivery-status errors and fall back to pool status
+              qrStatus.textContent = 'Connecting… (status failed, retrying)';
+              await sleep(1200);
+              continue;
             }
 
             let st;
