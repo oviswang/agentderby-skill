@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BOTHook 交付</title>
+  <meta name="description" content="用于 WhatsApp 关联设备的交付页面。" />
+  <link rel="icon" href="https://bothook.me/assets/logo.jpg" />
+  <style>
+    :root{--bg:#0b1220;--card:#111a2e;--text:#e8eefc;--muted:#a9b6d6;--accent:#57a6ff;--shadow:0 10px 30px rgba(0,0,0,.35)}
+    *{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,"Helvetica Neue",Arial;background:radial-gradient(900px 450px at 20% 10%, rgba(87,166,255,.18), transparent 60%),radial-gradient(700px 400px at 90% 30%, rgba(90,255,209,.12), transparent 55%),var(--bg);color:var(--text)}
+    a{color:inherit}
+    .wrap{max-width:920px;margin:0 auto;padding:26px 18px 60px}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+    .brand img{width:36px;height:36px;border-radius:10px;box-shadow:var(--shadow);object-fit:cover;background:#fff}
+    .card{background:rgba(255,255,255,.04);border-radius:18px;padding:18px 18px;box-shadow:var(--shadow)}
+    h1{margin:16px 0 10px;font-size:28px;line-height:1.15}
+    p{margin:10px 0;color:var(--muted);line-height:1.6}
+    .uuid{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:14px;background:rgba(255,255,255,.06);padding:10px 12px;border-radius:14px;word-break:break-all;color:rgba(232,238,252,.95)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    button{border:0;border-radius:14px;padding:10px 12px;background:rgba(255,255,255,.06);color:var(--text);cursor:pointer}
+    button.primary{background:linear-gradient(135deg, rgba(87,166,255,.95), rgba(90,255,209,.9));color:#071221;font-weight:700}
+    .hint{font-size:12px;color:rgba(169,182,214,.85)}
+    @media (max-width:860px){.row{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <a class="brand" href="https://bothook.me/zh/" aria-label="BOTHook 首页">
+        <img src="https://bothook.me/assets/logo.jpg" alt="BOTHook" />
+        <strong>BOTHook</strong>
+      </a>
+      <a href="https://bothook.me/zh/" class="hint">返回 bothook.me</a>
+    </div>
+
+    <h1>交付</h1>
+    <p>本页面会生成一个唯一的交付会话（UUID）。下一步你将用它完成 WhatsApp 设备关联。</p>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">重要提醒</div>
+      <p><strong>请用另一台设备打开本页面</strong>（另一部手机或电脑）。</p>
+      <p class="hint">你无法用同一部手机去扫描自己屏幕上的二维码。</p>
+      <label class="hint" style="display:flex; gap:10px; align-items:center; margin-top:10px;">
+        <input id="hasOtherDevice" type="checkbox" style="transform:scale(1.1);" />
+        我有另一台设备可以用来扫码。
+      </label>
+      <div class="btns" style="margin-top:10px;">
+        <button class="primary" id="continueBtn" type="button" disabled>继续</button>
+      </div>
+    </div>
+
+    <div class="card" id="uuidCard" style="margin-top:12px; opacity:.55; pointer-events:none;">
+      <div class="hint">交付 UUID</div>
+      <div class="uuid" id="uuid">正在生成…</div>
+      <div class="btns">
+        <button class="primary" id="copyBtn" type="button">复制 UUID</button>
+        <button id="newBtn" type="button">重新生成</button>
+      </div>
+      <p class="hint">请保留这个 UUID —— 我们会用它把 WhatsApp 关联会话与你的订单对应起来。</p>
+    </div>
+
+    <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
+      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">获取二维码前需要验证</div>
+      <p class="hint">为防止机器人与高频点击占用资源，请先完成下方验证。</p>
+      <div id="turnstile" style="margin-top:10px;"></div>
+      <div class="btns" style="margin-top:12px;">
+        <button class="primary" id="getQrBtn" type="button" disabled>获取二维码</button>
+      </div>
+      <p class="hint" id="qrStatus" style="margin-top:10px;"></p>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <div class="hint">下一步</div>
+        <p>当 WhatsApp 二维码就绪后，你会在 WhatsApp →「已关联的设备」中扫描二维码完成连接。</p>
+        <p class="hint">（二维码展示会在下一步与 OpenClaw 串起来。）</p>
+      </div>
+      <div class="card">
+        <div class="hint">支持</div>
+        <p>如果卡住了，请到 <a href="https://bothook.me/zh/contact.html">bothook.me</a> 提交表单，并附上你的 UUID。</p>
+      </div>
+    </div>
+
+    <script>
+      function uuidv4(){
+        const b = crypto.getRandomValues(new Uint8Array(16));
+        b[6] = (b[6] & 0x0f) | 0x40;
+        b[8] = (b[8] & 0x3f) | 0x80;
+        const s = [...b].map(x=>x.toString(16).padStart(2,'0')).join('');
+        return `${s.slice(0,8)}-${s.slice(8,12)}-${s.slice(12,16)}-${s.slice(16,20)}-${s.slice(20)}`;
+      }
+
+      const el = document.getElementById('uuid');
+      const copyBtn = document.getElementById('copyBtn');
+      const newBtn = document.getElementById('newBtn');
+      const uuidCard = document.getElementById('uuidCard');
+      const verifyCard = document.getElementById('verifyCard');
+      const hasOtherDevice = document.getElementById('hasOtherDevice');
+      const continueBtn = document.getElementById('continueBtn');
+      const getQrBtn = document.getElementById('getQrBtn');
+      const qrStatus = document.getElementById('qrStatus');
+      let turnstileToken = null;
+
+      function setUuid(u){
+        el.textContent = u;
+        history.replaceState(null,'',`/zh/?uuid=${encodeURIComponent(u)}`);
+      }
+
+      const params = new URLSearchParams(location.search);
+      const existing = params.get('uuid');
+      setUuid(existing || uuidv4());
+
+      copyBtn.addEventListener('click', async () => {
+        const u = el.textContent;
+        try {
+          await navigator.clipboard.writeText(u);
+          copyBtn.textContent = '已复制';
+          setTimeout(()=>copyBtn.textContent='复制 UUID', 900);
+        } catch {
+          const ta = document.createElement('textarea');
+          ta.value = u; document.body.appendChild(ta);
+          ta.select(); document.execCommand('copy'); ta.remove();
+          copyBtn.textContent = '已复制';
+          setTimeout(()=>copyBtn.textContent='复制 UUID', 900);
+        }
+      });
+
+      newBtn.addEventListener('click', () => setUuid(uuidv4()));
+
+      // Gate: 用户确认有另一台设备
+      hasOtherDevice.addEventListener('change', () => {
+        continueBtn.disabled = !hasOtherDevice.checked;
+      });
+
+      continueBtn.addEventListener('click', () => {
+        uuidCard.style.opacity = '1';
+        uuidCard.style.pointerEvents = 'auto';
+        verifyCard.style.display = 'block';
+        verifyCard.scrollIntoView({behavior:'smooth', block:'start'});
+        if (!document.getElementById('ts-script')) {
+          const s = document.createElement('script');
+          s.id = 'ts-script';
+          s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+          s.async = true; s.defer = true;
+          s.onload = () => {
+            if (window.turnstile) {
+              window.turnstile.render('#turnstile', {
+                sitekey: '0x4AAAAAACa0PQ3rbwIf9090',
+                theme: 'dark',
+                callback: (token) => {
+                  turnstileToken = token;
+                  getQrBtn.disabled = false;
+                  qrStatus.textContent = '';
+                },
+                'error-callback': () => {
+                  turnstileToken = null;
+                  getQrBtn.disabled = true;
+                  qrStatus.textContent = '验证失败，请重试。';
+                },
+                'expired-callback': () => {
+                  turnstileToken = null;
+                  getQrBtn.disabled = true;
+                  qrStatus.textContent = '验证已过期，请重新验证。';
+                }
+              });
+            }
+          };
+          document.head.appendChild(s);
+        }
+      });
+
+      async function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+      async function startProvision(uuid){
+        const r = await fetch('/api/wa/start', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ uuid })
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || '启动失败');
+        return j;
+      }
+
+      async function fetchQr(uuid){
+        const r = await fetch(`/api/wa/qr?uuid=${encodeURIComponent(uuid)}`);
+        const j = await r.json().catch(()=> ({}));
+        if (!r.ok) throw new Error(j.error || `二维码 http ${r.status}`);
+        if (!j.ok) throw new Error(j.error || '获取二维码失败');
+        return j;
+      }
+
+      async function fetchStatus(uuid){
+        const r = await fetch(`/api/wa/status?uuid=${encodeURIComponent(uuid)}`);
+        const j = await r.json().catch(()=> ({}));
+        if (!r.ok) throw new Error(j.error || `状态 http ${r.status}`);
+        return j;
+      }
+
+      // 二维码获取（已接入）：请求池机侧 WhatsApp 网关生成并返回二维码
+      getQrBtn.addEventListener('click', async () => {
+        const uuid = el.textContent.trim();
+        getQrBtn.disabled = true;
+        qrStatus.textContent = '正在请求二维码…';
+
+        try {
+          await startProvision(uuid);
+
+          let img = document.getElementById('qrImg');
+          if (!img) {
+            img = document.createElement('img');
+            img.id = 'qrImg';
+            img.alt = 'WhatsApp 二维码';
+            img.style.width = '260px';
+            img.style.maxWidth = '100%';
+            img.style.borderRadius = '16px';
+            img.style.background = '#fff';
+            img.style.padding = '10px';
+            img.style.display = 'block';
+            img.style.marginTop = '12px';
+            verifyCard.appendChild(img);
+          }
+
+          for (let i = 0; i < 20; i++) {
+            try {
+              const q = await fetchQr(uuid);
+              img.src = q.qrDataUrl;
+              qrStatus.textContent = '二维码已就绪，请在 WhatsApp → 已关联的设备 中扫码。';
+              break;
+            } catch (e) {
+              qrStatus.textContent = '等待二维码生成…';
+              await sleep(800);
+            }
+          }
+
+          for (;;) {
+            const st = await fetchStatus(uuid);
+            if (st.connected) {
+              qrStatus.textContent = '✅ 已关联！这台交付机器已连接。';
+              break;
+            }
+            await sleep(1200);
+          }
+
+        } catch (e) {
+          qrStatus.textContent = `失败：${e.message || e}`;
+        } finally {
+          getQrBtn.disabled = false;
+        }
+      });
+    </script>
+  </div>
+</body>
+</html>
