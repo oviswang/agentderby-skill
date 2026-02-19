@@ -298,6 +298,7 @@
           return;
         }
         const uuid = el.textContent.trim();
+        let hadQr = false;
         getQrBtn.disabled = true;
         qrStatus.textContent = 'Requesting QR code…';
 

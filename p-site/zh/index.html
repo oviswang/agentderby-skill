@@ -289,6 +289,7 @@
           return;
         }
         const uuid = el.textContent.trim();
+        let hadQr = false;
         getQrBtn.disabled = true;
         qrStatus.textContent = '正在请求二维码…';
 
