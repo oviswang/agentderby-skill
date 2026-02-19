@@ -55,70 +55,70 @@
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "FAQPage",
+  "@type": "Perguntas frequentesPage",
   "mainEntity": [
     {
       "@type": "Question",
-      "name": "1) Do you provide the OpenAI API key? What do I need to prepare?",
+      "name": "1) Vocês fornecem a chave da API da OpenAI? O que eu preciso preparar?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "You bring your own OpenAI API key. We don’t sell keys, and we don’t mark up OpenAI usage."
+        "text": "Você traz sua própria chave de API da OpenAI. Nós não vendemos chaves e não adicionamos margem ao uso da OpenAI."
       }
     },
     {
       "@type": "Question",
-      "name": "2) Is my OpenAI key safe?",
+      "name": "2) Minha chave da OpenAI é segura?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Your key is stored on your own dedicated machine (not shared with other users). We never display it back in chat. You can replace it anytime."
+        "text": "Sua chave é armazenada na sua máquina dedicada (não compartilhada com outros usuários). Nós nunca exibimos a chave no chat. Você pode trocar quando quiser."
       }
     },
     {
       "@type": "Question",
-      "name": "3) Can I cancel anytime? Will I be charged again?",
+      "name": "3) Posso cancelar a qualquer momento? Vou ser cobrado novamente?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. You can cancel anytime inside WhatsApp. After you cancel, you won’t be charged for the next month."
+        "text": "Sim. Você pode cancelar a qualquer momento no WhatsApp. Depois de cancelar, você não será cobrado no próximo mês."
       }
     },
     {
       "@type": "Question",
-      "name": "4) Can I use it in groups?",
+      "name": "4) Posso usar em grupos?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Not by default. This product is optimized for “message yourself” (self‑chat) to keep it private and reliable."
+        "text": "Não por padrão. Este produto é otimizado para “mensagem para você mesmo” (self‑chat) para manter privacidade e confiabilidade."
       }
     },
     {
       "@type": "Question",
-      "name": "5) What if I accidentally unlinked the WhatsApp device? (Relink)",
+      "name": "5) E se eu desvincular o dispositivo do WhatsApp por engano? (Relink)",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "If you’re paid and your subscription is active, you can relink via your personal link on p.bothook.me using your UUID. We’ll verify the WhatsApp account matches before restoring access."
+        "text": "Se você pagou e sua assinatura está ativa, você pode relink pelo seu link pessoal em p.bothook.me usando seu UUID. Nós verificaremos se a conta do WhatsApp corresponde antes de restaurar o acesso."
       }
     },
     {
       "@type": "Question",
-      "name": "6) What models can I use?",
+      "name": "6) Quais modelos eu posso usar?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "You can use any OpenAI model available to your key (subject to OpenAI’s own limits). Defaults are tuned for quality and stability."
+        "text": "Você pode usar qualquer modelo da OpenAI disponível para sua chave (sujeito aos limites da OpenAI). Os padrões são ajustados para qualidade e estabilidade."
       }
     },
     {
       "@type": "Question",
-      "name": "7) What are the limits? (speed / rate / usage)",
+      "name": "7) Quais são os limites? (velocidade / taxa / uso)",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Limits depend mostly on your OpenAI account and chosen model. Server resources are dedicated and always-on."
+        "text": "Os limites dependem principalmente da sua conta OpenAI e do modelo escolhido. Os recursos do servidor são dedicados e sempre ligados."
       }
     },
     {
       "@type": "Question",
-      "name": "8) Where do I use the assistant?",
+      "name": "8) Onde eu uso o assistente?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "In WhatsApp. The easiest way is to open your “Message yourself” chat and talk to the assistant there (self‑chat)."
+        "text": "No WhatsApp. The easiest way is to open your “Message yourself” chat and talk to the assistant there (self‑chat)."
       }
     }
   ],
@@ -129,10 +129,10 @@
 <body>
   <div class="banner" id="langBanner" aria-live="polite">
     <div class="inner card" style="padding:8px 10px;">
-      <div id="langBannerText">View this page in another language?</div>
+      <div id="langBannerText">Ver esta página em outro idioma?</div>
       <div style="display:flex; gap:8px; align-items:center;">
-        <button id="langBannerSwitch" type="button">Switch</button>
-        <button id="langBannerDismiss" type="button">Not now</button>
+        <button id="langBannerTrocar" type="button">Trocar</button>
+        <button id="langBannerFechar" type="button">Agora não</button>
       </div>
     </div>
   </div>
@@ -156,7 +156,7 @@
         <a class="langItem" href="/fr/" data-locale="fr" role="menuitem"><span class="native">Français</span><span class="en">French</span></a>
         <a class="langItem" href="/de/" data-locale="de" role="menuitem"><span class="native">Deutsch</span><span class="en">German</span></a>
         <a class="langItem" href="/es/" data-locale="es" role="menuitem"><span class="native">Español</span><span class="en">Spanish</span></a>
-        <a class="langItem" href="/pt-br/" data-locale="pt-br" role="menuitem"><span class="native">Português (Brasil)</span><span class="en">Portuguese (Brazil)</span></a>
+        <a class="langItem" href="/pt-br/" data-locale="pt-br" role="menuitem"><span class="native">Português (Brasil)</span><span class="en">Português (Brasil)</span></a>
         <a class="langItem" href="/ru/" data-locale="ru" role="menuitem"><span class="native">Русский</span><span class="en">Russian</span></a>
         <a class="langItem" href="/ar/" data-locale="ar" role="menuitem"><span class="native">العربية</span><span class="en">Arabic</span></a>
         <a class="langItem" href="/hi/" data-locale="hi" role="menuitem"><span class="native">हिन्दी</span><span class="en">Hindi</span></a>
@@ -172,15 +172,15 @@
       <section class="hero">
         <div class="card">
           <div class="kicker">Hook me to bots</div>
-          <h1 class="h1">A simpler way to use OpenClaw.</h1>
+          <h1 class="h1">Uma forma mais simples de usar o OpenClaw.</h1>
           <p class="p">O bothook faz uma coisa simples: nós configuramos o <a href="https://openclaw.ai" target="_blank" rel="noopener noreferrer">OpenClaw</a> para você e levamos direto para os apps de chat que você já usa.</p>
-          <p class="p">No signup. No setup. No technical knowledge required.</p>
+          <p class="p">Sem cadastro. Sem setup. Sem conhecimento técnico.</p>
 
           <div class="ctaRow">
             <a class="cta primary wide" href="https://p.bothook.me/" id="ctaPrimary">Get started</a>
           </div>
 
-          <p class="p" style="margin-top:14px; font-size:13px;">The website is only for getting started, payment, and checking status. Once the bot is ready, you rarely need to come back.</p>
+          <p class="p" style="margin-top:14px; font-size:13px;">O site serve apenas para começar, pagar e verificar status. Quando o bot estiver pronto, você quase não precisa voltar.</p>
         </div>
         <div class="card" style="padding:0; display:flex;">
           <div class="demoFrame" aria-label="WhatsApp linking animation">
@@ -190,17 +190,17 @@
       </section>
 
       <section class="card" style="margin-top:18px;">
-        <h2 class="h2">Optimized runtime for OpenClaw</h2>
+        <h2 class="h2">Ambiente otimizado para OpenClaw</h2>
         <div class="calloutGrid">
           <div>
-            <p class="p">You get a dedicated environment tuned for running OpenClaw 24×7:</p>
+            <p class="p">Você recebe um ambiente dedicado, ajustado para rodar o OpenClaw 24×7:</p>
             <ul class="list">
               <li>2 vCPU · 2GB RAM</li>
               <li>40GB SSD</li>
               <li>200Mbps bandwidth</li>
               <li>Always online (7×24)</li>
             </ul>
-            <p class="p" style="margin-top:12px;">Performance is sufficient for long-term, stable use.</p>
+            <p class="p" style="margin-top:12px;">O desempenho é suficiente para uso estável no longo prazo.</p>
           </div>
           <div class="priceCard" aria-label="Pricing">
             <div class="priceBig" aria-label="Price">
@@ -208,19 +208,19 @@
               <span class="amount"> $9.8</span>
               <span class="unit">/ mês</span>
             </div>
-            <p class="p" style="margin:0;">Manage subscription inside WhatsApp (subscribe / cancel / upgrade).</p>
+            <p class="p" style="margin:0;">Gerencie sua assinatura no WhatsApp (assinar / cancelar / fazer upgrade).</p>
           </div>
         </div>
       </section>
 
       <section class="grid2">
         <div class="card">
-          <h2 class="h2">What is bothook.me?</h2>
+          <h2 class="h2">O que é bothook.me?</h2>
           <p class="p">bothook oferece uma forma mais simples de usar o OpenClaw. Ele não muda o OpenClaw e não pede que você instale ou mantenha nada.</p>
           <p class="p">O bot aparece direto nos apps de chat que você já usa. É só começar a conversar.</p>
         </div>
         <div class="card">
-          <h2 class="h2">What bothook actually does</h2>
+          <h2 class="h2">O que a bothook realmente faz</h2>
           <p class="p">bothook não cria um novo bot. E não adiciona outra camada complicada por cima do OpenClaw.</p>
           <p class="p"><strong>Ele faz uma coisa só:</strong> configura o OpenClaw para você e leva direto para os seus apps de chat.</p>
         </div>
@@ -228,7 +228,7 @@
 
       <section class="grid2">
         <div class="card">
-          <h2 class="h2">What using it feels like</h2>
+          <h2 class="h2">Como é usar</h2>
           <ul class="list">
             <li>Você não usa um bot dentro de um site.</li>
             <li>Você não precisa aprender uma nova interface.</li>
@@ -239,10 +239,10 @@
           <p class="p" style="margin-top:12px;">Você conversa com ele no <strong>WhatsApp</strong>, bem onde você já está. Focamos em um único canal e fazemos isso muito bem.</p>
         </div>
         <div class="card">
-          <h2 class="h2">Who it’s for (and not for)</h2>
+          <h2 class="h2">Para quem é (e para quem não é)</h2>
           <div class="split">
             <div>
-              <div class="label">For you if</div>
+              <div class="label">Para você se</div>
               <ul class="list">
                 <li>você quer usar o OpenClaw, não aprender a instalar</li>
                 <li>você prefere resolver tudo em apps de chat</li>
@@ -250,7 +250,7 @@
               </ul>
             </div>
             <div>
-              <div class="label">Not a good fit if</div>
+              <div class="label">Não é uma boa opção se</div>
               <ul class="list">
                 <li>você quer controle total da instalação e execução</li>
                 <li>você precisa de customização profunda</li>
@@ -258,58 +258,58 @@
               </ul>
             </div>
           </div>
-          <p class="p" style="margin-top:12px;"><strong>One-line boundary:</strong> bothook é para quem quer usar um bot, não para quem quer construir um.</p>
+          <p class="p" style="margin-top:12px;"><strong>Em uma frase:</strong> bothook é para quem quer usar um bot, não para quem quer construir um.</p>
         </div>
       </section>
 
       <section class="card" style="margin-top:18px;">
-        <h2 class="h2">FAQ</h2>
+        <h2 class="h2">Perguntas frequentes</h2>
 
         <details class="faq">
-          <summary>1) Do you provide the OpenAI API key? What do I need to prepare?</summary>
-          <div>You bring your own OpenAI API key. We don’t sell keys, and we don’t mark up OpenAI usage.</div>
+          <summary>1) Vocês fornecem a chave da API da OpenAI? O que eu preciso preparar?</summary>
+          <div>Você traz sua própria chave de API da OpenAI. Nós não vendemos chaves e não adicionamos margem ao uso da OpenAI.</div>
         </details>
 
         <details class="faq">
-          <summary>2) Is my OpenAI key safe?</summary>
-          <div>Your key is stored on your own dedicated machine (not shared with other users). We never display it back in chat. You can replace it anytime.</div>
+          <summary>2) Minha chave da OpenAI é segura?</summary>
+          <div>Sua chave é armazenada na sua máquina dedicada (não compartilhada com outros usuários). Nós nunca exibimos a chave no chat. Você pode trocar quando quiser.</div>
         </details>
 
         <details class="faq">
-          <summary>3) Can I cancel anytime? Will I be charged again?</summary>
-          <div>Yes. You can cancel anytime inside WhatsApp. After you cancel, you won’t be charged for the next month.</div>
+          <summary>3) Posso cancelar a qualquer momento? Vou ser cobrado novamente?</summary>
+          <div>Sim. Você pode cancelar a qualquer momento no WhatsApp. Depois de cancelar, você não será cobrado no próximo mês.</div>
         </details>
 
         <details class="faq">
-          <summary>4) Can I use it in groups?</summary>
-          <div>Not by default. This product is optimized for “message yourself” (self‑chat) to keep it private and reliable.</div>
+          <summary>4) Posso usar em grupos?</summary>
+          <div>Não por padrão. Este produto é otimizado para “mensagem para você mesmo” (self‑chat) para manter privacidade e confiabilidade.</div>
         </details>
 
         <details class="faq">
-          <summary>5) What if I accidentally unlinked the WhatsApp device? (Relink)</summary>
-          <div>If you’re paid and your subscription is active, you can relink via your personal link on p.bothook.me using your UUID. We’ll verify the WhatsApp account matches before restoring access.</div>
+          <summary>5) E se eu desvincular o dispositivo do WhatsApp por engano? (Relink)</summary>
+          <div>Se você pagou e sua assinatura está ativa, você pode relink pelo seu link pessoal em p.bothook.me usando seu UUID. Nós verificaremos se a conta do WhatsApp corresponde antes de restaurar o acesso.</div>
         </details>
 
         <details class="faq">
-          <summary>6) What models can I use?</summary>
-          <div>You can use any OpenAI model available to your key (subject to OpenAI’s own limits). Defaults are tuned for quality and stability.</div>
+          <summary>6) Quais modelos eu posso usar?</summary>
+          <div>Você pode usar qualquer modelo da OpenAI disponível para sua chave (sujeito aos limites da OpenAI). Os padrões são ajustados para qualidade e estabilidade.</div>
         </details>
 
         <details class="faq">
-          <summary>7) What are the limits? (speed / rate / usage)</summary>
-          <div>Limits depend mostly on your OpenAI account and chosen model. Server resources are dedicated and always-on.</div>
+          <summary>7) Quais são os limites? (velocidade / taxa / uso)</summary>
+          <div>Os limites dependem principalmente da sua conta OpenAI e do modelo escolhido. Os recursos do servidor são dedicados e sempre ligados.</div>
         </details>
 
         <details class="faq">
-          <summary>8) Where do I use the assistant?</summary>
-          <div>In WhatsApp. The easiest way is to open your “Message yourself” chat and talk to the assistant there (self‑chat).</div>
+          <summary>8) Onde eu uso o assistente?</summary>
+          <div>No WhatsApp. The easiest way is to open your “Message yourself” chat and talk to the assistant there (self‑chat).</div>
         </details>
       </section>
 
       <section class="card" style="margin-top:18px;">
-        <h2 class="h2">Summary</h2>
-        <p class="p">bothook is a simpler way to use OpenClaw. It doesn’t change how OpenClaw works — it just brings it directly to you.</p>
-        <p class="p">You don’t need to understand how it runs. You only need to start chatting.</p>
+        <h2 class="h2">Resumo</h2>
+        <p class="p">A bothook é uma forma mais simples de usar o OpenClaw. Ela não muda como o OpenClaw funciona — apenas leva isso diretamente até você.</p>
+        <p class="p">Você não precisa entender como ele roda. Você só precisa começar a conversar.</p>
       </section>
     </div>
   </main>
@@ -415,8 +415,8 @@
     if (!dismissed && best !== cur) {
       const banner = document.getElementById('langBanner');
       const text = document.getElementById('langBannerText');
-      const sw = document.getElementById('langBannerSwitch');
-      const dis = document.getElementById('langBannerDismiss');
+      const sw = document.getElementById('langBannerTrocar');
+      const dis = document.getElementById('langBannerFechar');
       text.textContent = (best === 'zh') ? '查看中文版本？' : 'View this page in English?';
       banner.style.display = 'block';
       sw.onclick = () => {
