@@ -4,14 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Kontakt — BOTHook</title>
-  <meta name="description" content="Kontakt zu BOTHook." />
+  <meta name="description" content="BOTHook Support kontaktieren." />
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="canonical" href="https://bothook.me/de/contact.html" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/contact.html" />
+  <link rel="alternate" hreflang="de" href="https://bothook.me/de/contact.html" />
 </head>
 <body>
   <header class="header">
-    <a class="brand" href="/de/" aria-label="BOTHook home">
+    <a class="brand" href="/de/" aria-label="BOTHook Startseite">
       <img src="/assets/logo.jpg" alt="BOTHook logo" />
       <strong>BOTHook</strong>
     </a>
@@ -19,66 +21,99 @@
 
   <main class="main">
     <div class="content-wrap" id="contentWrap">
-      <section class="card" style="max-width:860px;margin:0 auto;">
-        <h1 class="h1" style="font-size:32px;">Kontakt</h1>
-        
+      <section class="card" style="max-width:760px; margin:0 auto;">
+        <h1 class="h1" style="font-size:32px; margin-bottom:8px;">Kontakt</h1>
+        <p class="p">Schick uns eine Nachricht — wir antworten per E‑Mail.</p>
 
-        <p class="p">Sende uns eine Nachricht — wir antworten per E‑Mail.</p>
+        <div id="sent" class="card" style="display:none; background:rgba(90,255,209,.10);">
+          <strong>Danke — wir haben es erhalten.</strong>
+          <div class="p" style="margin-top:8px;">Wir melden uns so schnell wie möglich per E‑Mail.</div>
+        </div>
 
+        <form id="form" class="card" style="margin-top:14px;" autocomplete="on">
+          <label class="label" for="email">E‑Mail</label>
+          <input id="email" name="email" type="email" required placeholder="you@company.com" class="input" />
 
+          <div style="height:12px"></div>
 
-        <hr class="hr" />
-        <form class="form" id="contactForm" style="margin-top:16px;">
-          <label class="label" for="email">E-Mail</label>
-          <input class="input" id="email" name="email" type="email" required placeholder="du@beispiel.com" />
+          <label class="label" for="uuid">Provisioning UUID (optional)</label>
+          <input id="uuid" name="uuid" type="text" placeholder="Von p.bothook.me" class="input" />
 
-          <label class="label" for="uuid" style="margin-top:12px;">Provisioning UUID (optional)</label>
-          <input class="input" id="uuid" name="uuid" type="text" placeholder="z. B. 7c2f…" />
-          <p class="p" style="font-size:13px;opacity:.85;">Tipp: Wenn du WhatsApp-Linking provisionierst, gib deine UUID an, damit wir deine Session schneller finden können.</p>
+          <div style="height:12px"></div>
 
-          <label class="label" for="message" style="margin-top:12px;">Nachricht</label>
-          <textarea class="textarea" id="message" name="message" required rows="7" placeholder="Wobei können wir helfen?"></textarea>
+          <label class="label" for="message">Nachricht</label>
+          <textarea id="message" name="message" rows="6" required placeholder="Wobei können wir helfen?" class="input"></textarea>
 
-          <button class="btn" type="submit" style="margin-top:14px;">Senden</button>
-          <p class="p" id="ok" style="display:none;margin-top:10px;">Danke — wir haben deine Nachricht erhalten. Wir antworten so schnell wie möglich per E‑Mail.</p>
+          <div class="btns">
+            <button class="cta primary" type="submit">Senden</button>
+            <a class="cta ghost" href="/de/">Zurück</a>
+          </div>
+          <p class="hint" style="margin-top:10px;">Tipp: Wenn du WhatsApp‑Linking provisionierst, füge bitte deine UUID hinzu, damit wir deine Session schneller finden können.</p>
         </form>
-        <script>
-          const form = document.getElementById('contactForm');
-          const ok = document.getElementById('ok');
-          form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            ok.style.display = 'none';
-            const data = {
-              email: form.email.value.trim(),
-              uuid: form.uuid.value.trim(),
-              message: form.message.value.trim(),
-            };
-            const res = await fetch('/api/support/contact', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify(data),
-            });
-            if (res.ok) {
-              ok.style.display = 'block';
-              form.reset();
-            } else {
-              alert('Fehlgeschlagen. Bitte versuche es später erneut.');
-            }
-          });
-        </script>
-        
       </section>
     </div>
   </main>
 
   <footer class="footer">
-    <div class="footer-inner">
-      <a class="footer-link" href="/de/">Startseite</a>
-      <a class="footer-link" href="/de/terms.html">AGB</a>
-      <a class="footer-link" href="/de/privacy.html">Datenschutz</a>
-      <a class="footer-link" href="/de/contact.html">Kontakt</a>
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/de/contact.html">Kontakt</a>
+        <span class="dot">·</span>
+        <a href="/de/terms.html">AGB</a>
+        <span class="dot">·</span>
+        <a href="/de/privacy.html">Datenschutz</a>
+      </nav>
     </div>
   </footer>
-  
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // Prefill UUID from querystring (e.g. /de/contact.html?uuid=...)
+    const params = new URLSearchParams(location.search);
+    const uuid = params.get('uuid');
+    if (uuid) document.getElementById('uuid').value = uuid;
+
+    const form = document.getElementById('form');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        email: form.email.value,
+        uuid: form.uuid.value,
+        message: form.message.value,
+        pageLang: document.documentElement.lang || 'de',
+      };
+
+      try {
+        const r = await fetch('/api/support/ticket', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const j = await r.json().catch(() => null);
+        if (!r.ok || !j || !j.ok) throw new Error(j?.error || 'Fehlgeschlagen');
+
+        const sent = document.getElementById('sent');
+        sent.style.display = 'block';
+        sent.innerHTML = `<strong>Danke — wir haben es erhalten.</strong><div class="p" style="margin-top:8px;">Ticket: <strong>${j.ticket_id}</strong>. Wir melden uns so schnell wie möglich per E‑Mail.</div>`;
+        form.style.display = 'none';
+        sent.scrollIntoView({behavior:'smooth', block:'start'});
+      } catch (err) {
+        alert('Konnte nicht gesendet werden. Bitte versuche es in einem Moment erneut.');
+      }
+    });
+  </script>
+
+  <style>
+    .input{width:100%;border:0;border-radius:14px;padding:12px 12px;background:rgba(255,255,255,.06);color:var(--text);outline:none}
+    .input::placeholder{color:rgba(169,182,214,.7)}
+    textarea.input{resize:vertical;min-height:120px}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  </style>
 </body>
 </html>
