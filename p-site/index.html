@@ -204,7 +204,8 @@
             clearTimeout(loadTimer);
             if (!window.turnstile) return failLoad('Verification failed to initialize. Please refresh.');
             
-              window.turnstile.render('#turnstile', {
+              try {
+            window.turnstile.render('#turnstile', {
                 sitekey: '0x4AAAAAACa0PQ3rbwIf9090',
                 theme: 'dark',
                 callback: (token) => {
@@ -225,6 +226,9 @@
                   qrStatus.textContent = 'Verification expired. Please verify again.';
                 }
             });
+          } catch (e) {
+            failLoad('Verification render failed. Please refresh or try another network.');
+          }
           };
           document.head.appendChild(s);
         }

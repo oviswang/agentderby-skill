@@ -192,7 +192,8 @@
             clearTimeout(loadTimer);
             if (!window.turnstile) return failLoad('人机验证初始化失败，请刷新页面。');
             
-              window.turnstile.render('#turnstile', {
+              try {
+            window.turnstile.render('#turnstile', {
                 sitekey: '0x4AAAAAACa0PQ3rbwIf9090',
                 theme: 'dark',
                 callback: (token) => { const h=document.getElementById('turnstileHint'); if(h) h.textContent=''; turnstileToken = token; getQrBtn.disabled = false; qrStatus.textContent=''; },
