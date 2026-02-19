@@ -171,20 +171,34 @@
           s.id = 'ts-script';
           s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
           s.async = true; s.defer = true;
+
+          const failLoad = (msg) => {
+            const h = document.getElementById('turnstileHint');
+            if (h) h.textContent = msg;
+            getQrBtn.disabled = true;
+            qrStatus.textContent = msg;
+          };
+
+          const loadTimer = setTimeout(() => {
+            if (!window.turnstile) failLoad('人机验证加载失败，请关闭广告拦截并刷新页面。');
+          }, 8000);
+
+          s.onerror = () => {
+            clearTimeout(loadTimer);
+            failLoad('人机验证脚本被拦截，请关闭广告拦截并刷新页面。');
+          };
+
           s.onload = () => {
-            if (window.turnstile) {
+            clearTimeout(loadTimer);
+            if (!window.turnstile) return failLoad('人机验证初始化失败，请刷新页面。');
+            
               window.turnstile.render('#turnstile', {
                 sitekey: '0x4AAAAAACa0PQ3rbwIf9090',
                 theme: 'dark',
-                callback: (token) => {
-                  const h=document.getElementById('turnstileHint'); if(h) h.textContent='';
-                  turnstileToken = token;
-                },
                 callback: (token) => { const h=document.getElementById('turnstileHint'); if(h) h.textContent=''; turnstileToken = token; getQrBtn.disabled = false; qrStatus.textContent=''; },
                 'error-callback': () => { turnstileToken = null; getQrBtn.disabled = true; qrStatus.textContent='验证失败，请重试。'; },
                 'expired-callback': () => { turnstileToken = null; getQrBtn.disabled = true; qrStatus.textContent='验证已过期，请重新验证。'; }
-              });
-            }
+            });
           };
           document.head.appendChild(s);
         }
