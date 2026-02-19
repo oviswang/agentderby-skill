@@ -25,3 +25,13 @@
 - 下一小时目标（1–2 条）：
 
 ---
+
+### 2026-02-20 07:00–07:59 CST
+- P0 子任务：P0.1 cloud-init artifacts 清单与验收文档（v0.1.0）
+- 完成定义（DoD）：在 p-site 下生成可公开拉取的 artifacts 目录（bootstrap/manifest/sha256/systemd/healthcheck）+ 验收文档骨架；不含密钥；并提交 git。
+- 本小时完成：已创建 p-site/artifacts/v0.1.0 全套文件 + p-site/docs/cloud-init-artifacts-acceptance.md。
+- 产出链接/commit：fb601ba（P0.1: add cloud-init artifacts + acceptance doc (v0.1.0)）
+- 阻塞：尚未进行真实新机 cloud-init 端到端验证（需一台全新实例执行 curl|bash 验收）。
+- 下一小时目标（1–2 条）：1) 用一台全新机器按验收步骤跑一遍并记录结果；2) 依据结果修正 unit/路径假设。
+
+---
