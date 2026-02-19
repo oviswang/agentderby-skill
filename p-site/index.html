@@ -60,12 +60,18 @@
       </div>
 
       <p class="hint" id="qrStatus" style="margin-top:10px;"></p>
-      <pre class="hint" id="diag" style="margin-top:8px; white-space:pre-wrap; word-break:break-word; opacity:.9;"></pre>
 
       <div class="btns" style="margin-top:12px;">
         <button class="primary" id="getQrBtn" type="button" disabled>Get QR code</button>
         <button class="primary" id="restartBtn" type="button" disabled style="display:none;">Retry</button>
       </div>
+    </div>
+
+    <div class="card" id="linkedCard" style="margin-top:12px; display:none;">
+      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">✅ Linked</div>
+      <p><strong>This delivery machine is now connected to your WhatsApp.</strong></p>
+      <p class="hint">You can close this page. To relink later, open your saved delivery link.</p>
+      <p class="hint">If WhatsApp shows it under Linked devices, you’re done.</p>
     </div>
 
     <div class="row">
@@ -105,12 +111,12 @@
       const copyBtn = document.getElementById('copyBtn');
       const uuidCard = document.getElementById('uuidCard');
       const verifyCard = document.getElementById('verifyCard');
+      const linkedCard = document.getElementById('linkedCard');
       const hasOtherDevice = document.getElementById('hasOtherDevice');
       const continueBtn = document.getElementById('continueBtn');
       const getQrBtn = document.getElementById('getQrBtn');
       const restartBtn = document.getElementById('restartBtn');
       const qrStatus = document.getElementById('qrStatus');
-      const diag = document.getElementById('diag');
       let turnstileToken = null;
 
       const STORAGE_KEY = 'bothook_provision_uuid_v1';
@@ -200,12 +206,12 @@
           };
 
           const loadTimer = setTimeout(() => {
-            if (!window.turnstile) failLoad('Verification failed to load. Please disable ad blockers and refresh.');
+            if (!window.turnstile) failLoad('Verification failed to load. Please refresh and try again.');
           }, 8000);
 
           s.onerror = () => {
             clearTimeout(loadTimer);
-            failLoad('Verification script blocked. Please disable ad blockers and refresh.');
+            failLoad('Verification failed to load. Please refresh and try again.');
           };
 
           s.onload = () => {
@@ -264,14 +270,6 @@
         return j;
       }
 
-      function setDiag(obj){
-        if (!diag) return;
-        if (!obj) { diag.textContent=''; return; }
-        try {
-          diag.textContent = JSON.stringify(obj, null, 2);
-        } catch {
-          diag.textContent = String(obj);
-        }
       }
 
       async function fetchStatus(uuid){
@@ -379,18 +377,18 @@
                 break;
               }
               qrStatus.textContent = 'Connecting… (status failed, retrying)';
-              setDiag({ uuid, error: 'pool_status_failed', attempt: statusErrs, message: String(e?.message || e) });
               await sleep(1200);
               continue;
             }
             statusErrs = 0;
-            setDiag({ uuid, instance_id: st.instance_id, status: st.status, connected: st.connected, reason: st.reason, restartCount: st.restartCount, lastUpdateAt: st.lastUpdateAt });
             if (st.connected) {
               linked = true;
               qrStatus.textContent = '✅ Linked! This delivery machine is now connected.';
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'none';
+              verifyCard.style.display = 'none';
+              if (linkedCard) linkedCard.style.display = 'block';
               break;
             }
             if (st.status === 'closed') {
