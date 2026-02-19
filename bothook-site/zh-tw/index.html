@@ -10,7 +10,7 @@
   <meta property="og:site_name" content="BOTHook" />
   <meta property="og:title" content="BOTHook — OpenClaw on WhatsApp (No setup)" />
   <meta property="og:description" content="Use OpenClaw directly in WhatsApp. $9.8/month. Bring your own OpenAI API key." />
-  <meta property="og:url" content="https://bothook.me/zh-tw/" />
+  <meta property="og:url" content="https://bothook.me/" />
   <meta property="og:image" content="https://bothook.me/assets/logo.jpg" />
 
   <meta name="twitter:card" content="summary" />
@@ -20,7 +20,7 @@
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="preload" href="/assets/logo.jpg" as="image" />
   <link rel="stylesheet" href="/styles.css" />
-  <link rel="canonical" href="https://bothook.me/zh-tw/" />
+  <link rel="canonical" href="https://bothook.me/" />
   <link rel="alternate" hreflang="en" href="https://bothook.me/" />
   <link rel="alternate" hreflang="zh" href="https://bothook.me/zh/" />
   <link rel="alternate" hreflang="zh-TW" href="https://bothook.me/zh-tw/" />
@@ -59,66 +59,66 @@
   "mainEntity": [
     {
       "@type": "Question",
-      "name": "1) Do you provide the OpenAI API key? What do I need to prepare?",
+      "name": "1）需要我提供 OpenAI Key 嗎？需要準備什麼？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "You bring your own OpenAI API key. We don’t sell keys, and we don’t mark up OpenAI usage."
+        "text": "你需要自備 OpenAI API Key。我們不售賣 Key，也不會對 OpenAI 用量加價。"
       }
     },
     {
       "@type": "Question",
-      "name": "2) Is my OpenAI key safe?",
+      "name": "2）我的 OpenAI Key 安全嗎？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Your key is stored on your own dedicated machine (not shared with other users). We never display it back in chat. You can replace it anytime."
+        "text": "你的 Key 會存放在你的獨立機器上（不與其他使用者共享），不會在聊天中回顯。你可以隨時更換。"
       }
     },
     {
       "@type": "Question",
-      "name": "3) Can I cancel anytime? Will I be charged again?",
+      "name": "3）可以隨時取消訂閱嗎？會繼續扣款嗎？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. You can cancel anytime inside WhatsApp. After you cancel, you won’t be charged for the next month."
+        "text": "可以。你可以隨時在 WhatsApp 內取消訂閱。取消後，下個月將不會再扣款。"
       }
     },
     {
       "@type": "Question",
-      "name": "4) Can I use it in groups?",
+      "name": "4）可以在群組裡用嗎？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Not by default. This product is optimized for “message yourself” (self‑chat) to keep it private and reliable."
+        "text": "預設不支援。產品優先最佳化「傳訊息給自己/自聊」，更私密也更穩定。"
       }
     },
     {
       "@type": "Question",
-      "name": "5) What if I accidentally unlinked the WhatsApp device? (Relink)",
+      "name": "5）如果我不小心取消了 WhatsApp 裝置連結，怎麼找回？（Relink）",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "If you’re paid and your subscription is active, you can relink via your personal link on p.bothook.me using your UUID. We’ll verify the WhatsApp account matches before restoring access."
+        "text": "如果你已付費且未到期，可以透過 p.bothook.me 的個人連結（含 UUID）重新連結。系統會核對掃碼的 WhatsApp 帳號一致後才恢復，防止被盜用。"
       }
     },
     {
       "@type": "Question",
-      "name": "6) What models can I use?",
+      "name": "6）我可以用哪些模型？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "You can use any OpenAI model available to your key (subject to OpenAI’s own limits). Defaults are tuned for quality and stability."
+        "text": "你可以使用你的 OpenAI Key 所支援的模型（受 OpenAI 自身限制）。預設設定優先穩定與效果。"
       }
     },
     {
       "@type": "Question",
-      "name": "7) What are the limits? (speed / rate / usage)",
+      "name": "7）有什麼限制嗎？（速度/頻率/用量）",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Limits depend mostly on your OpenAI account and chosen model. Server resources are dedicated and always-on."
+        "text": "限制主要取決於你的 OpenAI 帳號與模型選擇；伺服器資源為獨立常駐執行環境。"
       }
     },
     {
       "@type": "Question",
-      "name": "8) Where do I use the assistant?",
+      "name": "8）我在哪裡使用助手？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "In WhatsApp. The easiest way is to open your “Message yourself” chat and talk to the assistant there (self‑chat)."
+        "text": "在 WhatsApp 裡使用。最簡單的方式是打開「傳訊息給自己/自聊（Message yourself）」的對話，直接在裡面和助手聊天。"
       }
     }
   ],
@@ -129,10 +129,10 @@
 <body>
   <div class="banner" id="langBanner" aria-live="polite">
     <div class="inner card" style="padding:8px 10px;">
-      <div id="langBannerText">View this page in another language?</div>
+      <div id="langBannerText">要查看其他語言版本嗎？</div>
       <div style="display:flex; gap:8px; align-items:center;">
-        <button id="langBannerSwitch" type="button">Switch</button>
-        <button id="langBannerDismiss" type="button">Not now</button>
+        <button id="langBanner切換" type="button">切換</button>
+        <button id="langBannerDismiss" type="button">暫不</button>
       </div>
     </div>
   </div>
@@ -172,15 +172,15 @@
       <section class="hero">
         <div class="card">
           <div class="kicker">Hook me to bots</div>
-          <h1 class="h1">A simpler way to use OpenClaw.</h1>
+          <h1 class="h1">更簡單地使用 OpenClaw。</h1>
           <p class="p">What bothook does is simple: it sets up the <a href="https://openclaw.ai" target="_blank" rel="noopener noreferrer">OpenClaw</a> bot for you and brings it directly into the chat apps you already use.</p>
-          <p class="p">No signup. No setup. No technical knowledge required.</p>
+          <p class="p">無需註冊。無需設定。無需任何技術背景。</p>
 
           <div class="ctaRow">
-            <a class="cta primary wide" href="https://p.bothook.me/" id="ctaPrimary">Get started</a>
+            <a class="cta primary wide" href="https://p.bothook.me/" id="ctaPrimary">開始使用</a>
           </div>
 
-          <p class="p" style="margin-top:14px; font-size:13px;">The website is only for getting started, payment, and checking status. Once the bot is ready, you rarely need to come back.</p>
+          <p class="p" style="margin-top:14px; font-size:13px;">網站只用於起步、付款與查看狀態。機器人就緒後，你幾乎不需要再回來。</p>
         </div>
         <div class="card" style="padding:0; display:flex;">
           <div class="demoFrame" aria-label="WhatsApp linking animation">
@@ -190,17 +190,17 @@
       </section>
 
       <section class="card" style="margin-top:18px;">
-        <h2 class="h2">Optimized runtime for OpenClaw</h2>
+        <h2 class="h2">專為 OpenClaw 最佳化的執行環境</h2>
         <div class="calloutGrid">
           <div>
-            <p class="p">You get a dedicated environment tuned for running OpenClaw 24×7:</p>
+            <p class="p">我們提供適合 7×24 長期執行 OpenClaw 的獨立環境：</p>
             <ul class="list">
               <li>2 vCPU · 2GB RAM</li>
               <li>40GB SSD</li>
               <li>200Mbps bandwidth</li>
               <li>Always online (7×24)</li>
             </ul>
-            <p class="p" style="margin-top:12px;">Performance is sufficient for long-term, stable use.</p>
+            <p class="p" style="margin-top:12px;">效能充足，長期穩定。</p>
           </div>
           <div class="priceCard" aria-label="Pricing">
             <div class="priceBig" aria-label="Price">
@@ -208,19 +208,19 @@
               <span class="amount"> $9.8</span>
               <span class="unit">/ month</span>
             </div>
-            <p class="p" style="margin:0;">Manage subscription inside WhatsApp (subscribe / cancel / upgrade).</p>
+            <p class="p" style="margin:0;">訂閱/取消/升級：都可以直接在 WhatsApp 內完成。</p>
           </div>
         </div>
       </section>
 
       <section class="grid2">
         <div class="card">
-          <h2 class="h2">What is bothook.me?</h2>
+          <h2 class="h2">bothook.me 是什麼？</h2>
           <p class="p">bothook offers a simpler way to use OpenClaw. It doesn’t change OpenClaw, and it doesn’t ask you to install or maintain anything yourself.</p>
           <p class="p">The bot appears directly in the chat apps you already use. All you need to do is start chatting.</p>
         </div>
         <div class="card">
-          <h2 class="h2">What bothook actually does</h2>
+          <h2 class="h2">bothook 實際做了什麼</h2>
           <p class="p">bothook doesn’t create a new bot. And it doesn’t add another complicated layer on top of OpenClaw.</p>
           <p class="p"><strong>It does one simple thing:</strong> it sets up OpenClaw for you and brings it directly into the chat apps you already use.</p>
         </div>
@@ -228,7 +228,7 @@
 
       <section class="grid2">
         <div class="card">
-          <h2 class="h2">What using it feels like</h2>
+          <h2 class="h2">使用體驗是什麼樣的</h2>
           <ul class="list">
             <li>You don’t use a bot inside a website.</li>
             <li>You don’t need to learn a new interface.</li>
@@ -239,10 +239,10 @@
           <p class="p" style="margin-top:12px;">You talk to it on <strong>WhatsApp</strong> — right where you already are. We’re intentionally focused on doing one channel extremely well.</p>
         </div>
         <div class="card">
-          <h2 class="h2">Who it’s for (and not for)</h2>
+          <h2 class="h2">適合誰（以及不適合誰）</h2>
           <div class="split">
             <div>
-              <div class="label">For you if</div>
+              <div class="label">適合你，如果你</div>
               <ul class="list">
                 <li>you want to use OpenClaw, not learn how to install it</li>
                 <li>you prefer getting things done in chat apps</li>
@@ -250,7 +250,7 @@
               </ul>
             </div>
             <div>
-              <div class="label">Not a good fit if</div>
+              <div class="label">不太適合你，如果你</div>
               <ul class="list">
                 <li>you want full control over installation and runtime</li>
                 <li>you need deep low-level customization</li>
@@ -258,58 +258,58 @@
               </ul>
             </div>
           </div>
-          <p class="p" style="margin-top:12px;"><strong>One-line boundary:</strong> bothook is for people who want to use a bot, not for people who want to build one.</p>
+          <p class="p" style="margin-top:12px;"><strong>一句話邊界：</strong> bothook is for people who want to use a bot, not for people who want to build one.</p>
         </div>
       </section>
 
       <section class="card" style="margin-top:18px;">
-        <h2 class="h2">FAQ</h2>
+        <h2 class="h2">常見問題</h2>
 
         <details class="faq">
-          <summary>1) Do you provide the OpenAI API key? What do I need to prepare?</summary>
-          <div>You bring your own OpenAI API key. We don’t sell keys, and we don’t mark up OpenAI usage.</div>
+          <summary>1）需要我提供 OpenAI Key 嗎？需要準備什麼？</summary>
+          <div>你需要自備 OpenAI API Key。我們不售賣 Key，也不會對 OpenAI 用量加價。</div>
         </details>
 
         <details class="faq">
-          <summary>2) Is my OpenAI key safe?</summary>
-          <div>Your key is stored on your own dedicated machine (not shared with other users). We never display it back in chat. You can replace it anytime.</div>
+          <summary>2）我的 OpenAI Key 安全嗎？</summary>
+          <div>你的 Key 會存放在你的獨立機器上（不與其他使用者共享），不會在聊天中回顯。你可以隨時更換。</div>
         </details>
 
         <details class="faq">
-          <summary>3) Can I cancel anytime? Will I be charged again?</summary>
-          <div>Yes. You can cancel anytime inside WhatsApp. After you cancel, you won’t be charged for the next month.</div>
+          <summary>3）可以隨時取消訂閱嗎？會繼續扣款嗎？</summary>
+          <div>可以。你可以隨時在 WhatsApp 內取消訂閱。取消後，下個月將不會再扣款。</div>
         </details>
 
         <details class="faq">
-          <summary>4) Can I use it in groups?</summary>
-          <div>Not by default. This product is optimized for “message yourself” (self‑chat) to keep it private and reliable.</div>
+          <summary>4）可以在群組裡用嗎？</summary>
+          <div>預設不支援。產品優先最佳化「傳訊息給自己/自聊」，更私密也更穩定。</div>
         </details>
 
         <details class="faq">
-          <summary>5) What if I accidentally unlinked the WhatsApp device? (Relink)</summary>
-          <div>If you’re paid and your subscription is active, you can relink via your personal link on p.bothook.me using your UUID. We’ll verify the WhatsApp account matches before restoring access.</div>
+          <summary>5）如果我不小心取消了 WhatsApp 裝置連結，怎麼找回？（Relink）</summary>
+          <div>如果你已付費且未到期，可以透過 p.bothook.me 的個人連結（含 UUID）重新連結。系統會核對掃碼的 WhatsApp 帳號一致後才恢復，防止被盜用。</div>
         </details>
 
         <details class="faq">
-          <summary>6) What models can I use?</summary>
-          <div>You can use any OpenAI model available to your key (subject to OpenAI’s own limits). Defaults are tuned for quality and stability.</div>
+          <summary>6）我可以用哪些模型？</summary>
+          <div>你可以使用你的 OpenAI Key 所支援的模型（受 OpenAI 自身限制）。預設設定優先穩定與效果。</div>
         </details>
 
         <details class="faq">
-          <summary>7) What are the limits? (speed / rate / usage)</summary>
-          <div>Limits depend mostly on your OpenAI account and chosen model. Server resources are dedicated and always-on.</div>
+          <summary>7）有什麼限制嗎？（速度/頻率/用量）</summary>
+          <div>限制主要取決於你的 OpenAI 帳號與模型選擇；伺服器資源為獨立常駐執行環境。</div>
         </details>
 
         <details class="faq">
-          <summary>8) Where do I use the assistant?</summary>
-          <div>In WhatsApp. The easiest way is to open your “Message yourself” chat and talk to the assistant there (self‑chat).</div>
+          <summary>8）我在哪裡使用助手？</summary>
+          <div>在 WhatsApp 裡使用。最簡單的方式是打開「傳訊息給自己/自聊（Message yourself）」的對話，直接在裡面和助手聊天。</div>
         </details>
       </section>
 
       <section class="card" style="margin-top:18px;">
-        <h2 class="h2">Summary</h2>
-        <p class="p">bothook is a simpler way to use OpenClaw. It doesn’t change how OpenClaw works — it just brings it directly to you.</p>
-        <p class="p">You don’t need to understand how it runs. You only need to start chatting.</p>
+        <h2 class="h2">總結</h2>
+        <p class="p">bothook 是更簡單的 OpenClaw 使用方式。它不改變 OpenClaw 的運作方式——只是把它直接交付到你常用的聊天軟體裡。</p>
+        <p class="p">你不需要理解它如何運作，你只需要開始聊天。</p>
       </section>
     </div>
   </main>
@@ -318,11 +318,11 @@
     <div class="footerRow">
       <div>© <span id="year"></span> BOTHook.</div>
       <nav class="footerLinks" aria-label="Footer">
-        <a href="/contact.html">Contact</a>
+        <a href="/contact.html">聯絡</a>
         <span class="dot">·</span>
-        <a href="/terms.html">Terms</a>
+        <a href="/terms.html">條款</a>
         <span class="dot">·</span>
-        <a href="/privacy.html">Privacy</a>
+        <a href="/privacy.html">隱私</a>
       </nav>
     </div>
   </footer>
@@ -415,7 +415,7 @@
     if (!dismissed && best !== cur) {
       const banner = document.getElementById('langBanner');
       const text = document.getElementById('langBannerText');
-      const sw = document.getElementById('langBannerSwitch');
+      const sw = document.getElementById('langBanner切換');
       const dis = document.getElementById('langBannerDismiss');
       text.textContent = (best === 'zh') ? '查看中文版本？' : 'View this page in English?';
       banner.style.display = 'block';
