@@ -191,15 +191,31 @@
           s.onload = () => {
             clearTimeout(loadTimer);
             if (!window.turnstile) return failLoad('人机验证初始化失败，请刷新页面。');
-            
-              try {
-            window.turnstile.render('#turnstile', {
+
+            try {
+              window.turnstile.render('#turnstile', {
                 sitekey: '0x4AAAAAACa0PQ3rbwIf9090',
                 theme: 'dark',
-                callback: (token) => { const h=document.getElementById('turnstileHint'); if(h) h.textContent=''; turnstileToken = token; getQrBtn.disabled = false; qrStatus.textContent=''; },
-                'error-callback': () => { turnstileToken = null; getQrBtn.disabled = true; qrStatus.textContent='验证失败，请重试。'; },
-                'expired-callback': () => { turnstileToken = null; getQrBtn.disabled = true; qrStatus.textContent='验证已过期，请重新验证。'; }
-            });
+                callback: (token) => {
+                  const h=document.getElementById('turnstileHint'); if(h) h.textContent='';
+                  turnstileToken = token;
+                  getQrBtn.disabled = false;
+                  qrStatus.textContent='';
+                },
+                'error-callback': () => {
+                  turnstileToken = null;
+                  getQrBtn.disabled = true;
+                  qrStatus.textContent='验证失败，请重试。';
+                },
+                'expired-callback': () => {
+                  turnstileToken = null;
+                  getQrBtn.disabled = true;
+                  qrStatus.textContent='验证已过期，请重新验证。';
+                }
+              });
+            } catch (e) {
+              failLoad('人机验证渲染失败，请刷新页面或更换网络。');
+            }
           };
           document.head.appendChild(s);
         }
