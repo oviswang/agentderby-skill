@@ -63,8 +63,8 @@
     </div>
 
     <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
-      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">获取二维码前需要验证</div>
-      <p class="hint">为防止机器人与高频点击占用资源，请先完成下方验证。</p>
+      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">获取二维码</div>
+      <p class="hint">（目前验证为可选；后续可能会强制开启。）</p>
       <div id="turnstile" style="margin-top:10px;"></div>
       <div class="btns" style="margin-top:12px;">
         <button class="primary" id="getQrBtn" type="button" disabled>获取二维码</button>
@@ -76,7 +76,7 @@
       <div class="card">
         <div class="hint">下一步</div>
         <p>当 WhatsApp 二维码就绪后，你会在 WhatsApp →「已关联的设备」中扫描二维码完成连接。</p>
-        <p class="hint">（二维码展示会在下一步与 OpenClaw 串起来。）</p>
+        <p class="hint">扫码完成后，本页面会自动显示“已关联✅”。</p>
       </div>
       <div class="card">
         <div class="hint">支持</div>
@@ -104,13 +104,24 @@
       const qrStatus = document.getElementById('qrStatus');
       let turnstileToken = null;
 
+      function getUuidFromPath(){
+        // 支持分享链接：/zh/p/<id>
+        const m = location.pathname.match(/^\/zh\/p\/([^\/]+)\/?$/);
+        return m ? decodeURIComponent(m[1]) : null;
+      }
+
       function setUuid(u){
         el.textContent = u;
-        history.replaceState(null,'',`/zh/?uuid=${encodeURIComponent(u)}`);
+        // 如果用户是从 /zh/p/<id> 进入，则保持该形式，方便复制分享
+        if (location.pathname.startsWith('/zh/p/')) {
+          history.replaceState(null,'',`/zh/p/${encodeURIComponent(u)}`);
+        } else {
+          history.replaceState(null,'',`/zh/?uuid=${encodeURIComponent(u)}`);
+        }
       }
 
       const params = new URLSearchParams(location.search);
-      const existing = params.get('uuid');
+      const existing = params.get('uuid') || getUuidFromPath();
       setUuid(existing || uuidv4());
 
       copyBtn.addEventListener('click', async () => {
@@ -140,6 +151,10 @@
         uuidCard.style.pointerEvents = 'auto';
         verifyCard.style.display = 'block';
         verifyCard.scrollIntoView({behavior:'smooth', block:'start'});
+
+        // 先允许直接获取二维码（服务端强制验证会在后续启用）
+        getQrBtn.disabled = false;
+
         if (!document.getElementById('ts-script')) {
           const s = document.createElement('script');
           s.id = 'ts-script';
@@ -150,21 +165,9 @@
               window.turnstile.render('#turnstile', {
                 sitekey: '0x4AAAAAACa0PQ3rbwIf9090',
                 theme: 'dark',
-                callback: (token) => {
-                  turnstileToken = token;
-                  getQrBtn.disabled = false;
-                  qrStatus.textContent = '';
-                },
-                'error-callback': () => {
-                  turnstileToken = null;
-                  getQrBtn.disabled = true;
-                  qrStatus.textContent = '验证失败，请重试。';
-                },
-                'expired-callback': () => {
-                  turnstileToken = null;
-                  getQrBtn.disabled = true;
-                  qrStatus.textContent = '验证已过期，请重新验证。';
-                }
+                callback: (token) => { turnstileToken = token; },
+                'error-callback': () => { turnstileToken = null; },
+                'expired-callback': () => { turnstileToken = null; }
               });
             }
           };
@@ -178,7 +181,7 @@
         const r = await fetch('/api/wa/start', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ uuid })
+          body: JSON.stringify({ uuid, turnstileToken })
         });
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || '启动失败');

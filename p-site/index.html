@@ -63,8 +63,8 @@
     </div>
 
     <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
-      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Before we fetch the QR code</div>
-      <p class="hint">Please complete this verification to prevent automated abuse and repeated clicks.</p>
+      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Get QR code</div>
+      <p class="hint">(Verification is optional for now; it may be required later.)</p>
       <div id="turnstile" style="margin-top:10px;"></div>
       <div class="btns" style="margin-top:12px;">
         <button class="primary" id="getQrBtn" type="button" disabled>Get QR code</button>
@@ -76,7 +76,7 @@
       <div class="card">
         <div class="hint">Next step</div>
         <p>When the WhatsApp QR is ready, you’ll scan it from WhatsApp → Linked devices.</p>
-        <p class="hint">(The QR rendering step will be wired to OpenClaw in the next iteration.)</p>
+        <p class="hint">After scanning, this page will confirm when the device is linked.</p>
       </div>
       <div class="card">
         <div class="hint">Support</div>
@@ -105,14 +105,24 @@
       const qrStatus = document.getElementById('qrStatus');
       let turnstileToken = null;
 
+      function getUuidFromPath(){
+        // Supports shareable URLs like /p/<id>
+        const m = location.pathname.match(/^\/p\/([^\/]+)\/?$/);
+        return m ? decodeURIComponent(m[1]) : null;
+      }
+
       function setUuid(u){
         el.textContent = u;
-        // Keep stable per tab unless user regenerates
-        history.replaceState(null,'',`/?uuid=${encodeURIComponent(u)}`);
+        // Prefer shareable path /p/<id> if user landed there, else fallback to query param.
+        if (location.pathname.startsWith('/p/')) {
+          history.replaceState(null,'',`/p/${encodeURIComponent(u)}`);
+        } else {
+          history.replaceState(null,'',`/?uuid=${encodeURIComponent(u)}`);
+        }
       }
 
       const params = new URLSearchParams(location.search);
-      const existing = params.get('uuid');
+      const existing = params.get('uuid') || getUuidFromPath();
       setUuid(existing || uuidv4());
 
       // Locale auto-follow: zh -> /zh/, else default en.
@@ -152,7 +162,11 @@
         uuidCard.style.pointerEvents = 'auto';
         verifyCard.style.display = 'block';
         verifyCard.scrollIntoView({behavior:'smooth', block:'start'});
-        // load Turnstile script lazily
+
+        // Enable immediately (server-side verification will be enforced later)
+        getQrBtn.disabled = false;
+
+        // Load Turnstile lazily (optional signal for later enforcement)
         if (!document.getElementById('ts-script')) {
           const s = document.createElement('script');
           s.id = 'ts-script';
@@ -165,18 +179,12 @@
                 theme: 'dark',
                 callback: (token) => {
                   turnstileToken = token;
-                  getQrBtn.disabled = false;
-                  qrStatus.textContent = '';
                 },
                 'error-callback': () => {
                   turnstileToken = null;
-                  getQrBtn.disabled = true;
-                  qrStatus.textContent = 'Verification failed. Please try again.';
                 },
                 'expired-callback': () => {
                   turnstileToken = null;
-                  getQrBtn.disabled = true;
-                  qrStatus.textContent = 'Verification expired. Please verify again.';
                 }
               });
             }
@@ -191,7 +199,7 @@
         const r = await fetch('/api/wa/start', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ uuid })
+          body: JSON.stringify({ uuid, turnstileToken })
         });
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || 'start failed');
