@@ -134,3 +134,18 @@ CREATE TABLE IF NOT EXISTS write_queue (
 );
 
 CREATE INDEX IF NOT EXISTS idx_wq_kind ON write_queue(kind, qid);
+
+
+-- Shortlink map (code -> long URL)
+CREATE TABLE IF NOT EXISTS shortlinks (
+  code TEXT PRIMARY KEY,
+  long_url TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT,
+  kind TEXT,
+  delivery_id TEXT,
+  provision_uuid TEXT,
+  meta_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_shortlinks_expires ON shortlinks(expires_at);

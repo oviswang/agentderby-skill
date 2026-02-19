@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openDb, nowIso } from './lib/db.mjs';
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 function readSchemaSql() {
-  const p = path.join(process.cwd(), 'control-plane', 'schema.sql');
+  const p = path.join(process.cwd(), 'schema.sql');
   return fs.readFileSync(p, 'utf8');
 }
 

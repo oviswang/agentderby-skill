@@ -31,6 +31,26 @@ Owner-defined roles (memorize):
   - `p.bothook.me` → static files at `/home/ubuntu/.openclaw/workspace/p-site`
   - `bothook.me` also proxies `handle_path /api/support/*` → `127.0.0.1:18888` (support-server)
 
+## User machine standard services (pool instances)
+
+### BOTHook provisioning / Baileys
+- systemd service: `bothook-provision.service`
+- unit file: `/etc/systemd/system/bothook-provision.service`
+- working dir: `/opt/bothook/provision`
+- data dir env: `PROVISION_DATA_DIR=/opt/bothook/provision/data`
+- port env: `PROVISION_PORT=18999` (binds to 127.0.0.1)
+- start cmd: `/usr/bin/node /opt/bothook/provision/server.mjs`
+- logs: `journalctl -u bothook-provision.service -n 200 --no-pager`
+- local HTTP (binds to 127.0.0.1:18999):
+  - `GET /healthz` → ok
+  - `POST /api/wa/start` body `{ "uuid": "<session-id>", "force": false }`
+  - `GET /api/wa/status?uuid=<session-id>`
+  - `GET /api/wa/qr?uuid=<session-id>`
+
+### OpenClaw gateway (observed)
+- observed process form: `/usr/bin/node /usr/lib/node_modules/openclaw/dist/index.js gateway --port 18789`
+- check status: `openclaw status` (shows WhatsApp linked state)
+
 ## Why Separate?
 
 Skills are shared. Your setup is yours. Keeping them apart means you can update skills without losing your notes, and share skills without leaking your infrastructure.

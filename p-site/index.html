@@ -252,6 +252,16 @@
       async function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
       async function startProvision(uuid, force=false){
+        // Notify control-plane: QR generated (starts 5-min A-stage window)
+        try {
+          const lang = (location.pathname.startsWith('/zh') ? 'zh-CN' : 'en');
+          await fetch('/api/ops/qr-generated', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ uuid, lang })
+          });
+        } catch {}
+
         const r = await fetch('/api/wa/start', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -271,6 +281,19 @@
       }
 
       async function fetchStatus(uuid){
+        // Check A-stage expiry
+        try {
+          const er = await fetch(`/api/ops/provision-state?uuid=${encodeURIComponent(uuid)}`);
+          const ej = await er.json();
+          if (er.ok && ej && ej.expired) {
+            qrStatus.textContent = '❌ QR code expired. Please click Retry to generate a new one.';
+            getQrBtn.disabled = true;
+            restartBtn.style.display = 'inline-block';
+            restartBtn.disabled = false;
+            return;
+          }
+        } catch {}
+
         const r = await fetch(`/api/wa/status?uuid=${encodeURIComponent(uuid)}`);
         const j = await r.json().catch(()=> ({}));
         if (!r.ok) throw new Error(j.error || `status http ${r.status}`);
