@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>服务條款 — BOTHook</title>
+  <meta name="description" content="BOTHook 服务條款。" />
+  <link rel="icon" href="/assets/logo.jpg" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="canonical" href="https://bothook.me/zh-tw/terms.html" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/terms.html" />
+  <link rel="alternate" hreflang="zh" href="https://bothook.me/zh-tw/terms.html" />
+</head>
+<body>
+  <header class="header">
+    <a class="brand" href="/zh-tw/" aria-label="BOTHook 首页">
+      <img src="/assets/logo.jpg" alt="BOTHook logo" />
+      <strong>BOTHook</strong>
+    </a>
+  </header>
+
+  <main class="main">
+    <div class="content-wrap" id="contentWrap">
+      <section class="card" style="max-width:860px;margin:0 auto;">
+        <h1 class="h1" style="font-size:32px;">服务條款</h1>
+        <p class="p" style="font-size:13px;">更新日期：<span id="d"></span></p>
+
+        <p class="p">BOTHook（“bothook”、“我们”）提供 OpenClaw 的托管式准备与交付体验，使你可以在聊天软件中直接使用机器人。本條款适用于你对我们网站与服务的使用。</p>
+
+        <h2 class="h2">1. 我们提供什么</h2>
+        <ul class="list">
+          <li>我们为你准备并运行一个 OpenClaw 实例，并协助将其连接到支持的聊天软件。</li>
+          <li>网站主要用于起步、支付与查看基础的状态/账单信息。</li>
+          <li>OpenClaw 为第三方/开源软件；bothook 不主张对 OpenClaw 的所有权。</li>
+        </ul>
+
+        <h2 class="h2">2. 你的责任</h2>
+        <ul class="list">
+          <li>你对你发送给机器人的内容负责，并应遵守你所使用的聊天平台的规则与政策。</li>
+          <li>不得将服务用于违法、恶意、骚扰、侵权或其他有害活动。</li>
+          <li>请保护好你的设备与已关联的聊天账号。如怀疑被盗用，请立即聯絡我们。</li>
+        </ul>
+
+        <h2 class="h2">3. 可用性与变更</h2>
+        <p class="p">我们会尽力保障稳定性，但不承诺绝对的持续可用。我们可能为了安全与可靠性对服务进行更新、调整或下线部分功能。</p>
+
+        <h2 class="h2">4. 订阅、续费与到期</h2>
+        <ul class="list">
+          <li>服务使用权以你购买的计划周期为准。</li>
+          <li>到期前机器人可能会提醒你续费。</li>
+          <li>若你不续费，服务将在周期结束后自然停止，无需你做额外清理。</li>
+        </ul>
+
+        <h2 class="h2">5. 支持</h2>
+        <p class="p">如需支持，请使用 <a href="/zh-tw/contact.html">聯絡表单</a>。若相关，请附上 provisioning UUID。</p>
+
+        <h2 class="h2">6. 隱私</h2>
+        <p class="p">我们如何处理信息请见 <a href="/zh-tw/privacy.html">隱私政策</a>。</p>
+
+        <h2 class="h2">7. 免责声明</h2>
+        <p class="p">服务按“现状/可用性”提供。我们不保证服务不出错或不中断。</p>
+
+        <h2 class="h2">8. 责任限制</h2>
+        <p class="p">在法律允许的最大范围内，bothook 对因使用服务产生的间接、附带、特殊、后果性或惩罚性损失（包括数据丢失、利润或业务损失）不承担责任。</p>
+
+        <h2 class="h2">9. 聯絡</h2>
+        <p class="p">对本條款有疑问？请通过 <a href="/zh-tw/contact.html">聯絡页面</a> 与我们沟通。</p>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/zh-tw/contact.html">聯絡</a>
+        <span class="dot">·</span>
+        <a href="/zh-tw/terms.html">條款</a>
+        <span class="dot">·</span>
+        <a href="/zh-tw/privacy.html">隱私</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
+    document.getElementById('year').textContent = new Date().getFullYear();
+    document.getElementById('d').textContent = new Date().toISOString().slice(0,10);
+  </script>
+</body>
+</html>

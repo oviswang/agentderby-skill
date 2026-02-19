@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>隱私政策 — BOTHook</title>
+  <meta name="description" content="BOTHook 隱私政策。" />
+  <link rel="icon" href="/assets/logo.jpg" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="canonical" href="https://bothook.me/zh-tw/privacy.html" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/privacy.html" />
+  <link rel="alternate" hreflang="zh" href="https://bothook.me/zh-tw/privacy.html" />
+</head>
+<body>
+  <header class="header">
+    <a class="brand" href="/zh-tw/" aria-label="BOTHook 首页">
+      <img src="/assets/logo.jpg" alt="BOTHook logo" />
+      <strong>BOTHook</strong>
+    </a>
+  </header>
+
+  <main class="main">
+    <div class="content-wrap" id="contentWrap">
+      <section class="card" style="max-width:860px;margin:0 auto;">
+        <h1 class="h1" style="font-size:32px;">隱私政策</h1>
+        <p class="p" style="font-size:13px;">更新日期：<span id="d"></span></p>
+
+        <p class="p">本隱私政策说明当你使用 BOTHook（“bothook”、“我们”）的网站与托管式 OpenClaw 交付服务时，我们如何处理信息。</p>
+
+        <h2 class="h2">1. 我们收集的信息</h2>
+        <ul class="list">
+          <li><strong>网站基础日志</strong>：为安全与运营所需的最小信息（如时间戳、IP、User-Agent）。</li>
+          <li><strong>聯絡表单</strong>：你提交的邮箱、消息内容，以及你可选提供的 provisioning UUID。</li>
+          <li><strong>服务元数据</strong>：为完成交付与运维所需的最小信息（如订单/会话标识、状态）。</li>
+        </ul>
+
+        <h2 class="h2">2. 聊天内容</h2>
+        <p class="p">当你在聊天软件里与机器人对话时，消息内容会由对应的平台与 OpenClaw 运行环境处理。我们不出售聊天内容。我们会尽量减少对消息内容的存储，仅在服务运行、支持与排错所必需的范围内保留信息。</p>
+
+        <h2 class="h2">3. 我们如何使用信息</h2>
+        <ul class="list">
+          <li>用于准备与运行你的 OpenClaw 实例。</li>
+          <li>用于客服支持与问题响应。</li>
+          <li>用于防滥用、安全防护与可靠性改进。</li>
+        </ul>
+
+        <h2 class="h2">4. 信息共享</h2>
+        <p class="p">我们可能在提供服务所必需的范围内与供应商共享信息（如云基础设施、邮件发送服务）。我们不出售个人信息。</p>
+
+        <h2 class="h2">5. 保存期限</h2>
+        <p class="p">我们仅在提供服务、满足合规、解决争议与执行协议所需的期限内保存信息。若你到期不续费，机器人会停止运行；部分运营数据可能在有限时间内保留用于结算与支持。</p>
+
+        <h2 class="h2">6. 安全</h2>
+        <p class="p">我们采取合理的安全措施（访问控制、传输加密、最小权限等），但任何系统都无法保证绝对安全。</p>
+
+        <h2 class="h2">7. 你的选择</h2>
+        <ul class="list">
+          <li>你可以聯絡我们请求访问、更正或删除你通过聯絡表单提交的信息。</li>
+          <li>你可以随时停止使用；不续费即可自然停止服务。</li>
+        </ul>
+
+        <h2 class="h2">8. 聯絡</h2>
+        <p class="p">如有隱私相关问题，请使用 <a href="/zh-tw/contact.html">聯絡表单</a>。</p>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/zh-tw/contact.html">聯絡</a>
+        <span class="dot">·</span>
+        <a href="/zh-tw/terms.html">條款</a>
+        <span class="dot">·</span>
+        <a href="/zh-tw/privacy.html">隱私</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
+    document.getElementById('year').textContent = new Date().getFullYear();
+    document.getElementById('d').textContent = new Date().toISOString().slice(0,10);
+  </script>
+</body>
+</html>
