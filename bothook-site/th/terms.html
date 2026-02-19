@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Terms — BOTHook</title>
-  <meta name="description" content="BOTHook Terms of Service." />
+  <title>ข้อกำหนด — BOTHook</title>
+  <meta name="description" content="ข้อกำหนดการให้บริการของ BOTHook" />
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="canonical" href="https://bothook.me/th/terms.html" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/terms.html" />
+  <link rel="alternate" hreflang="th" href="https://bothook.me/th/terms.html" />
 </head>
 <body>
   <header class="header">
-    <a class="brand" href="/th/" aria-label="BOTHook home">
+    <a class="brand" href="/th/" aria-label="หน้าแรก BOTHook">
       <img src="/assets/logo.jpg" alt="BOTHook logo" />
       <strong>BOTHook</strong>
     </a>
@@ -49,20 +51,30 @@
         <p class="p">ภายใต้ขอบเขตกฎหมายที่อนุญาต bothook จะไม่รับผิดชอบต่อความเสียหายทางอ้อม/ต่อเนื่อง ความรับผิดของเราจำกัดตามจำนวนเงินที่คุณชำระสำหรับรอบปัจจุบัน</p>
 
         <h2 class="h2">6. ติดต่อ</h2>
-        <p class="p">ต้องการความช่วยเหลือ? โปรดใช้หน้า Contact</p>
-
+        <p class="p">ต้องการความช่วยเหลือ? โปรดใช้ <a href="/th/contact.html">หน้าติดต่อ</a></p>
       </section>
     </div>
   </main>
 
   <footer class="footer">
-    <div class="footer-inner">
-      <a class="footer-link" href="/th/">Home</a>
-      <a class="footer-link" href="/th/terms.html">Terms</a>
-      <a class="footer-link" href="/th/privacy.html">Privacy</a>
-      <a class="footer-link" href="/th/contact.html">Contact</a>
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/th/contact.html">ติดต่อ</a>
+        <span class="dot">·</span>
+        <a href="/th/terms.html">ข้อกำหนด</a>
+        <span class="dot">·</span>
+        <a href="/th/privacy.html">ความเป็นส่วนตัว</a>
+      </nav>
     </div>
   </footer>
-  <script>document.getElementById('d').textContent = new Date().toISOString().slice(0, 10);</script>
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
+    document.getElementById('year').textContent = new Date().getFullYear();
+    document.getElementById('d').textContent = new Date().toISOString().slice(0,10);
+  </script>
 </body>
 </html>

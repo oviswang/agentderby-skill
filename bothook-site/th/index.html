@@ -55,70 +55,70 @@
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "FAQPage",
+  "@type": "คำถามที่พบบ่อยPage",
   "mainEntity": [
     {
       "@type": "Question",
-      "name": "1) Do you provide the OpenAI API key? What do I need to prepare?",
+      "name": "1) คุณมี OpenAI API key ให้ไหม? ต้องเตรียมอะไรบ้าง?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "You bring your own OpenAI API key. We don’t sell keys, and we don’t mark up OpenAI usage."
+        "text": "คุณต้องเตรียม OpenAI API key เอง เราไม่ขาย key และไม่บวกเพิ่มจากการใช้งาน OpenAI"
       }
     },
     {
       "@type": "Question",
-      "name": "2) Is my OpenAI key safe?",
+      "name": "2) OpenAI key ของฉันปลอดภัยไหม?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Your key is stored on your own dedicated machine (not shared with other users). We never display it back in chat. You can replace it anytime."
+        "text": "key ของคุณถูกเก็บไว้บนเครื่อง dedicated ของคุณ (ไม่แชร์กับผู้ใช้อื่น) และจะไม่ถูกแสดงกลับในแชต คุณสามารถเปลี่ยนได้ทุกเมื่อ"
       }
     },
     {
       "@type": "Question",
-      "name": "3) Can I cancel anytime? Will I be charged again?",
+      "name": "3) ยกเลิกได้ตอนไหนก็ได้ไหม? จะถูกคิดเงินอีกไหม?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. You can cancel anytime inside WhatsApp. After you cancel, you won’t be charged for the next month."
+        "text": "ได้ คุณยกเลิกได้ตลอดใน WhatsApp หลังยกเลิกจะไม่ถูกคิดเงินในเดือนถัดไป"
       }
     },
     {
       "@type": "Question",
-      "name": "4) Can I use it in groups?",
+      "name": "4) ใช้ในกลุ่มได้ไหม?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Not by default. This product is optimized for “message yourself” (self‑chat) to keep it private and reliable."
+        "text": "ค่าเริ่มต้นไม่รองรับ ผลิตภัณฑ์นี้ปรับให้เหมาะกับ “Message yourself” (self‑chat) เพื่อความเป็นส่วนตัวและความเสถียร"
       }
     },
     {
       "@type": "Question",
-      "name": "5) What if I accidentally unlinked the WhatsApp device? (Relink)",
+      "name": "5) ถ้าฉันเผลอ unlink อุปกรณ์ WhatsApp จะทำอย่างไร? (Relink)",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "If you’re paid and your subscription is active, you can relink via your personal link on p.bothook.me using your UUID. We’ll verify the WhatsApp account matches before restoring access."
+        "text": "หากคุณชำระเงินแล้วและการสมัครยังใช้งานอยู่ คุณสามารถ relink ผ่านลิงก์ส่วนตัวบน p.bothook.me ด้วย UUID ของคุณ เราจะตรวจสอบบัญชี WhatsApp ให้ตรงกันก่อนคืนสิทธิ์"
       }
     },
     {
       "@type": "Question",
-      "name": "6) What models can I use?",
+      "name": "6) ใช้โมเดลอะไรได้บ้าง?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "You can use any OpenAI model available to your key (subject to OpenAI’s own limits). Defaults are tuned for quality and stability."
+        "text": "คุณใช้ได้ทุกโมเดล OpenAI ที่ key ของคุณรองรับ (ขึ้นอยู่กับข้อจำกัดของ OpenAI) ค่าเริ่มต้นปรับเพื่อคุณภาพและความเสถียร"
       }
     },
     {
       "@type": "Question",
-      "name": "7) What are the limits? (speed / rate / usage)",
+      "name": "7) มีข้อจำกัดอะไรบ้าง? (ความเร็ว / อัตรา / การใช้งาน)",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Limits depend mostly on your OpenAI account and chosen model. Server resources are dedicated and always-on."
+        "text": "ข้อจำกัดขึ้นอยู่กับบัญชี OpenAI และโมเดลที่เลือกเป็นหลัก ทรัพยากรเซิร์ฟเวอร์เป็นแบบ dedicated และเปิดตลอด"
       }
     },
     {
       "@type": "Question",
-      "name": "8) Where do I use the assistant?",
+      "name": "8) ใช้ผู้ช่วยที่ไหน?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "In WhatsApp. The easiest way is to open your “Message yourself” chat and talk to the assistant there (self‑chat)."
+        "text": "ใน WhatsApp วิธีที่ง่ายที่สุดคือเปิดแชต “Message yourself” แล้วคุยกับผู้ช่วยที่นั่น (self‑chat)"
       }
     }
   ],
@@ -129,10 +129,10 @@
 <body>
   <div class="banner" id="langBanner" aria-live="polite">
     <div class="inner card" style="padding:8px 10px;">
-      <div id="langBannerText">View this page in another language?</div>
+      <div id="langBannerText">ดูหน้านี้เป็นภาษาอื่น?</div>
       <div style="display:flex; gap:8px; align-items:center;">
-        <button id="langBannerSwitch" type="button">Switch</button>
-        <button id="langBannerDismiss" type="button">Not now</button>
+        <button id="langBannerสลับภาษา" type="button">สลับภาษา</button>
+        <button id="langBannerปิด" type="button">ไว้ทีหลัง</button>
       </div>
     </div>
   </div>
@@ -172,15 +172,15 @@
       <section class="hero">
         <div class="card">
           <div class="kicker">Hook me to bots</div>
-          <h1 class="h1">A simpler way to use OpenClaw.</h1>
+          <h1 class="h1">วิธีที่ง่ายกว่าในการใช้ OpenClaw</h1>
           <p class="p">bothook ทำสิ่งเดียวแบบเรียบง่าย: เราตั้งค่า <a href="https://openclaw.ai" target="_blank" rel="noopener noreferrer">OpenClaw</a> ให้คุณ และพาไปใช้งานได้ทันทีในแอปแชตที่คุณใช้อยู่แล้ว</p>
-          <p class="p">No signup. No setup. No technical knowledge required.</p>
+          <p class="p">ไม่ต้องสมัคร ไม่ต้องตั้งค่า ไม่ต้องมีความรู้ด้านเทคนิค</p>
 
           <div class="ctaRow">
             <a class="cta primary wide" href="https://p.bothook.me/" id="ctaPrimary">Get started</a>
           </div>
 
-          <p class="p" style="margin-top:14px; font-size:13px;">The website is only for getting started, payment, and checking status. Once the bot is ready, you rarely need to come back.</p>
+          <p class="p" style="margin-top:14px; font-size:13px;">เว็บไซต์นี้ใช้สำหรับเริ่มต้น ชำระเงิน และตรวจสอบสถานะเท่านั้น เมื่อบอทพร้อมแล้ว คุณแทบไม่ต้องกลับมาอีก</p>
         </div>
         <div class="card" style="padding:0; display:flex;">
           <div class="demoFrame" aria-label="WhatsApp linking animation">
@@ -190,17 +190,17 @@
       </section>
 
       <section class="card" style="margin-top:18px;">
-        <h2 class="h2">Optimized runtime for OpenClaw</h2>
+        <h2 class="h2">สภาพแวดล้อมที่ปรับให้เหมาะกับ OpenClaw</h2>
         <div class="calloutGrid">
           <div>
-            <p class="p">You get a dedicated environment tuned for running OpenClaw 24×7:</p>
+            <p class="p">คุณจะได้สภาพแวดล้อมแบบ dedicated ที่ปรับให้เหมาะกับการรัน OpenClaw แบบ 24×7:</p>
             <ul class="list">
               <li>2 vCPU · 2GB RAM</li>
               <li>40GB SSD</li>
               <li>200Mbps bandwidth</li>
               <li>Always online (7×24)</li>
             </ul>
-            <p class="p" style="margin-top:12px;">Performance is sufficient for long-term, stable use.</p>
+            <p class="p" style="margin-top:12px;">ประสิทธิภาพเพียงพอสำหรับการใช้งานระยะยาวที่เสถียร</p>
           </div>
           <div class="priceCard" aria-label="Pricing">
             <div class="priceBig" aria-label="Price">
@@ -208,19 +208,19 @@
               <span class="amount"> $9.8</span>
               <span class="unit">/ เดือน</span>
             </div>
-            <p class="p" style="margin:0;">Manage subscription inside WhatsApp (subscribe / cancel / upgrade).</p>
+            <p class="p" style="margin:0;">จัดการการสมัครสมาชิกได้ใน WhatsApp (สมัคร / ยกเลิก / อัปเกรด)</p>
           </div>
         </div>
       </section>
 
       <section class="grid2">
         <div class="card">
-          <h2 class="h2">What is bothook.me?</h2>
+          <h2 class="h2">bothook.me คืออะไร?</h2>
           <p class="p">bothook ทำให้การใช้ OpenClaw ง่ายขึ้น โดยไม่ไปเปลี่ยน OpenClaw และไม่บังคับให้คุณต้องติดตั้งหรือดูแลระบบเอง</p>
           <p class="p">บอทจะอยู่ในแอปแชตที่คุณใช้อยู่แล้ว คุณแค่เริ่มคุยได้เลย</p>
         </div>
         <div class="card">
-          <h2 class="h2">What bothook actually does</h2>
+          <h2 class="h2">bothook ทำอะไรจริง ๆ</h2>
           <p class="p">bothook ไม่ได้สร้างบอทตัวใหม่ และไม่ได้เพิ่มชั้นความซับซ้อนเพิ่มเติมบน OpenClaw</p>
           <p class="p"><strong>มันทำแค่อย่างเดียว:</strong> ตั้งค่า OpenClaw ให้คุณ และนำไปใช้งานได้ทันทีในแอปแชตที่คุณใช้อยู่</p>
         </div>
@@ -228,7 +228,7 @@
 
       <section class="grid2">
         <div class="card">
-          <h2 class="h2">What using it feels like</h2>
+          <h2 class="h2">ประสบการณ์การใช้งานเป็นอย่างไร</h2>
           <ul class="list">
             <li>คุณไม่ต้องไปใช้บอทในเว็บไซต์</li>
             <li>คุณไม่ต้องเรียนรู้หน้าตา/อินเทอร์เฟซใหม่</li>
@@ -239,10 +239,10 @@
           <p class="p" style="margin-top:12px;">คุณคุยกับมันได้บน <strong>WhatsApp</strong> เลย—ตรงที่คุณใช้อยู่แล้ว เราตั้งใจโฟกัสแค่ช่องทางเดียวและทำให้มันดีที่สุด</p>
         </div>
         <div class="card">
-          <h2 class="h2">Who it’s for (and not for)</h2>
+          <h2 class="h2">เหมาะกับใคร (และไม่เหมาะกับใคร)</h2>
           <div class="split">
             <div>
-              <div class="label">For you if</div>
+              <div class="label">เหมาะกับคุณถ้า</div>
               <ul class="list">
                 <li>คุณอยากใช้ OpenClaw ไม่ใช่เรียนรู้วิธีติดตั้ง</li>
                 <li>คุณชอบทำงานให้เสร็จในแอปแชต</li>
@@ -250,7 +250,7 @@
               </ul>
             </div>
             <div>
-              <div class="label">Not a good fit if</div>
+              <div class="label">ไม่เหมาะถ้า</div>
               <ul class="list">
                 <li>คุณต้องการควบคุมการติดตั้งและการรันทั้งหมดเอง</li>
                 <li>คุณต้องการปรับแต่งเชิงลึกระดับล่าง</li>
@@ -258,56 +258,56 @@
               </ul>
             </div>
           </div>
-          <p class="p" style="margin-top:12px;"><strong>One-line boundary:</strong> bothook เหมาะกับคนที่อยาก “ใช้บอท” ไม่ใช่คนที่อยาก “สร้างบอท”</p>
+          <p class="p" style="margin-top:12px;"><strong>สรุปสั้น ๆ:</strong> bothook เหมาะกับคนที่อยาก “ใช้บอท” ไม่ใช่คนที่อยาก “สร้างบอท”</p>
         </div>
       </section>
 
       <section class="card" style="margin-top:18px;">
-        <h2 class="h2">FAQ</h2>
+        <h2 class="h2">คำถามที่พบบ่อย</h2>
 
         <details class="faq">
-          <summary>1) Do you provide the OpenAI API key? What do I need to prepare?</summary>
-          <div>You bring your own OpenAI API key. We don’t sell keys, and we don’t mark up OpenAI usage.</div>
+          <summary>1) คุณมี OpenAI API key ให้ไหม? ต้องเตรียมอะไรบ้าง?</summary>
+          <div>คุณต้องเตรียม OpenAI API key เอง เราไม่ขาย key และไม่บวกเพิ่มจากการใช้งาน OpenAI</div>
         </details>
 
         <details class="faq">
-          <summary>2) Is my OpenAI key safe?</summary>
-          <div>Your key is stored on your own dedicated machine (not shared with other users). We never display it back in chat. You can replace it anytime.</div>
+          <summary>2) OpenAI key ของฉันปลอดภัยไหม?</summary>
+          <div>key ของคุณถูกเก็บไว้บนเครื่อง dedicated ของคุณ (ไม่แชร์กับผู้ใช้อื่น) และจะไม่ถูกแสดงกลับในแชต คุณสามารถเปลี่ยนได้ทุกเมื่อ</div>
         </details>
 
         <details class="faq">
-          <summary>3) Can I cancel anytime? Will I be charged again?</summary>
-          <div>Yes. You can cancel anytime inside WhatsApp. After you cancel, you won’t be charged for the next month.</div>
+          <summary>3) ยกเลิกได้ตอนไหนก็ได้ไหม? จะถูกคิดเงินอีกไหม?</summary>
+          <div>ได้ คุณยกเลิกได้ตลอดใน WhatsApp หลังยกเลิกจะไม่ถูกคิดเงินในเดือนถัดไป</div>
         </details>
 
         <details class="faq">
-          <summary>4) Can I use it in groups?</summary>
-          <div>Not by default. This product is optimized for “message yourself” (self‑chat) to keep it private and reliable.</div>
+          <summary>4) ใช้ในกลุ่มได้ไหม?</summary>
+          <div>ค่าเริ่มต้นไม่รองรับ ผลิตภัณฑ์นี้ปรับให้เหมาะกับ “Message yourself” (self‑chat) เพื่อความเป็นส่วนตัวและความเสถียร</div>
         </details>
 
         <details class="faq">
-          <summary>5) What if I accidentally unlinked the WhatsApp device? (Relink)</summary>
-          <div>If you’re paid and your subscription is active, you can relink via your personal link on p.bothook.me using your UUID. We’ll verify the WhatsApp account matches before restoring access.</div>
+          <summary>5) ถ้าฉันเผลอ unlink อุปกรณ์ WhatsApp จะทำอย่างไร? (Relink)</summary>
+          <div>หากคุณชำระเงินแล้วและการสมัครยังใช้งานอยู่ คุณสามารถ relink ผ่านลิงก์ส่วนตัวบน p.bothook.me ด้วย UUID ของคุณ เราจะตรวจสอบบัญชี WhatsApp ให้ตรงกันก่อนคืนสิทธิ์</div>
         </details>
 
         <details class="faq">
-          <summary>6) What models can I use?</summary>
-          <div>You can use any OpenAI model available to your key (subject to OpenAI’s own limits). Defaults are tuned for quality and stability.</div>
+          <summary>6) ใช้โมเดลอะไรได้บ้าง?</summary>
+          <div>คุณใช้ได้ทุกโมเดล OpenAI ที่ key ของคุณรองรับ (ขึ้นอยู่กับข้อจำกัดของ OpenAI) ค่าเริ่มต้นปรับเพื่อคุณภาพและความเสถียร</div>
         </details>
 
         <details class="faq">
-          <summary>7) What are the limits? (speed / rate / usage)</summary>
-          <div>Limits depend mostly on your OpenAI account and chosen model. Server resources are dedicated and always-on.</div>
+          <summary>7) มีข้อจำกัดอะไรบ้าง? (ความเร็ว / อัตรา / การใช้งาน)</summary>
+          <div>ข้อจำกัดขึ้นอยู่กับบัญชี OpenAI และโมเดลที่เลือกเป็นหลัก ทรัพยากรเซิร์ฟเวอร์เป็นแบบ dedicated และเปิดตลอด</div>
         </details>
 
         <details class="faq">
-          <summary>8) Where do I use the assistant?</summary>
-          <div>In WhatsApp. The easiest way is to open your “Message yourself” chat and talk to the assistant there (self‑chat).</div>
+          <summary>8) ใช้ผู้ช่วยที่ไหน?</summary>
+          <div>ใน WhatsApp วิธีที่ง่ายที่สุดคือเปิดแชต “Message yourself” แล้วคุยกับผู้ช่วยที่นั่น (self‑chat)</div>
         </details>
       </section>
 
       <section class="card" style="margin-top:18px;">
-        <h2 class="h2">Summary</h2>
+        <h2 class="h2">สรุป</h2>
         <p class="p">bothook is a simpler way to use OpenClaw. It doesn’t change how OpenClaw works — it just brings it directly to you.</p>
         <p class="p">You don’t need to understand how it runs. You only need to start chatting.</p>
       </section>
@@ -415,8 +415,8 @@
     if (!dismissed && best !== cur) {
       const banner = document.getElementById('langBanner');
       const text = document.getElementById('langBannerText');
-      const sw = document.getElementById('langBannerSwitch');
-      const dis = document.getElementById('langBannerDismiss');
+      const sw = document.getElementById('langBannerสลับภาษา');
+      const dis = document.getElementById('langBannerปิด');
       text.textContent = (best === 'zh') ? '查看中文版本？' : 'View this page in English?';
       banner.style.display = 'block';
       sw.onclick = () => {

@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Privacy — BOTHook</title>
-  <meta name="description" content="BOTHook Privacy Policy." />
+  <title>ความเป็นส่วนตัว — BOTHook</title>
+  <meta name="description" content="นโยบายความเป็นส่วนตัวของ BOTHook" />
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="canonical" href="https://bothook.me/th/privacy.html" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/privacy.html" />
+  <link rel="alternate" hreflang="th" href="https://bothook.me/th/privacy.html" />
 </head>
 <body>
   <header class="header">
-    <a class="brand" href="/th/" aria-label="BOTHook home">
+    <a class="brand" href="/th/" aria-label="หน้าแรก BOTHook">
       <img src="/assets/logo.jpg" alt="BOTHook logo" />
       <strong>BOTHook</strong>
     </a>
@@ -28,7 +30,7 @@
         <h2 class="h2">1. ข้อมูลที่เราเก็บ</h2>
         <ul class="list">
           <li><strong>ข้อมูลการใช้งานเว็บไซต์</strong>: บันทึกพื้นฐานเพื่อความปลอดภัยและการดำเนินงาน (เช่น เวลา, IP, user agent)</li>
-          <li><strong>การส่งฟอร์มติดต่อ</strong>: อีเมลที่คุณให้, ข้อความของคุณ และ (ถ้ามี) UUID สำหรับ provisioning</li>
+          <li><strong>การส่งฟอร์มติดต่อ</strong>: อีเมลที่คุณให้, ข้อความของคุณ และ (ถ้ามี) Provisioning UUID</li>
           <li><strong>เมตาดาต้าของบริการ</strong>: ข้อมูลขั้นต่ำเพื่อจัดเตรียม/จัดการอินสแตนซ์ (เช่น ตัวระบุคำสั่งซื้อ/เซสชัน, สถานะ)</li>
         </ul>
 
@@ -48,21 +50,40 @@
         <h2 class="h2">5. การเก็บรักษาข้อมูล</h2>
         <p class="p">เราเก็บข้อมูลเท่าที่จำเป็นต่อการดำเนินงาน/ซัพพอร์ต จากนั้นจะลบหรือทำให้ไม่สามารถระบุตัวตนได้เมื่อเหมาะสม</p>
 
-        <h2 class="h2">6. ติดต่อ</h2>
-        <p class="p">หากมีคำถามเกี่ยวกับความเป็นส่วนตัว โปรดติดต่อผ่านหน้า Contact</p>
+        <h2 class="h2">6. ความปลอดภัย</h2>
+        <p class="p">เราใช้มาตรการที่เหมาะสมเพื่อปกป้องข้อมูล (การควบคุมการเข้าถึง, การเข้ารหัสระหว่างส่ง, และแนวปฏิบัติ least‑privilege) แต่ไม่มีระบบใดปลอดภัยสมบูรณ์แบบ</p>
 
+        <h2 class="h2">7. ตัวเลือกของคุณ</h2>
+        <ul class="list">
+          <li>คุณสามารถติดต่อเราเพื่อขอเข้าถึง/แก้ไข/ลบข้อมูลติดต่อที่คุณส่งมา</li>
+          <li>คุณสามารถหยุดใช้บริการได้ทุกเมื่อด้วยการไม่ต่ออายุ</li>
+        </ul>
+
+        <h2 class="h2">8. ติดต่อ</h2>
+        <p class="p">มีคำถามเกี่ยวกับความเป็นส่วนตัว? ใช้ <a href="/th/contact.html">แบบฟอร์มติดต่อ</a></p>
       </section>
     </div>
   </main>
 
   <footer class="footer">
-    <div class="footer-inner">
-      <a class="footer-link" href="/th/">Home</a>
-      <a class="footer-link" href="/th/terms.html">Terms</a>
-      <a class="footer-link" href="/th/privacy.html">Privacy</a>
-      <a class="footer-link" href="/th/contact.html">Contact</a>
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/th/contact.html">ติดต่อ</a>
+        <span class="dot">·</span>
+        <a href="/th/terms.html">ข้อกำหนด</a>
+        <span class="dot">·</span>
+        <a href="/th/privacy.html">ความเป็นส่วนตัว</a>
+      </nav>
     </div>
   </footer>
-  <script>document.getElementById('d').textContent = new Date().toISOString().slice(0, 10);</script>
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
+    document.getElementById('year').textContent = new Date().getFullYear();
+    document.getElementById('d').textContent = new Date().toISOString().slice(0,10);
+  </script>
 </body>
 </html>
