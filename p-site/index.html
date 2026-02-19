@@ -270,8 +270,6 @@
         return j;
       }
 
-      }
-
       async function fetchStatus(uuid){
         const r = await fetch(`/api/wa/status?uuid=${encodeURIComponent(uuid)}`);
         const j = await r.json().catch(()=> ({}));
