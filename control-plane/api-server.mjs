@@ -119,6 +119,10 @@ async function poolFetch(instance, path, opts = {}) {
   }
 }
 
+function isDebug(req) {
+  return req.query?.debug === '1' || req.headers['x-bothook-debug'] === '1' || process.env.BOTHOOK_DEBUG === '1';
+}
+
 function send(res, status, obj) {
   res.status(status).type('application/json').send(JSON.stringify(obj));
 }
@@ -149,7 +153,10 @@ app.post('/api/wa/start', async (req, res) => {
     });
 
     if (!r.ok) return send(res, 502, { ok: false, error: 'pool_start_failed', detail: r.json || r.text, poolUrl: r.url });
-    return send(res, 200, { ok: true, uuid, instance_id: instance.instance_id, status: r.json?.status || 'starting', connected: Boolean(r.json?.connected) });
+
+    const out = { ok: true, uuid, instance_id: instance.instance_id, status: r.json?.status || 'starting', connected: Boolean(r.json?.connected) };
+    if (isDebug(req)) out.debug = { upstreamUrl: r.url, upstreamStatus: r.status, upstreamBody: r.json || r.text };
+    return send(res, 200, out);
   } catch (e) {
     return send(res, e.statusCode || 500, { ok: false, error: e.message || 'server_error' });
   }
@@ -167,10 +174,20 @@ app.get('/api/wa/qr', async (req, res) => {
     const instance = getInstanceById(db, delivery.instance_id);
     const r = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, { timeoutMs: 12000 });
 
-    if (r.status === 409) return send(res, 409, r.json || { ok: false, error: 'qr_not_ready' });
-    if (!r.ok) return send(res, 502, { ok: false, error: 'pool_qr_failed', detail: r.json || r.text });
+    if (r.status === 409) {
+      const out = r.json || { ok: false, error: 'qr_not_ready' };
+      if (isDebug(req)) out.debug = { upstreamUrl: r.url, upstreamStatus: r.status, upstreamBody: r.json || r.text };
+      return send(res, 409, out);
+    }
+    if (!r.ok) {
+      const out = { ok: false, error: 'pool_qr_failed', detail: r.json || r.text };
+      if (isDebug(req)) out.debug = { upstreamUrl: r.url, upstreamStatus: r.status, upstreamBody: r.json || r.text };
+      return send(res, 502, out);
+    }
 
-    return send(res, 200, { ok: true, uuid, instance_id: instance.instance_id, qrDataUrl: r.json?.qrDataUrl, status: r.json?.status });
+    const out = { ok: true, uuid, instance_id: instance.instance_id, qrDataUrl: r.json?.qrDataUrl, status: r.json?.status };
+    if (isDebug(req)) out.debug = { upstreamUrl: r.url, upstreamStatus: r.status };
+    return send(res, 200, out);
   } catch (e) {
     return send(res, 500, { ok: false, error: e.message || 'server_error' });
   }
@@ -188,7 +205,11 @@ app.get('/api/wa/status', async (req, res) => {
     const instance = getInstanceById(db, delivery.instance_id);
     const r = await poolFetch(instance, `/api/wa/status?uuid=${encodeURIComponent(uuid)}`, { timeoutMs: 8000 });
 
-    if (!r.ok) return send(res, 502, { ok: false, error: 'pool_status_failed', detail: r.json || r.text });
+    if (!r.ok) {
+      const out = { ok: false, error: 'pool_status_failed', detail: r.json || r.text };
+      if (isDebug(req)) out.debug = { upstreamUrl: r.url, upstreamStatus: r.status, upstreamBody: r.json || r.text };
+      return send(res, 502, out);
+    }
 
     // If connected: bind UUID to WhatsApp identity (prevents relink takeover)
     if (r.json?.connected) {
@@ -224,7 +245,9 @@ app.get('/api/wa/status', async (req, res) => {
       }
     }
 
-    return send(res, 200, { ok: true, uuid, instance_id: instance.instance_id, ...r.json });
+    const out = { ok: true, uuid, instance_id: instance.instance_id, ...r.json };
+    if (isDebug(req)) out.debug = { upstreamUrl: r.url, upstreamStatus: r.status };
+    return send(res, 200, out);
   } catch (e) {
     return send(res, 500, { ok: false, error: e.message || 'server_error' });
   }
