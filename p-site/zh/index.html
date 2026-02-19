@@ -60,6 +60,7 @@
       </div>
 
       <p class="hint" id="qrStatus" style="margin-top:10px;"></p>
+      <pre class="hint" id="diag" style="margin-top:8px; white-space:pre-wrap; word-break:break-word; opacity:.9;"></pre>
 
       <div class="btns" style="margin-top:12px;">
         <button class="primary" id="getQrBtn" type="button" disabled>获取二维码</button>
@@ -108,6 +109,7 @@
       const getQrBtn = document.getElementById('getQrBtn');
       const restartBtn = document.getElementById('restartBtn');
       const qrStatus = document.getElementById('qrStatus');
+      const diag = document.getElementById('diag');
       let turnstileToken = null;
 
       const STORAGE_KEY = 'bothook_provision_uuid_v1';
@@ -250,6 +252,16 @@
         return j;
       }
 
+      function setDiag(obj){
+        if (!diag) return;
+        if (!obj) { diag.textContent=''; return; }
+        try {
+          diag.textContent = JSON.stringify(obj, null, 2);
+        } catch {
+          diag.textContent = String(obj);
+        }
+      }
+
       async function fetchStatus(uuid){
         const r = await fetch(`/api/wa/status?uuid=${encodeURIComponent(uuid)}`);
         const j = await r.json().catch(()=> ({}));
@@ -353,10 +365,12 @@
                 break;
               }
               qrStatus.textContent = '连接用户机中…（状态获取失败，正在重试）';
+              setDiag({ uuid, error: 'pool_status_failed', attempt: statusErrs, message: String(e?.message || e) });
               await sleep(1200);
               continue;
             }
             statusErrs = 0;
+            setDiag({ uuid, instance_id: st.instance_id, status: st.status, connected: st.connected, reason: st.reason, restartCount: st.restartCount, lastUpdateAt: st.lastUpdateAt });
             if (st.connected) {
               qrStatus.textContent = '✅ 已关联！这台交付机器已连接。';
               break;
