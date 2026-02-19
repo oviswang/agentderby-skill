@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Contact — BOTHook</title>
-  <meta name="description" content="Contact BOTHook support." />
+  <meta name="description" content="Contact BOTHook." />
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="canonical" href="https://bothook.me/th/contact.html" />
@@ -19,88 +19,66 @@
 
   <main class="main">
     <div class="content-wrap" id="contentWrap">
-      <section class="card" style="max-width:760px; margin:0 auto;">
-        <h1 class="h1" style="font-size:32px; margin-bottom:8px;">Contact</h1>
-        <p class="p">Send us a message and we’ll reply by email.</p>
+      <section class="card" style="max-width:860px;margin:0 auto;">
+        <h1 class="h1" style="font-size:32px;">ติดต่อ</h1>
+        
 
-        <div id="sent" class="card" style="display:none; background:rgba(90,255,209,.10);">
-          <strong>Thanks — we got it.</strong>
-          <div class="p" style="margin-top:8px;">We’ll reply to your email as soon as possible.</div>
-        </div>
+        <p class="p">ส่งข้อความถึงเรา แล้วเราจะตอบกลับทางอีเมล</p>
 
-        <form id="form" class="card" style="margin-top:14px;" autocomplete="on">
+
+
+        <hr class="hr" />
+        <form class="form" id="contactForm" style="margin-top:16px;">
           <label class="label" for="email">Email</label>
-          <input id="email" name="email" type="email" required placeholder="you@company.com" class="input" />
+          <input class="input" id="email" name="email" type="email" required placeholder="you@example.com" />
 
-          <div style="height:12px"></div>
+          <label class="label" for="uuid" style="margin-top:12px;">Provisioning UUID (optional)</label>
+          <input class="input" id="uuid" name="uuid" type="text" placeholder="e.g. 7c2f..." />
+          <p class="p" style="font-size:13px;opacity:.85;">Tip: If you’re provisioning WhatsApp linking, include your UUID so we can find your session quickly.</p>
 
-          <label class="label" for="uuid">Provisioning UUID (optional)</label>
-          <input id="uuid" name="uuid" type="text" placeholder="From p.bothook.me" class="input" />
+          <label class="label" for="message" style="margin-top:12px;">Message</label>
+          <textarea class="textarea" id="message" name="message" required rows="7" placeholder="How can we help?"></textarea>
 
-          <div style="height:12px"></div>
-
-          <label class="label" for="message">Message</label>
-          <textarea id="message" name="message" rows="6" required placeholder="How can we help?" class="input"></textarea>
-
-          <div class="btns">
-            <button class="cta primary" type="submit">Send</button>
-            <a class="cta ghost" href="/">Back</a>
-          </div>
-          <p class="hint" style="margin-top:10px;">Tip: If you’re provisioning WhatsApp linking, include your UUID so we can find your session quickly.</p>
+          <button class="btn" type="submit" style="margin-top:14px;">Send</button>
+          <p class="p" id="ok" style="display:none;margin-top:10px;">Thanks — we got it. We’ll reply to your email as soon as possible.</p>
         </form>
+        <script>
+          const form = document.getElementById('contactForm');
+          const ok = document.getElementById('ok');
+          form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            ok.style.display = 'none';
+            const data = {
+              email: form.email.value.trim(),
+              uuid: form.uuid.value.trim(),
+              message: form.message.value.trim(),
+            };
+            const res = await fetch('/api/support/contact', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify(data),
+            });
+            if (res.ok) {
+              ok.style.display = 'block';
+              form.reset();
+            } else {
+              alert('Failed. Please try again later.');
+            }
+          });
+        </script>
+        
       </section>
     </div>
   </main>
 
-  <footer class="footer">© <span id="year"></span> BOTHook.</footer>
-
-  <script>
-    const wrap = document.getElementById('contentWrap');
-    wrap.style.opacity = '0';
-    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
-
-    document.getElementById('year').textContent = new Date().getFullYear();
-
-    // Prefill UUID from querystring (e.g. /contact.html?uuid=...)
-    const params = new URLSearchParams(location.search);
-    const uuid = params.get('uuid');
-    if (uuid) document.getElementById('uuid').value = uuid;
-
-    const form = document.getElementById('form');
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const payload = {
-        email: form.email.value,
-        uuid: form.uuid.value,
-        message: form.message.value,
-        pageLang: document.documentElement.lang || 'en',
-      };
-
-      try {
-        const r = await fetch('/api/support/ticket', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const j = await r.json().catch(() => null);
-        if (!r.ok || !j || !j.ok) throw new Error(j?.error || 'Failed');
-
-        const sent = document.getElementById('sent');
-        sent.style.display = 'block';
-        sent.innerHTML = `<strong>Thanks — we got it.</strong><div class="p" style="margin-top:8px;">Ticket: <strong>${j.ticket_id}</strong>. We’ll reply to your email as soon as possible.</div>`;
-        form.style.display = 'none';
-        sent.scrollIntoView({behavior:'smooth', block:'start'});
-      } catch (err) {
-        alert('Could not submit. Please try again in a moment.');
-      }
-    });
-  </script>
-
-  <style>
-    .input{width:100%;border:0;border-radius:14px;padding:12px 12px;background:rgba(255,255,255,.06);color:var(--text);outline:none}
-    .input::placeholder{color:rgba(169,182,214,.7)}
-    textarea.input{resize:vertical;min-height:120px}
-    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-  </style>
+  <footer class="footer">
+    <div class="footer-inner">
+      <a class="footer-link" href="/th/">Home</a>
+      <a class="footer-link" href="/th/terms.html">Terms</a>
+      <a class="footer-link" href="/th/privacy.html">Privacy</a>
+      <a class="footer-link" href="/th/contact.html">Contact</a>
+    </div>
+  </footer>
+  
 </body>
 </html>

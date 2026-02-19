@@ -20,72 +20,49 @@
   <main class="main">
     <div class="content-wrap" id="contentWrap">
       <section class="card" style="max-width:860px;margin:0 auto;">
-        <h1 class="h1" style="font-size:32px;">Terms of Service</h1>
-        <p class="p" style="font-size:13px;">Last updated: <span id="d"></span></p>
+        <h1 class="h1" style="font-size:32px;">Ketentuan Layanan</h1>
+        <p class="p" style="font-size:13px;">Terakhir diperbarui: <span id="d"></span></p>
 
-        <p class="p">BOTHook (“bothook”, “we”, “us”) provides a hosted setup and delivery experience for running OpenClaw in chat apps. These Terms govern your use of our website and service.</p>
+        <p class="p">BOTHook (“bothook”, “kami”) menyediakan pengalaman setup dan delivery untuk menjalankan OpenClaw di aplikasi chat. Ketentuan ini mengatur penggunaan situs web dan layanan.</p>
 
-        <h2 class="h2">1. What we provide</h2>
+        <h2 class="h2">1. Apa yang kami sediakan</h2>
         <ul class="list">
-          <li>We provision an OpenClaw instance for you and help connect it to supported chat apps.</li>
-          <li>The website is used for getting started, payment, and viewing basic status/billing information.</li>
-          <li>OpenClaw is third‑party/open source software; bothook does not claim ownership of OpenClaw.</li>
+          <li>Kami mem‑provision instance OpenClaw dan membantu menghubungkannya ke aplikasi chat yang didukung.</li>
+          <li>Situs web digunakan untuk memulai, pembayaran, dan melihat status/info dasar.</li>
+          <li>OpenClaw adalah perangkat lunak open‑source/pihak ketiga; bothook tidak mengklaim kepemilikan atas OpenClaw.</li>
         </ul>
 
-        <h2 class="h2">2. Your responsibilities</h2>
+        <h2 class="h2">2. Tanggung jawab Anda</h2>
         <ul class="list">
-          <li>You are responsible for the content you send to the bot and for complying with the rules of the chat platforms you use.</li>
-          <li>Do not use the service for illegal, harmful, abusive, or infringing activity.</li>
-          <li>Keep your device and linked chat accounts secure. If you suspect compromise, contact us immediately.</li>
+          <li>Anda bertanggung jawab atas konten yang Anda kirim ke bot dan mematuhi aturan platform chat.</li>
+          <li>Jangan gunakan layanan untuk aktivitas ilegal, berbahaya, abusif, atau melanggar hak.</li>
+          <li>Jaga keamanan perangkat dan akun chat yang tertaut. Hubungi kami jika Anda mencurigai kompromi.</li>
         </ul>
 
-        <h2 class="h2">3. Availability and changes</h2>
-        <p class="p">We aim for reliable service, but uptime is not guaranteed. We may update, modify, or discontinue parts of the service to improve stability or security.</p>
+        <h2 class="h2">3. Ketersediaan dan perubahan</h2>
+        <p class="p">Kami berupaya memberikan layanan yang andal, namun uptime tidak dijamin. Kami dapat mengubah atau menghentikan sebagian layanan untuk meningkatkan stabilitas atau keamanan.</p>
 
-        <h2 class="h2">4. Trials, subscriptions, renewal, expiration</h2>
-        <ul class="list">
-          <li>Service access is time‑bound based on your purchase/plan.</li>
-          <li>Before expiration, the bot may remind you.</li>
-          <li>If you do not renew, the bot will stop naturally after the paid period ends. No additional cleanup should be required from you.</li>
-        </ul>
+        <h2 class="h2">4. Langganan, perpanjangan, kedaluwarsa</h2>
+        <p class="p">Akses bersifat terbatas waktu sesuai paket Anda. Setelah kedaluwarsa, layanan dapat ditangguhkan atau direklamasi sesuai kebijakan operasional.</p>
 
-        <h2 class="h2">5. Support</h2>
-        <p class="p">For support, use the <a href="/id/contact.html">contact form</a>. If relevant, include your provisioning UUID.</p>
+        <h2 class="h2">5. Pembatasan tanggung jawab</h2>
+        <p class="p">Sejauh diizinkan hukum, bothook tidak bertanggung jawab atas kerugian tidak langsung/konsekuensial. Tanggung jawab dibatasi sebesar jumlah yang Anda bayar untuk periode berjalan.</p>
 
-        <h2 class="h2">6. Privacy</h2>
-        <p class="p">Our <a href="/id/privacy.html">Privacy Policy</a> explains what data we collect and how we use it.</p>
+        <h2 class="h2">6. Kontak</h2>
+        <p class="p">Butuh bantuan? Silakan gunakan halaman Contact.</p>
 
-        <h2 class="h2">7. Disclaimers</h2>
-        <p class="p">The service is provided “as is” and “as available”. We do not warrant that it will be error‑free or uninterrupted.</p>
-
-        <h2 class="h2">8. Limitation of liability</h2>
-        <p class="p">To the maximum extent permitted by law, bothook will not be liable for indirect, incidental, special, consequential, or punitive damages, or for loss of data, profits, or business arising from your use of the service.</p>
-
-        <h2 class="h2">9. Contact</h2>
-        <p class="p">Questions about these Terms? Contact us via <a href="/id/contact.html">/contact</a>.</p>
       </section>
     </div>
   </main>
 
   <footer class="footer">
-    <div class="footerRow">
-      <div>© <span id="year"></span> BOTHook.</div>
-      <nav class="footerLinks" aria-label="Footer">
-        <a href="/id/contact.html">Contact</a>
-        <span class="dot">·</span>
-        <a href="/id/terms.html">Terms</a>
-        <span class="dot">·</span>
-        <a href="/id/privacy.html">Privacy</a>
-      </nav>
+    <div class="footer-inner">
+      <a class="footer-link" href="/id/">Home</a>
+      <a class="footer-link" href="/id/terms.html">Terms</a>
+      <a class="footer-link" href="/id/privacy.html">Privacy</a>
+      <a class="footer-link" href="/id/contact.html">Contact</a>
     </div>
   </footer>
-
-  <script>
-    const wrap = document.getElementById('contentWrap');
-    wrap.style.opacity = '0';
-    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
-    document.getElementById('year').textContent = new Date().getFullYear();
-    document.getElementById('d').textContent = new Date().toISOString().slice(0,10);
-  </script>
+  <script>document.getElementById('d').textContent = new Date().toISOString().slice(0, 10);</script>
 </body>
 </html>
