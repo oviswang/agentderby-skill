@@ -24,12 +24,50 @@ a{color:inherit}
 .p{margin:0 0 14px;color:var(--muted);font-size:16px;line-height:1.55}
 
 /* Pricing callout */
-.priceBig{font-size:30px;line-height:1.1;margin:10px 0 12px;color:rgba(232,238,252,.96);font-weight:800;letter-spacing:.2px}
-.priceBig .currency{opacity:.9;font-weight:800}
-.priceBig .amount{font-size:42px}
-.priceBig .unit{opacity:.85;font-weight:700;font-size:18px;margin-left:6px}
 .calloutGrid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
 @media (max-width:860px){.calloutGrid{grid-template-columns:1fr}}
+
+.priceCard{
+  background:linear-gradient(135deg, rgba(87,166,255,.16), rgba(90,255,209,.10));
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:18px;
+  padding:18px 18px;
+  box-shadow:var(--shadow);
+  position:relative;
+  overflow:hidden;
+}
+.priceCard:before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  background:radial-gradient(450px 260px at 20% 10%, rgba(87,166,255,.22), transparent 60%),
+             radial-gradient(380px 240px at 90% 30%, rgba(90,255,209,.18), transparent 55%);
+  opacity:.9;
+  pointer-events:none;
+}
+.priceCard > *{position:relative}
+
+.priceTag{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:rgba(232,238,252,.9);
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.10);
+  padding:8px 10px;
+  border-radius:999px;
+}
+
+.priceBig{font-size:30px;line-height:1.05;margin:14px 0 12px;color:rgba(232,238,252,.98);font-weight:900;letter-spacing:.2px}
+.priceBig .currency{opacity:.92;font-weight:900}
+.priceBig .amount{font-size:56px}
+.priceBig .unit{opacity:.88;font-weight:800;font-size:18px;margin-left:6px}
+
+.priceCardBottom{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.mini{font-size:13px;color:rgba(169,182,214,.95);line-height:1.4}
 
 .ctaRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
 .cta{display:inline-flex;align-items:center;justify-content:center;padding:12px 14px;border-radius:14px;text-decoration:none;font-weight:600}
