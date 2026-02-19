@@ -181,7 +181,6 @@
           s.async = true; s.defer = true;
 
           const failLoad = (msg) => {
-            const h = document.getElementById('turnstileHint');
             if (h) h.textContent = msg;
             getQrBtn.disabled = true;
             qrStatus.textContent = msg;
