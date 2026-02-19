@@ -30,3 +30,6 @@
   - External contacts get promo copy.
   - 20-min timeout after bind (if unpaid): auto-unbind + cleanup + return to pool.
 - After delivery complete: machine becomes **self-chat control mode** (owner is the user's own WhatsApp number); external contacts must be ignored (no response).
+- Post-delivery: no platform welcome copy; the user's own model drives the conversation. Platform exits except for retention of SSH rights for lifecycle ops (cancel/expiry reclaim) and support interventions.
+- OpenAI key verification should be minimal: a lightweight API call (e.g., `GET /v1/models`) to confirm the key works; user can rotate/change key later via a documented chat command.
+- Before exiting on delivery, write a small persistent “constitution” on the user machine: includes UUID + rules (prefer solving via chat; user has no SSH) while keeping it minimal to avoid impacting user experience.
