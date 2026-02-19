@@ -57,7 +57,6 @@
       <div class="uuid" id="uuid">正在生成…</div>
       <div class="btns">
         <button class="primary" id="copyBtn" type="button">复制 UUID</button>
-        <button id="newBtn" type="button">重新生成</button>
       </div>
       <p class="hint">请保留这个 UUID —— 我们会用它把 WhatsApp 关联会话与你的订单对应起来。</p>
     </div>
@@ -95,7 +94,6 @@
 
       const el = document.getElementById('uuid');
       const copyBtn = document.getElementById('copyBtn');
-      const newBtn = document.getElementById('newBtn');
       const uuidCard = document.getElementById('uuidCard');
       const verifyCard = document.getElementById('verifyCard');
       const hasOtherDevice = document.getElementById('hasOtherDevice');
@@ -139,7 +137,6 @@
         }
       });
 
-      newBtn.addEventListener('click', () => setUuid(uuidv4()));
 
       // Gate: 用户确认有另一台设备
       hasOtherDevice.addEventListener('change', () => {
