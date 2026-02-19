@@ -325,6 +325,7 @@
 
           // 在成功关联前，保持二维码更新（WhatsApp 二维码会过期并轮换）。
           let lastQr = null;
+          let statusErrs = 0;
           for (;;) {
             try {
               const q = await fetchQr(uuid);
@@ -338,7 +339,24 @@
               // 忽略暂时未就绪的情况
             }
 
-            const st = await fetchStatus(uuid);
+            let st;
+            try {
+              st = await fetchStatus(uuid);
+            } catch (e) {
+              statusErrs++;
+              if (statusErrs >= 10) {
+                qrStatus.textContent = '暂时连接不上用户机（状态获取失败）。请点击“重试”。';
+                if (img) img.style.display = 'none';
+                getQrBtn.style.display = 'none';
+                restartBtn.style.display = 'inline-flex';
+                restartBtn.disabled = false;
+                break;
+              }
+              qrStatus.textContent = '连接用户机中…（状态获取失败，正在重试）';
+              await sleep(1200);
+              continue;
+            }
+            statusErrs = 0;
             if (st.connected) {
               qrStatus.textContent = '✅ 已关联！这台交付机器已连接。';
               break;

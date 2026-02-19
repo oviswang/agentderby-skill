@@ -337,6 +337,7 @@
 
           // Keep QR fresh until linked (WhatsApp QR rotates/expirs).
           let lastQr = null;
+          let statusErrs = 0;
           for (;;) {
             // Try refresh QR
             try {
@@ -351,7 +352,24 @@
               // ignore transient qr_not_ready
             }
 
-            const st = await fetchStatus(uuid);
+            let st;
+            try {
+              st = await fetchStatus(uuid);
+            } catch (e) {
+              statusErrs++;
+              if (statusErrs >= 10) {
+                qrStatus.textContent = 'Cannot reach the delivery machine (status failed). Click “Retry”.';
+                if (img) img.style.display = 'none';
+                getQrBtn.style.display = 'none';
+                restartBtn.style.display = 'inline-flex';
+                restartBtn.disabled = false;
+                break;
+              }
+              qrStatus.textContent = 'Connecting… (status failed, retrying)';
+              await sleep(1200);
+              continue;
+            }
+            statusErrs = 0;
             if (st.connected) {
               qrStatus.textContent = '✅ Linked! This delivery machine is now connected.';
               break;
