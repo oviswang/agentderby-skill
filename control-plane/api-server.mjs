@@ -190,16 +190,34 @@ app.get('/api/wa/status', async (req, res) => {
 
     if (!r.ok) return send(res, 502, { ok: false, error: 'pool_status_failed', detail: r.json || r.text });
 
-    // If connected, mark delivery/instance as ACTIVE
+    // If connected: bind UUID to WhatsApp identity (prevents relink takeover)
     if (r.json?.connected) {
+      const waJid = r.json?.wa_jid || null;
       const ts = nowIso();
+
       db.exec('BEGIN IMMEDIATE');
       try {
-        db.prepare('UPDATE deliveries SET status=?, updated_at=? WHERE delivery_id=?').run('ACTIVE', ts, delivery.delivery_id);
-        // Do not auto-change lifecycle here in MVP (multiple UUID sessions may share a provision-ready instance).
-        db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-          crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PROVISION_LINKED', JSON.stringify({ uuid, instance_id: instance.instance_id })
-        );
+        const current = db.prepare('SELECT wa_jid FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+        const bound = current?.wa_jid;
+
+        if (!bound && waJid) {
+          db.prepare('UPDATE deliveries SET status=?, wa_jid=?, bound_at=?, updated_at=? WHERE delivery_id=?')
+            .run('ACTIVE', waJid, ts, ts, delivery.delivery_id);
+          db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+            crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'UUID_BOUND', JSON.stringify({ uuid, wa_jid: waJid, instance_id: instance.instance_id })
+          );
+        } else if (bound && waJid && bound !== waJid) {
+          // takeover attempt: keep delivery inactive and report mismatch
+          db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+            crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'UUID_BIND_MISMATCH', JSON.stringify({ uuid, expected: bound, got: waJid, instance_id: instance.instance_id })
+          );
+          db.exec('COMMIT');
+          return send(res, 403, { ok: false, error: 'uuid_bound_to_another_account' });
+        } else {
+          // Either already bound to same jid, or jid missing; just mark active.
+          db.prepare('UPDATE deliveries SET status=?, updated_at=? WHERE delivery_id=?').run('ACTIVE', ts, delivery.delivery_id);
+        }
+
         db.exec('COMMIT');
       } catch (e) {
         try { db.exec('ROLLBACK'); } catch {}

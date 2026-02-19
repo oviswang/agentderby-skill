@@ -91,6 +91,12 @@ CREATE TABLE IF NOT EXISTS deliveries (
   instance_id TEXT,
   status TEXT NOT NULL,
   provision_uuid TEXT,
+
+  -- Bind this provisioning UUID to a WhatsApp identity (prevents takeover on relink)
+  wa_jid TEXT,
+  wa_e164 TEXT,
+  bound_at TEXT,
+
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   meta_json TEXT,
