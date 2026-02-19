@@ -27,8 +27,9 @@
 - Unpaid/provision-ready server pool cap: **max 5 machines** by default; any change requires explicit owner confirmation.
 
 ## Reporting / comms routing (owner preference)
-- Keep WhatsApp chat clean: WhatsApp is for owner↔agent work coordination.
-- Send hourly work reports + future ops/cron-generated updates (customer support replies, new machines added to pool, subscription/paid events, etc.) to the owner via **Telegram**.
+- Keep WhatsApp chat clean: WhatsApp is for owner↔agent work coordination（仅临时讨论/指令/确认）。
+- **硬规则**：所有“小时级工作日报/定时报告”以及**未来所有运营信息**（客服回复、入池/回收、订阅/支付、cron 产出等）一律发到 **Telegram（owner）**；**不要**再发到 WhatsApp。
+- 执行要求：即便服务器/agent 重启也必须遵守；当 WhatsApp 收到 cron 提醒触发时，主会话不再转发/复述（除非 owner 明确要求）。
 
 ## Delivery state machine (owner spec)
 - 交付工程化策略：**A(Cloud-init/开机自举)为主，C(基础镜像)为辅**；不允许需要人工上机操作的交付流程（B）。
