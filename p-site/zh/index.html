@@ -203,7 +203,10 @@
                   const h=document.getElementById('turnstileHint'); if(h) h.textContent='';
                   turnstileToken = token;
                   getQrBtn.disabled = false;
+                  restartBtn.style.display='none';
                   qrStatus.textContent='';
+                  // hide verification UI after success
+                  const box=document.getElementById('turnstileBox'); if(box) box.style.display='none';
                 },
                 'error-callback': () => {
                   turnstileToken = null;
@@ -269,8 +272,13 @@
         const img = document.getElementById('qrImg');
         if (img) img.style.display = 'none';
 
+        qrStatus.textContent = '正在请求新的二维码会话…';
+        try { await startProvision(uuid, true); } catch {}
+        // show verification UI again
+        const box=document.getElementById('turnstileBox'); if(box) box.style.display='flex';
         qrStatus.textContent = '请重新完成人机验证，然后点击“获取二维码”。';
         restartBtn.style.display = 'none';
+        getQrBtn.style.display = 'inline-flex';
       });
       getQrBtn.addEventListener('click', async () => {
         if (!turnstileToken) {
@@ -334,6 +342,7 @@
               qrStatus.textContent = '二维码已过期（会话已结束）。请点击“重新获取”，并重新完成人机验证。';
               const img = document.getElementById('qrImg');
               if (img) img.style.display = 'none';
+              getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';
               restartBtn.disabled = false;
               break;
@@ -345,6 +354,7 @@
           qrStatus.textContent = `失败：${e.message || e}`;
         } finally {
           getQrBtn.disabled = false;
+                  restartBtn.style.display='none';
         }
       });
     </script>

@@ -215,7 +215,10 @@
                   const h=document.getElementById('turnstileHint'); if(h) h.textContent='';
                   turnstileToken = token;
                   getQrBtn.disabled = false;
+                  restartBtn.style.display='none';
                   qrStatus.textContent = '';
+                  // hide verification UI after success
+                  const box=document.getElementById('turnstileBox'); if(box) box.style.display='none';
                 },
                 
                 'error-callback': () => {
@@ -280,8 +283,12 @@
         const img = document.getElementById('qrImg');
         if (img) img.style.display = 'none';
 
+        qrStatus.textContent = 'Starting a new QR session…';
+        try { await startProvision(uuid, true); } catch {}
+        const box=document.getElementById('turnstileBox'); if(box) box.style.display='flex';
         qrStatus.textContent = 'Please verify again, then click “Get QR code”.';
         restartBtn.style.display = 'none';
+        getQrBtn.style.display = 'inline-flex';
       });
       getQrBtn.addEventListener('click', async () => {
         if (!turnstileToken) {
@@ -348,6 +355,7 @@
               qrStatus.textContent = 'QR expired (session ended). Click “Get a new QR” and verify again.';
               const img = document.getElementById('qrImg');
               if (img) img.style.display = 'none';
+              getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';
               restartBtn.disabled = false;
               break;
@@ -359,6 +367,7 @@
           qrStatus.textContent = `Failed: ${e.message || e}`;
         } finally {
           getQrBtn.disabled = false;
+                  restartBtn.style.display='none';
         }
       });
     </script>
