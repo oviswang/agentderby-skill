@@ -349,23 +349,22 @@
                 lastQr = q.qrDataUrl;
                 img.src = q.qrDataUrl;
                 hadQr = true;
-                qrStatus.textContent = '二维码已就绪，请在 WhatsApp → 已关联的设备 中扫码。';
+                qrStatus.textContent = '二维码已就绪，请在 WhatsApp →「已关联的设备」中扫描。';
               }
             } catch (e) {
               // 忽略暂时未就绪的情况
-            }            let deliveryStatus;
-            try {
-              deliveryStatus = await fetchDeliveryStatus(uuid);            // Delivery status (authoritative for: has ever been linked; also provides recycle/expiry states)
-            let deliveryStatus;
+            }
+
+            // Delivery status：用于判断“曾经是否关联过”以及过期/回收状态
+            let deliveryStatus = null;
             try {
               deliveryStatus = await fetchDeliveryStatus(uuid);
             } catch (e) {
               deliveryStatus = null;
             }
 
-            // If expired/recycled, show expired UI
             const stx = (deliveryStatus && deliveryStatus.status) ? String(deliveryStatus.status) : '';
-            if (stx === 'QR_EXPIRED' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNBOUND' || stx === 'QR_EXPIRED') {
+            if (stx === 'QR_EXPIRED' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNBOUND') {
               qrStatus.textContent = '❌ 本次链接已过期，请点击“重试”重新生成。';
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
@@ -374,15 +373,14 @@
               break;
             }
 
-            // Pool status determines whether it is currently connected
-            let st;
+            // Pool status：用于判断“当前是否仍在线”
+            let st = null;
             try {
               st = await fetchStatus(uuid);
             } catch (e) {
               st = null;
             }
 
-            // Three-state decision
             const everLinked = Boolean(deliveryStatus && deliveryStatus.ok && deliveryStatus.wa_jid);
             const isConnected = Boolean(st && st.connected);
 
@@ -406,7 +404,7 @@
               break;
             }
 
-            // Not linked yet: continue polling using st (if available)
+            // Not linked yet: rely on pool status
             if (!st) {
               statusErrs++;
               if (statusErrs >= 10) {
@@ -422,27 +420,10 @@
               continue;
             }
 
-            let st;
-            try {
-              st = await fetchStatus(uuid);
-            } catch (e) {
-              statusErrs++;
-              if (statusErrs >= 10) {
-                qrStatus.textContent = '暂时连接不上用户机（状态获取失败）。请点击“重试”。';
-                if (img) img.style.display = 'none';
-                getQrBtn.style.display = 'none';
-                restartBtn.style.display = 'inline-flex';
-                restartBtn.disabled = false;
-                break;
-              }
-              qrStatus.textContent = '连接用户机中…（状态获取失败，正在重试）';
-              await sleep(1200);
-              continue;
-            }
             statusErrs = 0;
             if (st.connected) {
               linked = true;
-              qrStatus.textContent = '✅ 已关联！这台交付机器已连接。';
+              qrStatus.textContent = '✅ 已关联！这台交付机器已成功连接到你的 WhatsApp。';
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'none';
@@ -451,13 +432,14 @@
               break;
             }
             if (st.status === 'closed') {
-              qrStatus.textContent = hadQr ? '二维码已过期（会话已结束）。请点击“重新获取”，并重新完成人机验证。' : '二维码生成失败（会话已结束）。请点击“重新获取”，重新生成二维码。';
+              qrStatus.textContent = hadQr ? '二维码已过期（会话已结束）。请点击“重试”并重新完成人机验证。' : '二维码生成失败（会话已结束）。请点击“重试”重新生成二维码。';
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';
               restartBtn.disabled = false;
               break;
             }
+
             await sleep(1200);
           }
 

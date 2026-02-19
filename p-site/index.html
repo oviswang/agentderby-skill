@@ -389,19 +389,18 @@
               }
             } catch (e) {
               // ignore transient qr_not_ready
-            }            let deliveryStatus;
-            try {
-              deliveryStatus = await fetchDeliveryStatus(uuid);            // Delivery status (authoritative for: has ever been linked; also provides recycle/expiry states)
-            let deliveryStatus;
+            }
+
+            // Delivery status: authoritative for "ever linked" + expiry/recycle states
+            let deliveryStatus = null;
             try {
               deliveryStatus = await fetchDeliveryStatus(uuid);
             } catch (e) {
               deliveryStatus = null;
             }
 
-            // If expired/recycled, show expired UI
             const stx = (deliveryStatus && deliveryStatus.status) ? String(deliveryStatus.status) : '';
-            if (stx === 'QR_EXPIRED' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNBOUND' || stx === 'QR_EXPIRED') {
+            if (stx === 'QR_EXPIRED' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNBOUND') {
               qrStatus.textContent = '❌ This link has expired. Please click Retry to generate a new one.';
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
@@ -410,18 +409,18 @@
               break;
             }
 
-            // Pool status determines whether it is currently connected
-            let st;
+            // Pool status: authoritative for "currently connected"
+            let st = null;
             try {
               st = await fetchStatus(uuid);
             } catch (e) {
               st = null;
             }
 
-            // Three-state decision
             const everLinked = Boolean(deliveryStatus && deliveryStatus.ok && deliveryStatus.wa_jid);
             const isConnected = Boolean(st && st.connected);
 
+            // Three-state UI
             if (everLinked && isConnected) {
               linked = true;
               qrStatus.textContent = '✅ Linked! This delivery machine is now connected.';
@@ -442,7 +441,7 @@
               break;
             }
 
-            // Not linked yet: continue polling using st (if available)
+            // Not linked yet: rely on pool status
             if (!st) {
               statusErrs++;
               if (statusErrs >= 10) {
@@ -458,23 +457,6 @@
               continue;
             }
 
-            let st;
-            try {
-              st = await fetchStatus(uuid);
-            } catch (e) {
-              statusErrs++;
-              if (statusErrs >= 10) {
-                qrStatus.textContent = 'Cannot reach the delivery machine (status failed). Click “Retry”.';
-                if (img) img.style.display = 'none';
-                getQrBtn.style.display = 'none';
-                restartBtn.style.display = 'inline-flex';
-                restartBtn.disabled = false;
-                break;
-              }
-              qrStatus.textContent = 'Connecting… (status failed, retrying)';
-              await sleep(1200);
-              continue;
-            }
             statusErrs = 0;
             if (st.connected) {
               linked = true;
@@ -494,6 +476,7 @@
               restartBtn.disabled = false;
               break;
             }
+
             await sleep(1200);
           }
 
