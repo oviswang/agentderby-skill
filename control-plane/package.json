@@ -1,0 +1,19 @@
+{
+  "name": "control-plane",
+  "version": "1.0.0",
+  "description": "This folder contains the first-pass control-plane storage + jobs for managing a large pool of delivery machines.",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1"
+  }
+}
