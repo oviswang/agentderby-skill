@@ -317,6 +317,7 @@
             try {
               const q = await fetchQr(uuid);
               img.src = q.qrDataUrl;
+              hadQr = true;
               qrStatus.textContent = '二维码已就绪，请在 WhatsApp → 已关联的设备 中扫码。';
               break;
             } catch (e) {
@@ -333,6 +334,7 @@
               if (q && q.qrDataUrl && q.qrDataUrl !== lastQr) {
                 lastQr = q.qrDataUrl;
                 img.src = q.qrDataUrl;
+                hadQr = true;
                 qrStatus.textContent = '二维码已就绪，请在 WhatsApp → 已关联的设备 中扫码。';
               }
             } catch (e) {
@@ -345,8 +347,7 @@
               break;
             }
             if (st.status === 'closed') {
-              qrStatus.textContent = '二维码已过期（会话已结束）。请点击“重新获取”，并重新完成人机验证。';
-              const img = document.getElementById('qrImg');
+              qrStatus.textContent = hadQr ? '二维码已过期（会话已结束）。请点击“重新获取”，并重新完成人机验证。' : '二维码生成失败（会话已结束）。请点击“重新获取”，重新生成二维码。';
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';

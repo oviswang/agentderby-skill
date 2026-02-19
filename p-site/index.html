@@ -309,6 +309,7 @@
 
           // Create / reuse QR image element
           let img = document.getElementById('qrImg');
+          let hadQr = false;
           if (!img) {
             img = document.createElement('img');
             img.id = 'qrImg';
@@ -328,6 +329,7 @@
             try {
               const q = await fetchQr(uuid);
               img.src = q.qrDataUrl;
+              hadQr = true;
               qrStatus.textContent = 'QR ready. Scan it in WhatsApp → Linked devices.';
               break;
             } catch (e) {
@@ -345,6 +347,7 @@
               if (q && q.qrDataUrl && q.qrDataUrl !== lastQr) {
                 lastQr = q.qrDataUrl;
                 img.src = q.qrDataUrl;
+                hadQr = true;
                 qrStatus.textContent = 'QR ready. Scan it in WhatsApp → Linked devices.';
               }
             } catch (e) {
@@ -357,8 +360,7 @@
               break;
             }
             if (st.status === 'closed') {
-              qrStatus.textContent = 'QR expired (session ended). Click “Get a new QR” and verify again.';
-              const img = document.getElementById('qrImg');
+              qrStatus.textContent = hadQr ? 'QR expired (session ended). Click “Get a new QR” and verify again.' : 'Failed to generate QR (session ended). Click “Get a new QR” to retry.';
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';
