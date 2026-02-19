@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Contact — BOTHook</title>
-  <meta name="description" content="Contact BOTHook support." />
+  <meta name="description" content="Contacter le support BOTHook." />
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="canonical" href="https://bothook.me/fr/contact.html" />
@@ -21,32 +21,32 @@
     <div class="content-wrap" id="contentWrap">
       <section class="card" style="max-width:760px; margin:0 auto;">
         <h1 class="h1" style="font-size:32px; margin-bottom:8px;">Contact</h1>
-        <p class="p">Send us a message and we’ll reply by email.</p>
+        <p class="p">Envoyez-nous un message : nous vous répondrons par e‑mail.</p>
 
         <div id="sent" class="card" style="display:none; background:rgba(90,255,209,.10);">
-          <strong>Thanks — we got it.</strong>
-          <div class="p" style="margin-top:8px;">We’ll reply to your email as soon as possible.</div>
+          <strong>Merci — c’est bien reçu.</strong>
+          <div class="p" style="margin-top:8px;">Nous vous répondrons par e‑mail dès que possible.</div>
         </div>
 
         <form id="form" class="card" style="margin-top:14px;" autocomplete="on">
-          <label class="label" for="email">Email</label>
+          <label class="label" for="email">E‑mail</label>
           <input id="email" name="email" type="email" required placeholder="you@company.com" class="input" />
 
           <div style="height:12px"></div>
 
-          <label class="label" for="uuid">Provisioning UUID (optional)</label>
-          <input id="uuid" name="uuid" type="text" placeholder="From p.bothook.me" class="input" />
+          <label class="label" for="uuid">UUID (optionnel)</label>
+          <input id="uuid" name="uuid" type="text" placeholder="Depuis p.bothook.me" class="input" />
 
           <div style="height:12px"></div>
 
           <label class="label" for="message">Message</label>
-          <textarea id="message" name="message" rows="6" required placeholder="How can we help?" class="input"></textarea>
+          <textarea id="message" name="message" rows="6" required placeholder="Comment pouvons‑nous aider ?" class="input"></textarea>
 
           <div class="btns">
-            <button class="cta primary" type="submit">Send</button>
-            <a class="cta ghost" href="/">Back</a>
+            <button class="cta primary" type="submit">Envoyer</button>
+            <a class="cta ghost" href="/fr/">Retour</a>
           </div>
-          <p class="hint" style="margin-top:10px;">Tip: If you’re provisioning WhatsApp linking, include your UUID so we can find your session quickly.</p>
+          <p class="hint" style="margin-top:10px;">Astuce : pour une demande liée à WhatsApp (QR / liaison), indiquez votre UUID afin que nous retrouvions votre session rapidement.</p>
         </form>
       </section>
     </div>
@@ -87,11 +87,11 @@
 
         const sent = document.getElementById('sent');
         sent.style.display = 'block';
-        sent.innerHTML = `<strong>Thanks — we got it.</strong><div class="p" style="margin-top:8px;">Ticket: <strong>${j.ticket_id}</strong>. We’ll reply to your email as soon as possible.</div>`;
+        sent.innerHTML = `<strong>Merci — c’est bien reçu.</strong><div class="p" style="margin-top:8px;">Ticket : <strong>${j.ticket_id}</strong>. Nous vous répondrons par e‑mail dès que possible.</div>`;
         form.style.display = 'none';
         sent.scrollIntoView({behavior:'smooth', block:'start'});
       } catch (err) {
-        alert('Could not submit. Please try again in a moment.');
+        alert('Envoi impossible pour le moment. Réessayez dans quelques instants.');
       }
     });
   </script>
