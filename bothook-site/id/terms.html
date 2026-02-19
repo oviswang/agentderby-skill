@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Terms — BOTHook</title>
-  <meta name="description" content="BOTHook Terms of Service." />
+  <title>Ketentuan — BOTHook</title>
+  <meta name="description" content="Ketentuan Layanan BOTHook." />
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="canonical" href="https://bothook.me/id/terms.html" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/terms.html" />
+  <link rel="alternate" hreflang="id" href="https://bothook.me/id/terms.html" />
 </head>
 <body>
   <header class="header">
-    <a class="brand" href="/id/" aria-label="BOTHook home">
+    <a class="brand" href="/id/" aria-label="Beranda BOTHook">
       <img src="/assets/logo.jpg" alt="BOTHook logo" />
       <strong>BOTHook</strong>
     </a>
@@ -23,12 +25,12 @@
         <h1 class="h1" style="font-size:32px;">Ketentuan Layanan</h1>
         <p class="p" style="font-size:13px;">Terakhir diperbarui: <span id="d"></span></p>
 
-        <p class="p">BOTHook (“bothook”, “kami”) menyediakan pengalaman setup dan delivery untuk menjalankan OpenClaw di aplikasi chat. Ketentuan ini mengatur penggunaan situs web dan layanan.</p>
+        <p class="p">BOTHook (“bothook”, “kami”) menyediakan pengalaman setup dan delivery yang di‑host untuk menjalankan OpenClaw di aplikasi chat. Ketentuan ini mengatur penggunaan situs web dan layanan.</p>
 
         <h2 class="h2">1. Apa yang kami sediakan</h2>
         <ul class="list">
           <li>Kami mem‑provision instance OpenClaw dan membantu menghubungkannya ke aplikasi chat yang didukung.</li>
-          <li>Situs web digunakan untuk memulai, pembayaran, dan melihat status/info dasar.</li>
+          <li>Situs web digunakan untuk memulai, pembayaran, dan melihat informasi dasar status/billing.</li>
           <li>OpenClaw adalah perangkat lunak open‑source/pihak ketiga; bothook tidak mengklaim kepemilikan atas OpenClaw.</li>
         </ul>
 
@@ -40,7 +42,7 @@
         </ul>
 
         <h2 class="h2">3. Ketersediaan dan perubahan</h2>
-        <p class="p">Kami berupaya memberikan layanan yang andal, namun uptime tidak dijamin. Kami dapat mengubah atau menghentikan sebagian layanan untuk meningkatkan stabilitas atau keamanan.</p>
+        <p class="p">Kami berupaya memberikan layanan yang andal, namun uptime tidak dijamin. Kami dapat memperbarui, mengubah, atau menghentikan sebagian layanan untuk meningkatkan stabilitas atau keamanan.</p>
 
         <h2 class="h2">4. Langganan, perpanjangan, kedaluwarsa</h2>
         <p class="p">Akses bersifat terbatas waktu sesuai paket Anda. Setelah kedaluwarsa, layanan dapat ditangguhkan atau direklamasi sesuai kebijakan operasional.</p>
@@ -49,20 +51,30 @@
         <p class="p">Sejauh diizinkan hukum, bothook tidak bertanggung jawab atas kerugian tidak langsung/konsekuensial. Tanggung jawab dibatasi sebesar jumlah yang Anda bayar untuk periode berjalan.</p>
 
         <h2 class="h2">6. Kontak</h2>
-        <p class="p">Butuh bantuan? Silakan gunakan halaman Contact.</p>
-
+        <p class="p">Butuh bantuan? Gunakan <a href="/id/contact.html">halaman kontak</a>.</p>
       </section>
     </div>
   </main>
 
   <footer class="footer">
-    <div class="footer-inner">
-      <a class="footer-link" href="/id/">Home</a>
-      <a class="footer-link" href="/id/terms.html">Terms</a>
-      <a class="footer-link" href="/id/privacy.html">Privacy</a>
-      <a class="footer-link" href="/id/contact.html">Contact</a>
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/id/contact.html">Kontak</a>
+        <span class="dot">·</span>
+        <a href="/id/terms.html">Ketentuan</a>
+        <span class="dot">·</span>
+        <a href="/id/privacy.html">Privasi</a>
+      </nav>
     </div>
   </footer>
-  <script>document.getElementById('d').textContent = new Date().toISOString().slice(0, 10);</script>
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
+    document.getElementById('year').textContent = new Date().getFullYear();
+    document.getElementById('d').textContent = new Date().toISOString().slice(0,10);
+  </script>
 </body>
 </html>

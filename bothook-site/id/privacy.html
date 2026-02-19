@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Privacy — BOTHook</title>
-  <meta name="description" content="BOTHook Privacy Policy." />
+  <title>Privasi — BOTHook</title>
+  <meta name="description" content="Kebijakan Privasi BOTHook." />
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="canonical" href="https://bothook.me/id/privacy.html" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/privacy.html" />
+  <link rel="alternate" hreflang="id" href="https://bothook.me/id/privacy.html" />
 </head>
 <body>
   <header class="header">
-    <a class="brand" href="/id/" aria-label="BOTHook home">
+    <a class="brand" href="/id/" aria-label="Beranda BOTHook">
       <img src="/assets/logo.jpg" alt="BOTHook logo" />
       <strong>BOTHook</strong>
     </a>
@@ -23,13 +25,13 @@
         <h1 class="h1" style="font-size:32px;">Kebijakan Privasi</h1>
         <p class="p" style="font-size:13px;">Terakhir diperbarui: <span id="d"></span></p>
 
-        <p class="p">Kebijakan ini menjelaskan bagaimana BOTHook (“bothook”, “kami”) menangani informasi saat Anda menggunakan situs web dan layanan setup OpenClaw yang di‑host.</p>
+        <p class="p">Kebijakan Privasi ini menjelaskan bagaimana BOTHook (“bothook”, “kami”) menangani informasi saat Anda menggunakan situs web dan layanan setup OpenClaw yang di‑host.</p>
 
         <h2 class="h2">1. Data yang kami kumpulkan</h2>
         <ul class="list">
-          <li><strong>Data penggunaan situs</strong>: log dasar untuk keamanan dan operasional (mis. waktu, IP, user agent).</li>
-          <li><strong>Pengiriman formulir kontak</strong>: email yang Anda berikan, pesan Anda, dan (opsional) UUID provisioning.</li>
-          <li><strong>Metadata layanan</strong>: data minimal untuk mem‑provision dan mengelola instance (mis. identifier order/sesi, status).</li>
+          <li><strong>Data penggunaan situs</strong>: log dasar yang diperlukan untuk keamanan dan operasional (mis. timestamp, alamat IP, user agent).</li>
+          <li><strong>Pengiriman formulir kontak</strong>: email yang Anda berikan, pesan Anda, dan (opsional) Provisioning UUID.</li>
+          <li><strong>Metadata layanan</strong>: data operasional minimal untuk mem‑provision dan mengelola instance (mis. identifier order/sesi, status).</li>
         </ul>
 
         <h2 class="h2">2. Konten chat</h2>
@@ -43,26 +45,45 @@
         </ul>
 
         <h2 class="h2">4. Berbagi data</h2>
-        <p class="p">Kami tidak menjual data pribadi. Kami dapat membagikan data minimal kepada penyedia infrastruktur untuk menjalankan layanan, atau jika diwajibkan oleh hukum.</p>
+        <p class="p">Kami dapat membagikan data kepada penyedia layanan hanya sejauh diperlukan untuk mengoperasikan bothook (mis. infrastruktur cloud, pengiriman email). Kami tidak menjual informasi pribadi.</p>
 
-        <h2 class="h2">5. Retensi</h2>
-        <p class="p">Kami menyimpan data hanya selama diperlukan untuk operasional/dukungan, lalu menghapus atau menganonimkan jika sesuai.</p>
+        <h2 class="h2">5. Retensi data</h2>
+        <p class="p">Kami menyimpan informasi hanya selama diperlukan untuk menyediakan layanan, memenuhi kewajiban hukum, menyelesaikan sengketa, dan menegakkan perjanjian. Jika paket Anda berakhir dan tidak diperpanjang, bot akan berhenti; data operasional dapat tersimpan untuk waktu terbatas untuk keperluan akuntansi dan dukungan.</p>
 
-        <h2 class="h2">6. Kontak</h2>
-        <p class="p">Jika Anda punya pertanyaan tentang privasi, silakan hubungi melalui halaman Contact.</p>
+        <h2 class="h2">6. Keamanan</h2>
+        <p class="p">Kami mengambil langkah yang wajar untuk melindungi informasi (kontrol akses, enkripsi saat transit, dan praktik operasional least‑privilege). Namun, tidak ada sistem yang sepenuhnya aman.</p>
 
+        <h2 class="h2">7. Pilihan Anda</h2>
+        <ul class="list">
+          <li>Anda dapat menghubungi kami untuk meminta akses, koreksi, atau penghapusan informasi kontak yang Anda kirimkan.</li>
+          <li>Anda dapat berhenti menggunakan layanan kapan saja dengan tidak memperpanjang.</li>
+        </ul>
+
+        <h2 class="h2">8. Kontak</h2>
+        <p class="p">Pertanyaan tentang privasi? Gunakan <a href="/id/contact.html">formulir kontak</a>.</p>
       </section>
     </div>
   </main>
 
   <footer class="footer">
-    <div class="footer-inner">
-      <a class="footer-link" href="/id/">Home</a>
-      <a class="footer-link" href="/id/terms.html">Terms</a>
-      <a class="footer-link" href="/id/privacy.html">Privacy</a>
-      <a class="footer-link" href="/id/contact.html">Contact</a>
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/id/contact.html">Kontak</a>
+        <span class="dot">·</span>
+        <a href="/id/terms.html">Ketentuan</a>
+        <span class="dot">·</span>
+        <a href="/id/privacy.html">Privasi</a>
+      </nav>
     </div>
   </footer>
-  <script>document.getElementById('d').textContent = new Date().toISOString().slice(0, 10);</script>
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
+    document.getElementById('year').textContent = new Date().getFullYear();
+    document.getElementById('d').textContent = new Date().toISOString().slice(0,10);
+  </script>
 </body>
 </html>
