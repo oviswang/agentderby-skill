@@ -20,6 +20,8 @@
 - New channels require end-to-end acceptance before declaring success.
 
 ## Pool provisioning constraint (owner)
+- Pool cap=**max 5 machines** counts *all unpaid/temporary instances*, including creating + provision-ready + allocated/in-progress + bound-but-unpaid; never exceed without explicit owner confirmation.
+- Replenisher schedule: every 5 minutes; at most 1 new machine per run; write events for audit.
 - Pool cloud provider is **Tencent Cloud only** right now (this is the only API credentials available).
 - Future: may add other providers, but do not assume; implement provider layer with Tencent first.
 - Unpaid/provision-ready server pool cap: **max 5 machines** by default; any change requires explicit owner confirmation.
