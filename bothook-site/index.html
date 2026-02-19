@@ -406,9 +406,10 @@
     const best = pref ? pref : mapNavToLocale(navLang);
 
     // Auto-redirect only when user has NOT explicitly chosen a language yet.
-    if (!pref && !dismissed && cur === 'en' && best === 'zh' && location.pathname === '/') {
+    if (!pref && !dismissed && cur === 'en' && best !== 'en' && location.pathname === '/') {
       wrap.classList.add('is-transitioning');
-      setTimeout(() => { location.replace('/zh/'); }, 150);
+      setTimeout(() => { const mapHref = { 'zh':'/zh/','zh-tw':'/zh-tw/','ja':'/ja/','ko':'/ko/','fr':'/fr/','de':'/de/','es':'/es/','pt-br':'/pt-br/','ru':'/ru/','ar':'/ar/','hi':'/hi/','id':'/id/','th':'/th/','vi':'/vi/' };
+      location.replace(mapHref[best] || '/'); }, 150);
     }
 
     // Keep the refined banner as an explicit control (first visit only).
