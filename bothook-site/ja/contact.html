@@ -52,7 +52,18 @@
     </div>
   </main>
 
-  <footer class="footer">© <span id="year"></span> BOTHook.</footer>
+  <footer class="footer">
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/ja/contact.html">お問い合わせ</a>
+        <span class="dot">·</span>
+        <a href="/ja/terms.html">利用規約</a>
+        <span class="dot">·</span>
+        <a href="/ja/privacy.html">プライバシー</a>
+      </nav>
+    </div>
+  </footer>
 
   <script>
     const wrap = document.getElementById('contentWrap');
@@ -73,7 +84,7 @@
         email: form.email.value,
         uuid: form.uuid.value,
         message: form.message.value,
-        pageLang: document.documentElement.lang || 'en',
+        pageLang: document.documentElement.lang || 'ja',
       };
 
       try {
