@@ -80,12 +80,13 @@
 
 
     <div class="card" id="uuidCard" style="margin-top:12px;">
-      <div class="hint">需要帮助？复制这个 UUID</div>
-      <div class="uuid" id="uuid">正在生成…</div>
+      <div class="hint">你的交付链接（请保存）</div>
+      <div class="uuid" id="provisionLink">生成中…</div>
       <div class="btns">
-        <button class="primary" id="copyBtn" type="button">复制 UUID</button>
+        <button class="primary" id="copyBtn" type="button">复制链接</button>
       </div>
-      <p class="hint">如需客服协助，请到 <a href="https://bothook.me/zh/contact.html">bothook.me/zh/contact.html</a> 提交表单，并附上这个 UUID。</p>
+      <p class="hint">这个链接包含你的 UUID。请复制保存，未来需要重新关联（relink）、查询、升级/取消订阅时，都可以直接打开。</p>
+      <p class="hint">如需客服协助，请到 <a href="https://bothook.me/zh/contact.html">bothook.me/zh/contact.html</a> 提交表单，并附上此链接（或其中的 UUID）。</p>
     </div>
 
     <script>
@@ -98,6 +99,7 @@
       }
 
       const el = document.getElementById('uuid');
+      const linkEl = document.getElementById('provisionLink');
       const copyBtn = document.getElementById('copyBtn');
       const uuidCard = document.getElementById('uuidCard');
       const verifyCard = document.getElementById('verifyCard');
@@ -127,6 +129,8 @@
       function setUuid(u){
         el.textContent = u;
         storeUuid(u);
+        const link = `${location.origin}/zh/p/${encodeURIComponent(u)}`;
+        if (linkEl) linkEl.textContent = link;
         // 如果用户是从 /zh/p/<id> 进入，则保持该形式，方便复制分享
         if (location.pathname.startsWith('/zh/p/')) {
           history.replaceState(null,'',`/zh/p/${encodeURIComponent(u)}`);
@@ -140,17 +144,17 @@
       setUuid(existing || uuidv4());
 
       copyBtn.addEventListener('click', async () => {
-        const u = el.textContent;
+        const link = linkEl ? linkEl.textContent : `${location.origin}/zh/p/${encodeURIComponent(el.textContent)}`;
         try {
-          await navigator.clipboard.writeText(u);
+          await navigator.clipboard.writeText(link);
           copyBtn.textContent = '已复制';
-          setTimeout(()=>copyBtn.textContent='复制 UUID', 900);
+          setTimeout(()=>copyBtn.textContent='复制链接', 900);
         } catch {
           const ta = document.createElement('textarea');
-          ta.value = u; document.body.appendChild(ta);
+          ta.value = link; document.body.appendChild(ta);
           ta.select(); document.execCommand('copy'); ta.remove();
           copyBtn.textContent = '已复制';
-          setTimeout(()=>copyBtn.textContent='复制 UUID', 900);
+          setTimeout(()=>copyBtn.textContent='复制链接', 900);
         }
       });
 

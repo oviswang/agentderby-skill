@@ -80,12 +80,13 @@
 
 
     <div class="card" id="uuidCard" style="margin-top:12px;">
-      <div class="hint">Need help? Copy this UUID</div>
-      <div class="uuid" id="uuid">Generating…</div>
+      <div class="hint">Your delivery link (save it)</div>
+      <div class="uuid" id="provisionLink">Generating…</div>
       <div class="btns">
-        <button class="primary" id="copyBtn" type="button">Copy UUID</button>
+        <button class="primary" id="copyBtn" type="button">Copy link</button>
       </div>
-      <p class="hint">If you need help, submit the form at <a href="https://bothook.me/contact.html">bothook.me/contact.html</a> and include this UUID.</p>
+      <p class="hint">This link contains your UUID. Save it — you can use it later to relink, check status, or manage your subscription.</p>
+      <p class="hint">If you need help, submit the form at <a href="https://bothook.me/contact.html">bothook.me/contact.html</a> and include this link (or the UUID in it).</p>
     </div>
 
     <script>
@@ -99,6 +100,7 @@
       }
 
       const el = document.getElementById('uuid');
+      const linkEl = document.getElementById('provisionLink');
       const copyBtn = document.getElementById('copyBtn');
       const uuidCard = document.getElementById('uuidCard');
       const verifyCard = document.getElementById('verifyCard');
@@ -128,6 +130,8 @@
       function setUuid(u){
         el.textContent = u;
         storeUuid(u);
+        const link = `${location.origin}/p/${encodeURIComponent(u)}`;
+        if (linkEl) linkEl.textContent = link;
         // Prefer shareable path /p/<id> if user landed there, else fallback to query param.
         if (location.pathname.startsWith('/p/')) {
           history.replaceState(null,'',`/p/${encodeURIComponent(u)}`);
@@ -150,18 +154,17 @@
       }
 
       copyBtn.addEventListener('click', async () => {
-        const u = el.textContent;
+        const link = linkEl ? linkEl.textContent : `${location.origin}/p/${encodeURIComponent(el.textContent)}`;
         try {
-          await navigator.clipboard.writeText(u);
+          await navigator.clipboard.writeText(link);
           copyBtn.textContent = 'Copied';
-          setTimeout(()=>copyBtn.textContent='Copy UUID', 900);
+          setTimeout(()=>copyBtn.textContent='Copy link', 900);
         } catch {
-          // fallback
           const ta = document.createElement('textarea');
-          ta.value = u; document.body.appendChild(ta);
+          ta.value = link; document.body.appendChild(ta);
           ta.select(); document.execCommand('copy'); ta.remove();
           copyBtn.textContent = 'Copied';
-          setTimeout(()=>copyBtn.textContent='Copy UUID', 900);
+          setTimeout(()=>copyBtn.textContent='Copy link', 900);
         }
       });
 
