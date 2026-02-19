@@ -22,3 +22,11 @@
 ## Reporting / comms routing (owner preference)
 - Keep WhatsApp chat clean: WhatsApp is for owner↔agent work coordination.
 - Send hourly work reports + future ops/cron-generated updates (customer support replies, new machines added to pool, subscription/paid events, etc.) to the owner via **Telegram**.
+
+## Delivery state machine (owner spec)
+- Delivery complete only when: WhatsApp linked (bind by `wa_jid`) + paid + OpenAI API key provided & verified (direct mode; proxy later).
+- Before delivery complete:
+  - Self-chat gets welcome/onboarding copy.
+  - External contacts get promo copy.
+  - 20-min timeout after bind (if unpaid): auto-unbind + cleanup + return to pool.
+- After delivery complete: machine becomes **self-chat control mode** (owner is the user's own WhatsApp number); external contacts must be ignored (no response).
