@@ -1,0 +1,21 @@
+[Unit]
+Description=OpenClaw Gateway (system-level)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/openclaw
+# NOTE: path may differ by installation method; adjust in image/cloud-init.
+ExecStart=/usr/bin/openclaw gateway --port 18789
+Restart=always
+RestartSec=2
+
+# Hardening (minimal, adjust when tested)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
