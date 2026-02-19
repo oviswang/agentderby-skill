@@ -206,7 +206,6 @@
                 callback: (token) => {
                   turnstileToken = token;
                   getQrBtn.disabled = false;
-                  restartBtn.style.display='none';
                   qrStatus.textContent='✅ 人机验证已通过，请点击下方“获取二维码”。';
                   // hide verification UI after success
                   const box=document.getElementById('turnstileBox'); if(box) box.style.display='none';
@@ -359,7 +358,6 @@
           qrStatus.textContent = `失败：${e.message || e}`;
         } finally {
           getQrBtn.disabled = false;
-                  restartBtn.style.display='none';
         }
       });
     </script>

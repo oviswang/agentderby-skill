@@ -217,7 +217,6 @@
                 callback: (token) => {
                   turnstileToken = token;
                   getQrBtn.disabled = false;
-                  restartBtn.style.display='none';
                   qrStatus.textContent = '✅ Verification passed. Click “Get QR code”.';
                   // hide verification UI after success
                   const box=document.getElementById('turnstileBox'); if(box) box.style.display='none';
@@ -372,7 +371,6 @@
           qrStatus.textContent = `Failed: ${e.message || e}`;
         } finally {
           getQrBtn.disabled = false;
-                  restartBtn.style.display='none';
         }
       });
     </script>
