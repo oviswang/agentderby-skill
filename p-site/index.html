@@ -305,11 +305,28 @@
             }
           }
 
-          // Poll connection status
+          // Keep QR fresh until linked (WhatsApp QR rotates/expirs).
+          let lastQr = null;
           for (;;) {
+            // Try refresh QR
+            try {
+              const q = await fetchQr(uuid);
+              if (q && q.qrDataUrl && q.qrDataUrl !== lastQr) {
+                lastQr = q.qrDataUrl;
+                img.src = q.qrDataUrl;
+                qrStatus.textContent = 'QR ready. Scan it in WhatsApp → Linked devices.';
+              }
+            } catch (e) {
+              // ignore transient qr_not_ready
+            }
+
             const st = await fetchStatus(uuid);
             if (st.connected) {
               qrStatus.textContent = '✅ Linked! This delivery machine is now connected.';
+              break;
+            }
+            if (st.status === 'closed') {
+              qrStatus.textContent = 'QR session ended. Please refresh the page and verify again to generate a new QR.';
               break;
             }
             await sleep(1200);

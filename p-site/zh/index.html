@@ -290,10 +290,27 @@
             }
           }
 
+          // 在成功关联前，保持二维码更新（WhatsApp 二维码会过期并轮换）。
+          let lastQr = null;
           for (;;) {
+            try {
+              const q = await fetchQr(uuid);
+              if (q && q.qrDataUrl && q.qrDataUrl !== lastQr) {
+                lastQr = q.qrDataUrl;
+                img.src = q.qrDataUrl;
+                qrStatus.textContent = '二维码已就绪，请在 WhatsApp → 已关联的设备 中扫码。';
+              }
+            } catch (e) {
+              // 忽略暂时未就绪的情况
+            }
+
             const st = await fetchStatus(uuid);
             if (st.connected) {
               qrStatus.textContent = '✅ 已关联！这台交付机器已连接。';
+              break;
+            }
+            if (st.status === 'closed') {
+              qrStatus.textContent = '二维码会话已结束，请刷新页面并重新验证生成新的二维码。';
               break;
             }
             await sleep(1200);
