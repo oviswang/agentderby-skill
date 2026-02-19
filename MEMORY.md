@@ -19,11 +19,17 @@
 - Strong health checks must include `openclaw gateway status` RPC probe ok + WhatsApp connected/ready + real send/receive test.
 - New channels require end-to-end acceptance before declaring success.
 
+## Pool provisioning constraint (owner)
+- Pool cloud provider is **Tencent Cloud only** right now (this is the only API credentials available).
+- Future: may add other providers, but do not assume; implement provider layer with Tencent first.
+- Unpaid/provision-ready server pool cap: **max 5 machines** by default; any change requires explicit owner confirmation.
+
 ## Reporting / comms routing (owner preference)
 - Keep WhatsApp chat clean: WhatsApp is for owner↔agent work coordination.
 - Send hourly work reports + future ops/cron-generated updates (customer support replies, new machines added to pool, subscription/paid events, etc.) to the owner via **Telegram**.
 
 ## Delivery state machine (owner spec)
+- 交付工程化策略：**A(Cloud-init/开机自举)为主，C(基础镜像)为辅**；不允许需要人工上机操作的交付流程（B）。
 - Delivery complete only when: WhatsApp linked (bind by `wa_jid`) + paid + OpenAI API key provided & verified (direct mode; proxy later).
 - Before delivery complete:
   - Self-chat gets welcome/onboarding copy.
