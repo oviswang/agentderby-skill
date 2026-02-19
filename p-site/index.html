@@ -35,7 +35,6 @@
       </a>
       <a href="https://bothook.me/" class="hint">Back to bothook.me</a>
     </div>
-
     <h1>Provisioning</h1>
     <p>This page creates a unique provisioning session. You’ll use it to link WhatsApp on the next step.</p>
 
@@ -51,20 +50,15 @@
         <button class="primary" id="continueBtn" type="button" disabled>Continue</button>
       </div>
     </div>
-
-    <div class="card" id="uuidCard" style="margin-top:12px; opacity:.55; pointer-events:none;">
-      <div class="hint">Provisioning UUID</div>
-      <div class="uuid" id="uuid">Generating…</div>
-      <div class="btns">
-        <button class="primary" id="copyBtn" type="button">Copy UUID</button>
-      </div>
-      <p class="hint">Keep this UUID — it will be used to match the WhatsApp linking session to your order.</p>
+      <p class="hint">If you contact support, include this UUID.</p>
     </div>
 
     <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
       <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Get QR code</div>
       <p class="hint">(Verification is optional for now; it may be required later.)</p>
-      <div id="turnstile" style="margin-top:10px;"></div>
+      <div id="turnstile" style="margin-top:10px; min-height:72px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);">
+        <span class="hint" id="turnstileHint">Loading verification…</span>
+      </div>
       <div class="btns" style="margin-top:12px;">
         <button class="primary" id="getQrBtn" type="button" disabled>Get QR code</button>
       </div>
@@ -81,6 +75,19 @@
         <div class="hint">Support</div>
         <p>If you’re stuck, contact us via the form on <a href="https://bothook.me/contact.html">bothook.me</a> and include your UUID.</p>
       </div>
+    </div>
+
+
+
+
+
+    <div class="card" id="uuidCard" style="margin-top:12px; opacity:.55; pointer-events:none;">
+      <div class="hint">Your UUID (for support)</div>
+      <div class="uuid" id="uuid">Generating…</div>
+      <div class="btns">
+        <button class="primary" id="copyBtn" type="button">Copy UUID</button>
+      </div>
+      <p class="hint">If you contact support, include this UUID.</p>
     </div>
 
     <script>
@@ -137,14 +144,14 @@
         try {
           await navigator.clipboard.writeText(u);
           copyBtn.textContent = 'Copied';
-          setTimeout(()=>copyBtn.textContent='Copy UUID', 900);
+          setTimeout(()=>copyBtn.textContent='Copy UUID (for support)', 900);
         } catch {
           // fallback
           const ta = document.createElement('textarea');
           ta.value = u; document.body.appendChild(ta);
           ta.select(); document.execCommand('copy'); ta.remove();
           copyBtn.textContent = 'Copied';
-          setTimeout(()=>copyBtn.textContent='Copy UUID', 900);
+          setTimeout(()=>copyBtn.textContent='Copy UUID (for support)', 900);
         }
       });
 
@@ -175,8 +182,10 @@
                 sitekey: '0x4AAAAAACa0PQ3rbwIf9090',
                 theme: 'dark',
                 callback: (token) => {
+                  const h=document.getElementById('turnstileHint'); if(h) h.textContent='';
                   turnstileToken = token;
                 },
+                
                 'error-callback': () => {
                   turnstileToken = null;
                 },

@@ -35,7 +35,6 @@
       </a>
       <a href="https://bothook.me/zh/" class="hint">返回 bothook.me</a>
     </div>
-
     <h1>交付</h1>
     <p>本页面会生成一个唯一的交付会话（UUID）。下一步你将用它完成 WhatsApp 设备关联。</p>
 
@@ -51,20 +50,15 @@
         <button class="primary" id="continueBtn" type="button" disabled>继续</button>
       </div>
     </div>
-
-    <div class="card" id="uuidCard" style="margin-top:12px; opacity:.55; pointer-events:none;">
-      <div class="hint">交付 UUID</div>
-      <div class="uuid" id="uuid">正在生成…</div>
-      <div class="btns">
-        <button class="primary" id="copyBtn" type="button">复制 UUID</button>
-      </div>
-      <p class="hint">请保留这个 UUID —— 我们会用它把 WhatsApp 关联会话与你的订单对应起来。</p>
+      <p class="hint">如需客服协助，请把这个 UUID 发给我们。</p>
     </div>
 
     <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
       <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">获取二维码</div>
       <p class="hint">（目前验证为可选；后续可能会强制开启。）</p>
-      <div id="turnstile" style="margin-top:10px;"></div>
+      <div id="turnstile" style="margin-top:10px; min-height:72px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);">
+        <span class="hint" id="turnstileHint">正在加载人机验证…</span>
+      </div>
       <div class="btns" style="margin-top:12px;">
         <button class="primary" id="getQrBtn" type="button" disabled>获取二维码</button>
       </div>
@@ -81,6 +75,19 @@
         <div class="hint">支持</div>
         <p>如果卡住了，请到 <a href="https://bothook.me/zh/contact.html">bothook.me</a> 提交表单，并附上你的 UUID。</p>
       </div>
+    </div>
+
+
+
+
+
+    <div class="card" id="uuidCard" style="margin-top:12px; opacity:.55; pointer-events:none;">
+      <div class="hint">你的 UUID（发给客服）</div>
+      <div class="uuid" id="uuid">正在生成…</div>
+      <div class="btns">
+        <button class="primary" id="copyBtn" type="button">复制 UUID</button>
+      </div>
+      <p class="hint">如需客服协助，请把这个 UUID 发给我们。</p>
     </div>
 
     <script>
@@ -127,13 +134,13 @@
         try {
           await navigator.clipboard.writeText(u);
           copyBtn.textContent = '已复制';
-          setTimeout(()=>copyBtn.textContent='复制 UUID', 900);
+          setTimeout(()=>copyBtn.textContent='复制 UUID（发给客服）', 900);
         } catch {
           const ta = document.createElement('textarea');
           ta.value = u; document.body.appendChild(ta);
           ta.select(); document.execCommand('copy'); ta.remove();
           copyBtn.textContent = '已复制';
-          setTimeout(()=>copyBtn.textContent='复制 UUID', 900);
+          setTimeout(()=>copyBtn.textContent='复制 UUID（发给客服）', 900);
         }
       });
 
@@ -162,7 +169,11 @@
               window.turnstile.render('#turnstile', {
                 sitekey: '0x4AAAAAACa0PQ3rbwIf9090',
                 theme: 'dark',
-                callback: (token) => { turnstileToken = token; },
+                callback: (token) => {
+                  const h=document.getElementById('turnstileHint'); if(h) h.textContent='';
+                  turnstileToken = token;
+                },
+                callback: (token) => { const h=document.getElementById('turnstileHint'); if(h) h.textContent=''; turnstileToken = token; },
                 'error-callback': () => { turnstileToken = null; },
                 'expired-callback': () => { turnstileToken = null; }
               });
