@@ -57,7 +57,6 @@
       <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Get QR code</div>
       <div id="turnstileBox" style="margin-top:10px; min-height:72px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);">
         <div id="turnstileWidget"></div>
-        <span class="hint" id="turnstileHint" style="position:absolute;">Loading verification…</span>
       </div>
 
       <p class="hint" id="qrStatus" style="margin-top:10px;"></p>
@@ -217,7 +216,6 @@
                 sitekey: '0x4AAAAAACa0PQ3rbwIf9090',
                 theme: 'dark',
                 callback: (token) => {
-                  const h=document.getElementById('turnstileHint'); if(h) h.textContent='';
                   turnstileToken = token;
                   getQrBtn.disabled = false;
                   restartBtn.style.display='none';
