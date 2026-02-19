@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Contact — BOTHook</title>
-  <meta name="description" content="Contact BOTHook support." />
+  <title>संपर्क — BOTHook</title>
+  <meta name="description" content="BOTHook सपोर्ट से संपर्क करें।" />
   <link rel="icon" href="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="canonical" href="https://bothook.me/hi/contact.html" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/contact.html" />
+  <link rel="alternate" hreflang="hi" href="https://bothook.me/hi/contact.html" />
 </head>
 <body>
   <header class="header">
-    <a class="brand" href="/hi/" aria-label="BOTHook home">
+    <a class="brand" href="/hi/" aria-label="BOTHook होम">
       <img src="/assets/logo.jpg" alt="BOTHook logo" />
       <strong>BOTHook</strong>
     </a>
@@ -20,39 +22,50 @@
   <main class="main">
     <div class="content-wrap" id="contentWrap">
       <section class="card" style="max-width:760px; margin:0 auto;">
-        <h1 class="h1" style="font-size:32px; margin-bottom:8px;">Contact</h1>
-        <p class="p">Send us a message and we’ll reply by email.</p>
+        <h1 class="h1" style="font-size:32px; margin-bottom:8px;">संपर्क</h1>
+        <p class="p">हमें संदेश भेजें — हम ईमेल से जवाब देंगे।</p>
 
         <div id="sent" class="card" style="display:none; background:rgba(90,255,209,.10);">
-          <strong>Thanks — we got it.</strong>
-          <div class="p" style="margin-top:8px;">We’ll reply to your email as soon as possible.</div>
+          <strong>धन्यवाद — मिल गया।</strong>
+          <div class="p" style="margin-top:8px;">हम जल्द से जल्द आपके ईमेल पर जवाब देंगे।</div>
         </div>
 
         <form id="form" class="card" style="margin-top:14px;" autocomplete="on">
-          <label class="label" for="email">Email</label>
+          <label class="label" for="email">ईमेल</label>
           <input id="email" name="email" type="email" required placeholder="you@company.com" class="input" />
 
           <div style="height:12px"></div>
 
-          <label class="label" for="uuid">Provisioning UUID (optional)</label>
-          <input id="uuid" name="uuid" type="text" placeholder="From p.bothook.me" class="input" />
+          <label class="label" for="uuid">Provisioning UUID (वैकल्पिक)</label>
+          <input id="uuid" name="uuid" type="text" placeholder="p.bothook.me से" class="input" />
 
           <div style="height:12px"></div>
 
-          <label class="label" for="message">Message</label>
-          <textarea id="message" name="message" rows="6" required placeholder="How can we help?" class="input"></textarea>
+          <label class="label" for="message">संदेश</label>
+          <textarea id="message" name="message" rows="6" required placeholder="हम कैसे मदद कर सकते हैं?" class="input"></textarea>
 
           <div class="btns">
-            <button class="cta primary" type="submit">Send</button>
-            <a class="cta ghost" href="/">Back</a>
+            <button class="cta primary" type="submit">भेजें</button>
+            <a class="cta ghost" href="/hi/">वापस</a>
           </div>
-          <p class="hint" style="margin-top:10px;">Tip: If you’re provisioning WhatsApp linking, include your UUID so we can find your session quickly.</p>
+          <p class="hint" style="margin-top:10px;">टिप: अगर आप WhatsApp linking (provisioning) कर रहे हैं, तो अपना UUID शामिल करें ताकि हम आपकी session जल्दी ढूंढ सकें।</p>
         </form>
       </section>
     </div>
   </main>
 
-  <footer class="footer">© <span id="year"></span> BOTHook.</footer>
+  <footer class="footer">
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/hi/contact.html">संपर्क</a>
+        <span class="dot">·</span>
+        <a href="/hi/terms.html">शर्तें</a>
+        <span class="dot">·</span>
+        <a href="/hi/privacy.html">गोपनीयता</a>
+      </nav>
+    </div>
+  </footer>
 
   <script>
     const wrap = document.getElementById('contentWrap');
@@ -61,7 +74,6 @@
 
     document.getElementById('year').textContent = new Date().getFullYear();
 
-    // Prefill UUID from querystring (e.g. /contact.html?uuid=...)
     const params = new URLSearchParams(location.search);
     const uuid = params.get('uuid');
     if (uuid) document.getElementById('uuid').value = uuid;
@@ -73,7 +85,7 @@
         email: form.email.value,
         uuid: form.uuid.value,
         message: form.message.value,
-        pageLang: document.documentElement.lang || 'en',
+        pageLang: document.documentElement.lang || 'hi',
       };
 
       try {
@@ -87,11 +99,11 @@
 
         const sent = document.getElementById('sent');
         sent.style.display = 'block';
-        sent.innerHTML = `<strong>Thanks — we got it.</strong><div class="p" style="margin-top:8px;">Ticket: <strong>${j.ticket_id}</strong>. We’ll reply to your email as soon as possible.</div>`;
+        sent.innerHTML = `<strong>धन्यवाद — मिल गया।</strong><div class="p" style="margin-top:8px;">Ticket: <strong>${j.ticket_id}</strong>. हम जल्द से जल्द आपके ईमेल पर जवाब देंगे।</div>`;
         form.style.display = 'none';
         sent.scrollIntoView({behavior:'smooth', block:'start'});
       } catch (err) {
-        alert('Could not submit. Please try again in a moment.');
+        alert('सबमिट नहीं हो सका। कृपया थोड़ी देर बाद फिर कोशिश करें।');
       }
     });
   </script>
