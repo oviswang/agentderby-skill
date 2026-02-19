@@ -69,18 +69,13 @@
         <p>When the WhatsApp QR is ready, you’ll scan it from WhatsApp → Linked devices.</p>
         <p class="hint">After scanning, this page will confirm when the device is linked.</p>
       </div>
-      <div class="card">
-        <div class="hint">Support</div>
-        <p>If you’re stuck, contact us via the form on <a href="https://bothook.me/contact.html">bothook.me</a> and include your UUID.</p>
-      </div>
-    </div>
 
 
 
 
 
     <div class="card" id="uuidCard" style="margin-top:12px;">
-      <div class="hint">Your UUID (send to support)</div>
+      <div class="hint">Need help? Copy this UUID</div>
       <div class="uuid" id="uuid">Generating…</div>
       <div class="btns">
         <button class="primary" id="copyBtn" type="button">Copy UUID</button>
@@ -108,6 +103,16 @@
       const qrStatus = document.getElementById('qrStatus');
       let turnstileToken = null;
 
+      const STORAGE_KEY = 'bothook_provision_uuid_v1';
+
+      function loadStoredUuid(){
+        try { return localStorage.getItem(STORAGE_KEY) || null; } catch { return null; }
+      }
+
+      function storeUuid(u){
+        try { localStorage.setItem(STORAGE_KEY, u); } catch {}
+      }
+
       function getUuidFromPath(){
         // Supports shareable URLs like /p/<id>
         const m = location.pathname.match(/^\/p\/([^\/]+)\/?$/);
@@ -116,6 +121,7 @@
 
       function setUuid(u){
         el.textContent = u;
+        storeUuid(u);
         // Prefer shareable path /p/<id> if user landed there, else fallback to query param.
         if (location.pathname.startsWith('/p/')) {
           history.replaceState(null,'',`/p/${encodeURIComponent(u)}`);
@@ -125,7 +131,7 @@
       }
 
       const params = new URLSearchParams(location.search);
-      const existing = params.get('uuid') || getUuidFromPath();
+      const existing = params.get('uuid') || getUuidFromPath() || loadStoredUuid();
       setUuid(existing || uuidv4());
 
       // Locale auto-follow: zh -> /zh/, else default en.
@@ -165,8 +171,9 @@
         verifyCard.style.display = 'block';
         verifyCard.scrollIntoView({behavior:'smooth', block:'start'});
 
-        // Enable immediately (server-side verification will be enforced later)
-        getQrBtn.disabled = false;
+        // Turnstile must pass before enabling QR
+        getQrBtn.disabled = true;
+        qrStatus.textContent = 'Complete verification to enable “Get QR code”.';
 
         // Load Turnstile lazily (optional signal for later enforcement)
         if (!document.getElementById('ts-script')) {
@@ -182,13 +189,19 @@
                 callback: (token) => {
                   const h=document.getElementById('turnstileHint'); if(h) h.textContent='';
                   turnstileToken = token;
+                  getQrBtn.disabled = false;
+                  qrStatus.textContent = '';
                 },
                 
                 'error-callback': () => {
                   turnstileToken = null;
+                  getQrBtn.disabled = true;
+                  qrStatus.textContent = 'Verification failed. Please try again.';
                 },
                 'expired-callback': () => {
                   turnstileToken = null;
+                  getQrBtn.disabled = true;
+                  qrStatus.textContent = 'Verification expired. Please verify again.';
                 }
               });
             }
@@ -227,6 +240,10 @@
 
       // QR fetch (wired): calls provisioning backend on the pool machine.
       getQrBtn.addEventListener('click', async () => {
+        if (!turnstileToken) {
+          qrStatus.textContent = 'Please complete verification first.';
+          return;
+        }
         const uuid = el.textContent.trim();
         getQrBtn.disabled = true;
         qrStatus.textContent = 'Requesting QR code…';

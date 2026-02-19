@@ -69,18 +69,13 @@
         <p>当 WhatsApp 二维码就绪后，你会在 WhatsApp →「已关联的设备」中扫描二维码完成连接。</p>
         <p class="hint">扫码完成后，本页面会自动显示“已关联✅”。</p>
       </div>
-      <div class="card">
-        <div class="hint">支持</div>
-        <p>如果卡住了，请到 <a href="https://bothook.me/zh/contact.html">bothook.me</a> 提交表单，并附上你的 UUID。</p>
-      </div>
-    </div>
 
 
 
 
 
     <div class="card" id="uuidCard" style="margin-top:12px;">
-      <div class="hint">你的 UUID（发给客服）</div>
+      <div class="hint">需要帮助？复制这个 UUID</div>
       <div class="uuid" id="uuid">正在生成…</div>
       <div class="btns">
         <button class="primary" id="copyBtn" type="button">复制 UUID</button>
@@ -107,6 +102,16 @@
       const qrStatus = document.getElementById('qrStatus');
       let turnstileToken = null;
 
+      const STORAGE_KEY = 'bothook_provision_uuid_v1';
+
+      function loadStoredUuid(){
+        try { return localStorage.getItem(STORAGE_KEY) || null; } catch { return null; }
+      }
+
+      function storeUuid(u){
+        try { localStorage.setItem(STORAGE_KEY, u); } catch {}
+      }
+
       function getUuidFromPath(){
         // 支持分享链接：/zh/p/<id>
         const m = location.pathname.match(/^\/zh\/p\/([^\/]+)\/?$/);
@@ -115,6 +120,7 @@
 
       function setUuid(u){
         el.textContent = u;
+        storeUuid(u);
         // 如果用户是从 /zh/p/<id> 进入，则保持该形式，方便复制分享
         if (location.pathname.startsWith('/zh/p/')) {
           history.replaceState(null,'',`/zh/p/${encodeURIComponent(u)}`);
@@ -124,7 +130,7 @@
       }
 
       const params = new URLSearchParams(location.search);
-      const existing = params.get('uuid') || getUuidFromPath();
+      const existing = params.get('uuid') || getUuidFromPath() || loadStoredUuid();
       setUuid(existing || uuidv4());
 
       copyBtn.addEventListener('click', async () => {
@@ -154,8 +160,9 @@
         verifyCard.style.display = 'block';
         verifyCard.scrollIntoView({behavior:'smooth', block:'start'});
 
-        // 先允许直接获取二维码（服务端强制验证会在后续启用）
-        getQrBtn.disabled = false;
+        // 必须先通过人机验证才能获取二维码
+        getQrBtn.disabled = true;
+        qrStatus.textContent = '请先完成人机验证，才能获取二维码。';
 
         if (!document.getElementById('ts-script')) {
           const s = document.createElement('script');
@@ -171,9 +178,9 @@
                   const h=document.getElementById('turnstileHint'); if(h) h.textContent='';
                   turnstileToken = token;
                 },
-                callback: (token) => { const h=document.getElementById('turnstileHint'); if(h) h.textContent=''; turnstileToken = token; },
-                'error-callback': () => { turnstileToken = null; },
-                'expired-callback': () => { turnstileToken = null; }
+                callback: (token) => { const h=document.getElementById('turnstileHint'); if(h) h.textContent=''; turnstileToken = token; getQrBtn.disabled = false; qrStatus.textContent=''; },
+                'error-callback': () => { turnstileToken = null; getQrBtn.disabled = true; qrStatus.textContent='验证失败，请重试。'; },
+                'expired-callback': () => { turnstileToken = null; getQrBtn.disabled = true; qrStatus.textContent='验证已过期，请重新验证。'; }
               });
             }
           };
@@ -211,6 +218,10 @@
 
       // 二维码获取（已接入）：请求池机侧 WhatsApp 网关生成并返回二维码
       getQrBtn.addEventListener('click', async () => {
+        if (!turnstileToken) {
+          qrStatus.textContent = '请先完成人机验证。';
+          return;
+        }
         const uuid = el.textContent.trim();
         getQrBtn.disabled = true;
         qrStatus.textContent = '正在请求二维码…';
