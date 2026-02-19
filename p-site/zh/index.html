@@ -50,8 +50,6 @@
         <button class="primary" id="continueBtn" type="button" disabled>继续</button>
       </div>
     </div>
-      <p class="hint">如需客服协助，请把这个 UUID 发给我们。</p>
-    </div>
 
     <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
       <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">获取二维码</div>
@@ -81,7 +79,7 @@
 
 
 
-    <div class="card" id="uuidCard" style="margin-top:12px; opacity:.55; pointer-events:none;">
+    <div class="card" id="uuidCard" style="margin-top:12px;">
       <div class="hint">你的 UUID（发给客服）</div>
       <div class="uuid" id="uuid">正在生成…</div>
       <div class="btns">
@@ -134,13 +132,13 @@
         try {
           await navigator.clipboard.writeText(u);
           copyBtn.textContent = '已复制';
-          setTimeout(()=>copyBtn.textContent='复制 UUID（发给客服）', 900);
+          setTimeout(()=>copyBtn.textContent='复制 UUID', 900);
         } catch {
           const ta = document.createElement('textarea');
           ta.value = u; document.body.appendChild(ta);
           ta.select(); document.execCommand('copy'); ta.remove();
           copyBtn.textContent = '已复制';
-          setTimeout(()=>copyBtn.textContent='复制 UUID（发给客服）', 900);
+          setTimeout(()=>copyBtn.textContent='复制 UUID', 900);
         }
       });
 

@@ -50,8 +50,6 @@
         <button class="primary" id="continueBtn" type="button" disabled>Continue</button>
       </div>
     </div>
-      <p class="hint">If you contact support, include this UUID.</p>
-    </div>
 
     <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
       <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Get QR code</div>
@@ -81,8 +79,8 @@
 
 
 
-    <div class="card" id="uuidCard" style="margin-top:12px; opacity:.55; pointer-events:none;">
-      <div class="hint">Your UUID (for support)</div>
+    <div class="card" id="uuidCard" style="margin-top:12px;">
+      <div class="hint">Your UUID (send to support)</div>
       <div class="uuid" id="uuid">Generating…</div>
       <div class="btns">
         <button class="primary" id="copyBtn" type="button">Copy UUID</button>
@@ -144,14 +142,14 @@
         try {
           await navigator.clipboard.writeText(u);
           copyBtn.textContent = 'Copied';
-          setTimeout(()=>copyBtn.textContent='Copy UUID (for support)', 900);
+          setTimeout(()=>copyBtn.textContent='Copy UUID', 900);
         } catch {
           // fallback
           const ta = document.createElement('textarea');
           ta.value = u; document.body.appendChild(ta);
           ta.select(); document.execCommand('copy'); ta.remove();
           copyBtn.textContent = 'Copied';
-          setTimeout(()=>copyBtn.textContent='Copy UUID (for support)', 900);
+          setTimeout(()=>copyBtn.textContent='Copy UUID', 900);
         }
       });
 
