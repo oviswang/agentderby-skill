@@ -35,3 +35,23 @@
 - 下一小时目标（1–2 条）：1) 用一台全新机器按验收步骤跑一遍并记录结果；2) 依据结果修正 unit/路径假设。
 
 ---
+
+### 2026-02-20 08:00–08:59 CST
+- P0 子任务：P0.1 cloud-init artifacts 端到端新机验收（按 v0.1.0 文档跑通）
+- 完成定义（DoD）：在一台全新实例上按验收文档从 0 跑通到 provision-ready；记录命令、输出摘要与任何偏差；必要时提交修复。
+- 本小时完成：小时开始，尚未完成端到端验收；已明确本小时验收范围与记录要求。
+- 产出链接/commit：暂无（原因：端到端验收尚未开始/未完成）。
+- 阻塞：需要一台可用于“全新开机自举”的实例（或等价的可重复环境）用于跑验收；否则只能做静态审阅。
+- 下一小时目标（1–2 条）：1) 准备/获取一台全新实例并按文档执行验收；2) 若发现路径/unit 假设不一致，提交最小修复并更新验收文档。
+
+---
+
+### 2026-02-20 08:00–08:59 CST
+- P0 子任务：P0.1 artifacts 端到端验收（使用池内 IN_POOL 机器）
+- 完成定义（DoD）：从一台池内机器完成 curl|bash 执行 bootstrap；确认关键文件/units 落盘；运行 healthcheck 并记录结果。
+- 本小时完成：已将除 paid 测试机外的 4 台机器同步为 IN_POOL；选择 lhins-an0746iv(124.156.200.117) 执行 bootstrap 验收；healthcheck 通过（provision /healthz not ready 属于预期：服务未启动）。
+- 产出链接/commit：fb601ba（artifacts v0.1.0）+ control-plane DB events: INSTANCE_LIFECYCLE_SYNC（bfmjrdqj/gs58d0eh/d6zdsg19）
+- 阻塞：needrestart 提示重启部分服务（systemd-logind deferred）；openclaw gateway unit 路径假设需后续在真实交付镜像/安装方式下再验证。
+- 下一小时目标（1–2 条）：1) 再选一台 IN_POOL 机器重复验收，确认一致性；2) 校验 openclaw gateway 的 ExecStart 路径与实际安装一致并形成可配置项。
+
+---
