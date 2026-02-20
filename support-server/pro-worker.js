@@ -68,11 +68,17 @@ function readTickets(){
   return out;
 }
 
+// Note: we intentionally do NOT auto-detect language from message contents.
+// Use page_lang from the form; default to English.
 function hasHan(s){ return /[\u4E00-\u9FFF]/.test(s || ''); }
 
 function detectLang(ticket){
-  if (ticket.page_lang && String(ticket.page_lang).toLowerCase().startsWith('zh')) return 'zh';
-  return hasHan(ticket.message) ? 'zh' : 'en';
+  // Policy: trust page_lang from the form; default to English if absent.
+  const pl = (ticket.page_lang || '').toString().trim().toLowerCase();
+  if (!pl) return 'en';
+  if (pl.startsWith('zh')) return 'zh';
+  // Extend later for more languages; for now only zh/en are supported.
+  return 'en';
 }
 
 function summarizeCategory(message){

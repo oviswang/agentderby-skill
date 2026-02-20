@@ -20,6 +20,10 @@ This support workflow is intentionally **low-risk**.
 - Follow-ups are supported by submitting the same `ticket_id` again (status=`followup`).
 - Reply cap: max **10 replies per ticket_id** (`ticketReplies[id].count`).
 
+## Language policy
+- Use `page_lang` from the form submission.
+- If `page_lang` is missing: default to English.
+
 ## Rate limiting
 - Basic server-side per-email rate limit: max 10 submissions per hour.
 - Worker run limit: `SUPPORT_MAX_PER_RUN` (default 10).
