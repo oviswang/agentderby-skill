@@ -38,6 +38,10 @@
 - **硬规则**：所有“小时级工作日报/定时报告”以及**未来所有运营信息**（客服回复、入池/回收、订阅/支付、cron 产出等）一律发到 **Telegram（owner）**；**不要**再发到 WhatsApp。
 - 执行要求：即便服务器/agent 重启也必须遵守；当 WhatsApp 收到 cron 提醒触发时，主会话不再转发/复述（除非 owner 明确要求）。
 
+## Internationalization (owner spec)
+- Language must be first-class state: main-site selected language propagates end-to-end (p-site pages, relink, onboarding/welcome/promo copy, support replies).
+- Implementation: carry `lang` in URLs/forms, persist to DB per uuid (e.g. `deliveries.user_lang`), and default to `en` if missing.
+
 ## Delivery state machine (owner spec)
 - 交付工程化策略：**A(Cloud-init/开机自举)为主，C(基础镜像)为辅**；不允许需要人工上机操作的交付流程（B）。
 - Delivery complete only when: WhatsApp linked (bind by `wa_jid`) + paid + OpenAI API key provided & verified (direct mode; proxy later).
