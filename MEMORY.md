@@ -26,6 +26,12 @@
 - Future: may add other providers, but do not assume; implement provider layer with Tencent first.
 - Unpaid/provision-ready server pool cap: **max 5 machines** by default; any change requires explicit owner confirmation.
 
+## Workstation / master host (MUST NOT TOUCH)
+- Tencent Lighthouse instance: `lhins-npsqfxvn` (ap-singapore-1)
+  - Public IP: `43.160.236.20`
+  - Role: **workstation/master** (this is where the agent runs; hosts bothook.me / p.bothook.me)
+  - **Hard rule:** never treat this instance as a pool/deliverable machine; never recycle/terminate it as part of pool ops.
+
 ## Reporting / comms routing (owner preference)
 - Keep WhatsApp chat clean: WhatsApp is for owner↔agent work coordination（仅临时讨论/指令/确认）。
 - **硬规则**：所有“小时级工作日报/定时报告”以及**未来所有运营信息**（客服回复、入池/回收、订阅/支付、cron 产出等）一律发到 **Telegram（owner）**；**不要**再发到 WhatsApp。
