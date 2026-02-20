@@ -9,6 +9,7 @@
 - Cloudflare Turnstile credentials are stored at `/home/ubuntu/.openclaw/credentials/cloudflare_turnstile.env`.
 - Brave Search API key is configured via `BRAVE_API_KEY` in `/home/ubuntu/.openclaw/.env`.
 - SendGrid API key + mail settings are stored at `/home/ubuntu/.openclaw/credentials/sendgrid.env`.
+  - Policy: `SENDGRID_FROM=support@bothook.me` and `SENDGRID_REPLY_TO=support@bothook.me` (do not use owner Gmail for support flows).
 - Stripe webhook secret + live key + standard price id are stored at `/home/ubuntu/.openclaw/credentials/stripe.env`.
 - SocialData API key is stored at `/home/ubuntu/.openclaw/credentials/socialdata.env`.
 - Telegram bot token + owner chat id are stored at `/home/ubuntu/.openclaw/credentials/telegram.env`.
