@@ -16,8 +16,9 @@ This support workflow is intentionally **low-risk**.
   - Telegram Bot API `sendMessage`
 
 ## Idempotency
-- Each ticket is processed once using `support/state.json` (`processed` map).
+- Each *submission entry* is processed once using `support/state.json` (`processedEntries`).
 - Follow-ups are supported by submitting the same `ticket_id` again (status=`followup`).
+- Reply cap: max **10 replies per ticket_id** (`ticketReplies[id].count`).
 
 ## Rate limiting
 - Basic server-side per-email rate limit: max 10 submissions per hour.

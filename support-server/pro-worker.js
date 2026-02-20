@@ -42,12 +42,14 @@ function loadEnv(file){
 
 function loadState(){
   try {
-    if (!fs.existsSync(STATE_FILE)) return { processed: {} };
+    if (!fs.existsSync(STATE_FILE)) return { processed: {}, processedEntries: {}, ticketReplies: {} };
     const s = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-    if (!s.processed) s.processed = {};
+    if (!s.processed) s.processed = {}; // legacy
+    if (!s.processedEntries) s.processedEntries = {};
+    if (!s.ticketReplies) s.ticketReplies = {};
     return s;
   } catch {
-    return { processed: {} };
+    return { processed: {}, processedEntries: {}, ticketReplies: {} };
   }
 }
 
@@ -253,6 +255,22 @@ function appendHandled(entry){
   fs.appendFileSync(HANDLED_LOG, JSON.stringify(entry) + '\n', 'utf8');
 }
 
+function stableEntryId(t){
+  // Idempotency per ticket entry (not just ticket_id): hash a stable subset.
+  const raw = JSON.stringify({
+    ticket_id: t.ticket_id || '',
+    created_at: t.created_at || '',
+    email: t.email || '',
+    uuid: t.uuid || '',
+    message: t.message || '',
+    status: t.status || '',
+  });
+  // simple non-crypto hash (djb2)
+  let h = 5381;
+  for (let i = 0; i < raw.length; i++) h = ((h << 5) + h) + raw.charCodeAt(i);
+  return `e${(h >>> 0).toString(16)}`;
+}
+
 async function main(){
   fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -281,29 +299,53 @@ async function main(){
   for (const t of tickets) {
     const id = t.ticket_id;
     if (!id) continue;
-    if (state.processed[id]) continue;
+
+    const entryId = stableEntryId(t);
+    if (state.processedEntries[entryId]) continue; // already handled this specific submission
+
+    const currentReplies = state.ticketReplies[id]?.count ?? 0;
+    if (currentReplies >= 10) {
+      // mark entry as seen to avoid reprocessing
+      state.processedEntries[entryId] = { at: nowIso(), skipped: 'reply_limit_reached', ticket_id: id };
+      saveState(state);
+      continue;
+    }
 
     const { lang, subject, text, html, category } = renderReply(t);
 
     // 1) send email
     await sendEmail({ apiKey, to: t.email, from, replyTo, subject, text, html });
 
-    // 2) mark processed + log
+    // 2) update state + logs
     const result = {
       ticket_id: id,
+      entry_id: entryId,
       at: nowIso(),
       to: t.email,
       lang,
       category,
       uuid: t.uuid || '',
+      reply_index: currentReplies + 1,
     };
-    state.processed[id] = result;
+
+    state.processedEntries[entryId] = { at: result.at, ticket_id: id };
+    state.ticketReplies[id] = {
+      count: currentReplies + 1,
+      last_at: result.at,
+      last_to: t.email,
+      last_lang: lang,
+      last_category: category,
+    };
+
+    // keep legacy field updated for backward compatibility
+    state.processed[id] = state.ticketReplies[id];
+
     saveState(state);
     appendHandled({ ...result, message: t.message });
 
     // 3) notify owner telegram
     const tgText = [
-      `[support] ticket ${id} processed`,
+      `[support] ticket ${id} replied (${result.reply_index}/10)`,
       `email: ${t.email}`,
       t.uuid ? `uuid: ${t.uuid}` : null,
       `category: ${category}`,
