@@ -13,38 +13,35 @@ Last updated: 2026-02-20
   - If delivery fails, an automatic retry path exists + emits a clear error event.
   - Document the fix.
 
-## 2) P0.2 Gateway systemd solidification — evidence chain (medium)
+## 2) P0.2 Single-gateway systemd solidification — evidence chain (medium)
 - Current: artifacts exist; some test machines show port conflicts (stray gateway process) and systemd restart noise.
 - DoD:
   - On 1 IN_POOL machine: bootstrap → services enabled → reboot → idle → WhatsApp remains stable.
   - Record outputs (timestamps + instance id + key commands).
   - Update acceptance doc with the exact verification steps.
 
-## 3) P0.3 Two-phase cutover — finish E2E rollback (medium-hard)
-- Current artifacts/doc:
-  - `p-site/docs/p0.3-two-phase-cutover.md`
-  - `p-site/artifacts/v0.1.6/scripts/cutover.sh`
-- DoD:
-  - Success path: key verify OK + WA health OK + send-test OK + stop provision + post-check OK.
-  - Failure path: force post-check failure → automatic rollback restores provision (and gateway if needed).
-  - Write auditable evidence (logs/events) and update doc.
+## 3) P0.3 (Deprecated) Two-phase cutover / dual-fallback
+- No longer a delivery requirement under the simplified strategy.
+- Keep scripts only as optional debugging helpers.
 
-## 4) P0.4 Delivered mode policy enforcement (hard)
-- Enforce: after delivery complete, respond only to self-chat; ignore external contacts.
-- DoD: regression tests across direct chats + groups + external inbound.
+## 4) P0.4 (Deprecated) Delivered-mode lockdown
+- No longer required (users may reclaim the machine after delivery).
+- SSH support is best-effort only; platform must not depend on it.
 
-## 5) P0.5 Strong health checks + auto rollback SOP (hard)
-- Engineering: backup→change→validate→minimal restart→strong health check→auto rollback.
-- Strong health check must include: RPC probe OK + WhatsApp connected/ready + real send/receive test.
+## 5) P0.5 (Reduced) Health checks
+- Keep basic bootstrap acceptance checks.
+- Do not implement complex auto-rollback on user machines; rely on cloud-provider API for lifecycle actions.
 
 ## 6) Pool replenisher automation (hard)
 - Every 5 min; at most 1 create/run; cap=5 counting all unpaid/temporary states.
 - Full events audit.
 
-## 7) Relink (paid only, original machine only, anti-theft) (hardest)
+## 7) Relink v2 (paid only → allocate a fresh machine) (hard)
 - Entry: `p.bothook.me/p/<uuid>`
-- Must verify scanned account matches expected `wa_jid`.
-- CN/EN UX; write security events on mismatch.
+- Only allow if paid & not expired.
+- Allocate/create a new machine and run standard bootstrap.
+- Old machine may be lost/corrupted; do not depend on its state.
+- CN/EN UX.
 
 ## Paused (do not advance)
 - P-site 15 languages
