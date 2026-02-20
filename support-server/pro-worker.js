@@ -75,10 +75,10 @@ function detectLang(ticket){
 
 function summarizeCategory(message){
   const m = String(message || '').toLowerCase();
-  if (m.includes('relink') || m.includes('续') || m.includes('到期') || m.includes('renew')) return 'billing/relink';
-  if (m.includes('qr') || m.includes('scan') || m.includes('扫码') || m.includes('关联')) return 'whatsapp/linking';
-  if (m.includes('timeout') || m.includes('timed out') || m.includes('不回') || m.includes('没回复')) return 'stability/timeout';
-  if (m.includes('domain') || m.includes('域名') || m.includes('caddy') || m.includes('https')) return 'domain/hosting';
+  if (m.includes('relink') || m.includes('续') || m.includes('到期') || m.includes('renew') || m.includes('billing') || m.includes('payment')) return 'billing/relink';
+  if (m.includes('qr') || m.includes('scan') || m.includes('扫码') || m.includes('关联') || m.includes('linked device')) return 'whatsapp/linking';
+  if (m.includes('timeout') || m.includes('timed out') || m.includes('不回') || m.includes('没回复') || m.includes('request timed out')) return 'stability/timeout';
+  if (m.includes('domain') || m.includes('域名') || m.includes('caddy') || m.includes('https') || m.includes('ssl') || m.includes('dns')) return 'domain/hosting';
   return 'general';
 }
 
@@ -91,54 +91,117 @@ function escapeHtml(s){
     .replace(/'/g,'&#39;');
 }
 
+function categoryNextStepsZh(category){
+  switch(category){
+    case 'whatsapp/linking':
+      return [
+        '请使用另一台设备（电脑/另一部手机）打开二维码页面。',
+        'WhatsApp → 已关联的设备 → 关联新设备，然后扫码。',
+        '如果扫码后仍失败，请告知：你所在国家/运营商、是否使用 VPN、以及失败提示截图。'
+      ];
+    case 'stability/timeout':
+      return [
+        '请提供：触发时间点（到分钟）、你发送的内容类型（文本/图片/语音）、是否自聊。',
+        '如果方便，补充：你连续发送了几条消息、每条大概多长。',
+        '我们会据此定位是连接问题还是处理耗时问题。'
+      ];
+    case 'domain/hosting':
+      return [
+        '请告知域名（example.com）以及你想指向的服务（网站/接口/控制台）。',
+        '确认 DNS 已添加 A/AAAA 记录指向服务器公网 IP。',
+        '若需要 HTTPS：请告知是否使用 Caddy（推荐）或 Nginx，我们会给出最小配置建议。'
+      ];
+    case 'billing/relink':
+      return [
+        '请提供 UUID（如有）以及付款邮箱/付款时间（大概即可）。',
+        '我们会核对付费状态与到期时间，并给出续上/重开方案。'
+      ];
+    default:
+      return [
+        '请补充：你期望达成的结果、触发时间点、以及是否能复现。'
+      ];
+  }
+}
+
+function categoryNextStepsEn(category){
+  switch(category){
+    case 'whatsapp/linking':
+      return [
+        'Open the QR page on another device (computer/another phone).',
+        'WhatsApp → Linked devices → Link a device, then scan the QR.',
+        'If it still fails, tell us your country/carrier, whether you use VPN, and the exact error/screenshot.'
+      ];
+    case 'stability/timeout':
+      return [
+        'Share: approximate time (to minute), message type (text/image/voice), and whether it was self-chat.',
+        'If possible: how many messages you sent in a row and their approximate length.',
+        'We will determine if it is connectivity or processing latency.'
+      ];
+    case 'domain/hosting':
+      return [
+        'Share the domain (example.com) and what you want to expose (website/API/control UI).',
+        'Confirm DNS A/AAAA records point to the server public IP.',
+        'For HTTPS: tell us whether you prefer Caddy (recommended) or Nginx.'
+      ];
+    case 'billing/relink':
+      return [
+        'Share UUID (if any) and the billing email / approximate payment time.',
+        'We will verify payment status & expiry and advise next steps.'
+      ];
+    default:
+      return [
+        'Please share the expected outcome, approximate time, and whether it is reproducible.'
+      ];
+  }
+}
+
 function renderReply(ticket){
   const lang = detectLang(ticket);
   const id = ticket.ticket_id;
   const uuid = ticket.uuid ? String(ticket.uuid).trim() : '';
   const category = summarizeCategory(ticket.message);
+  const isFollowup = String(ticket.status || '').toLowerCase() === 'followup';
 
   if (lang === 'zh') {
-    const subject = `[#${id}] BOTHook 支持回复`;
-    const text = `你好，\n\n我们已收到你的问题（工单号：${id}）。\n\n【问题分类】${category}\n\n【你提交的内容】\nEmail: ${ticket.email}${uuid ? `\nUUID: ${uuid}` : ''}\n\n${ticket.message}\n\n【建议与下一步】\n1) 如果是 WhatsApp 关联/扫码：请用另一台设备打开二维码页面，然后在 WhatsApp → 已关联的设备 → 关联新设备扫码。\n2) 如果是“消息不回复/超时”：请提供触发时间点（大概到分钟）、你发送的内容类型（文本/图片/语音），以及是否是自聊。\n3) 如果是续费/Relink：请提供 UUID（如有），我们会核对付费状态并给出下一步。\n\n我们会继续跟进，你也可以直接回复本邮件补充信息。\n\n— BOTHook Support`;
+    const subject = `[#${id}] BOTHook 支持回复${isFollowup ? '（跟进）' : ''}`;
+    const steps = categoryNextStepsZh(category);
+    const text = `你好，\n\n我们已收到你的${isFollowup ? '补充信息' : '问题'}（工单号：${id}）。\n\n【问题分类】${category}\n\n【你提交的内容】\nEmail: ${ticket.email}${uuid ? `\nUUID: ${uuid}` : ''}\n\n${ticket.message}\n\n【建议与下一步】\n${steps.map((s,i)=>`${i+1}) ${s}`).join('\n')}\n\n你也可以继续补充：在联系表单里填写同一个 ticket_id（${id}），我们会把它作为同一工单跟进。\n\n— BOTHook Support`;
 
     const html = `
 <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;line-height:1.6;color:#111">
   <p>你好，</p>
-  <p>我们已收到你的问题（工单号：<strong>${escapeHtml(id)}</strong>）。</p>
+  <p>我们已收到你的${isFollowup ? '补充信息' : '问题'}（工单号：<strong>${escapeHtml(id)}</strong>）。</p>
   <p><strong>问题分类：</strong>${escapeHtml(category)}</p>
   <hr style="border:none;border-top:1px solid #eee"/>
   <p><strong>你提交的内容</strong></p>
   <pre style="white-space:pre-wrap;background:#f7f7f8;padding:12px;border-radius:10px;">Email: ${escapeHtml(ticket.email)}${uuid ? `\nUUID: ${escapeHtml(uuid)}` : ''}\n\n${escapeHtml(ticket.message)}</pre>
   <p><strong>建议与下一步</strong></p>
   <ol>
-    <li>WhatsApp 关联/扫码：用另一台设备打开二维码页面；WhatsApp → 已关联的设备 → 关联新设备扫码。</li>
-    <li>消息不回复/超时：提供触发时间点（到分钟）、消息类型（文本/图片/语音）、是否自聊。</li>
-    <li>续费/Relink：提供 UUID（如有），我们将核对付费状态并给出下一步。</li>
+    ${steps.map((s)=>`<li>${escapeHtml(s)}</li>`).join('')}
   </ol>
-  <p style="color:#6b7280;font-size:12px">回复本邮件可继续沟通。</p>
+  <p style="color:#6b7280;font-size:12px">如需继续补充，请在联系表单里填写同一个 ticket_id（${escapeHtml(id)}），我们会作为同一工单跟进。</p>
 </div>`;
 
     return { lang, subject, text, html, category };
   }
 
-  const subject = `[#${id}] BOTHook Support Reply`;
-  const text = `Hi,\n\nWe received your request (Ticket: ${id}).\n\nCategory: ${category}\n\nWhat you submitted:\nEmail: ${ticket.email}${uuid ? `\nUUID: ${uuid}` : ''}\n\n${ticket.message}\n\nNext steps:\n1) WhatsApp linking/QR: open the QR page on another device, then WhatsApp → Linked devices → Link a device and scan.\n2) Timeouts/no reply: share the approximate time (to minute), message type (text/image/voice), and whether it was self-chat.\n3) Billing/Relink: share UUID (if any) and we’ll verify payment status and advise.\n\nReply to this email to add details.\n\n— BOTHook Support`;
+  const subject = `[#${id}] BOTHook Support Reply${isFollowup ? ' (Follow-up)' : ''}`;
+  const steps = categoryNextStepsEn(category);
+  const text = `Hi,\n\nWe received your ${isFollowup ? 'follow-up' : 'request'} (Ticket: ${id}).\n\nCategory: ${category}\n\nWhat you submitted:\nEmail: ${ticket.email}${uuid ? `\nUUID: ${uuid}` : ''}\n\n${ticket.message}\n\nNext steps:\n${steps.map((s,i)=>`${i+1}) ${s}`).join('\n')}\n\nTo add details, submit the contact form again with the same ticket_id (${id}).\n\n— BOTHook Support`;
 
   const html = `
 <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;line-height:1.6;color:#111">
   <p>Hi,</p>
-  <p>We received your request (Ticket: <strong>${escapeHtml(id)}</strong>).</p>
+  <p>We received your ${isFollowup ? 'follow-up' : 'request'} (Ticket: <strong>${escapeHtml(id)}</strong>).</p>
   <p><strong>Category:</strong> ${escapeHtml(category)}</p>
   <hr style="border:none;border-top:1px solid #eee"/>
   <p><strong>What you submitted</strong></p>
   <pre style="white-space:pre-wrap;background:#f7f7f8;padding:12px;border-radius:10px;">Email: ${escapeHtml(ticket.email)}${uuid ? `\nUUID: ${escapeHtml(uuid)}` : ''}\n\n${escapeHtml(ticket.message)}</pre>
   <p><strong>Next steps</strong></p>
   <ol>
-    <li>WhatsApp linking/QR: open the QR page on another device, then WhatsApp → Linked devices → Link a device and scan.</li>
-    <li>Timeouts/no reply: share the approximate time (to minute), message type (text/image/voice), and whether it was self-chat.</li>
-    <li>Billing/Relink: share UUID (if any) and we’ll verify payment status and advise.</li>
+    ${steps.map((s)=>`<li>${escapeHtml(s)}</li>`).join('')}
   </ol>
-  <p style="color:#6b7280;font-size:12px">Reply to this email to continue.</p>
+  <p style="color:#6b7280;font-size:12px">To add details, submit the contact form again with the same ticket_id (${escapeHtml(id)}).</p>
 </div>`;
 
   return { lang, subject, text, html, category };
