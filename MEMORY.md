@@ -43,8 +43,15 @@
 - 执行要求：即便服务器/agent 重启也必须遵守；当 WhatsApp 收到 cron 提醒触发时，主会话不再转发/复述（除非 owner 明确要求）。
 
 ## Internationalization (owner spec)
-- Language must be first-class state: main-site selected language propagates end-to-end (p-site pages, relink, onboarding/welcome/promo copy, support replies).
+- Language must be first-class state: main-site selected language propagates end-to-end (p-site pages, relink, onboarding/welcome/promo copy, support replies, and **WhatsApp onboarding prompts (incl. OpenAI key setup)**).
 - Implementation: carry `lang` in URLs/forms, persist to DB per uuid (e.g. `deliveries.user_lang`), and default to `en` if missing.
+
+## Persistent user recovery link (owner spec)
+- On delivered machines, write a fixed local file containing the user's UUID + p-site link for recovery/control:
+  - Path: `/opt/bothook/UUID.txt`
+  - Content includes: `uuid=<uuid>` and `https://p.bothook.me/p/<uuid>?lang=<lang>`
+- Do **not** rely on Stripe email receipt/checkout email for this in the current phase.
+- FAQ must document how to retrieve this link; users may also ask OpenClaw to print it.
 
 ## Delivery state machine (owner spec)
 - 交付工程化策略：**A(Cloud-init/开机自举)为主，C(基础镜像)为辅**；不允许需要人工上机操作的交付流程（B）。
