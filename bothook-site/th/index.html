@@ -55,7 +55,7 @@
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "คำถามที่พบบ่อยPage",
+  "@type": "FAQPage",
   "mainEntity": [
     {
       "@type": "Question",
@@ -120,11 +120,37 @@
         "@type": "Answer",
         "text": "ใน WhatsApp วิธีที่ง่ายที่สุดคือเปิดแชต “Message yourself” แล้วคุยกับผู้ช่วยที่นั่น (self‑chat)"
       }
+    },
+    {
+      "@type": "Question",
+      "name": "9) ฉันจะกู้ UUID ของฉันได้อย่างไร?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "UUID ของคุณถูกบันทึกไว้บนเซิร์ฟเวอร์ที่ไฟล์ /opt/bothook/UUID.txt คุณสามารถให้ OpenClaw แสดงให้ หรือเข้า SSH แล้วรัน cat /opt/bothook/UUID.txt."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "10) ลิงก์ UUID ใช้ทำอะไร?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "ลิงก์ UUID (https://p.bothook.me/p/?lang=) คือหน้าควบคุมของคุณ โดยจะแสดงสิ่งที่ทำได้ตามสถานะ: ผูกอุปกรณ์ (ผู้ใช้ใหม่), relink/ยกเลิก/อัปเกรด (สมาชิกยังใช้งาน), หรือสมัครใหม่ (หมดอายุ/ยกเลิก)."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "11) ฉันแชร์ UUID / ลิงก์ UUID ให้คนอื่นได้ไหม?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "ไม่ควร ถือว่าเป็นทางเข้าบัญชีของคุณ ห้ามโพสต์สาธารณะ หากต้องการความช่วยเหลือ ให้แชร์เฉพาะกับฝ่ายซัพพอร์ตทางการ (support@bothook.me) เท่านั้น."
+      }
     }
   ],
-  "url": "https://bothook.me/"
+  "url": "https://bothook.me/th/"
 }
   </script>
+  
+
 </head>
 <body>
   <div class="banner" id="langBanner" aria-live="polite">
