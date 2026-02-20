@@ -120,6 +120,30 @@
         "@type": "Answer",
         "text": "In WhatsApp. Am einfachsten ist es, den Chat „Message yourself“ zu öffnen und dort mit dem Assistenten zu schreiben."
       }
+    },
+    {
+        "@type": "Question",
+        "name": "9) Wie kann ich meine UUID wiederfinden?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Deine UUID wird auf deinem Server in /opt/bothook/UUID.txt gespeichert. Du kannst OpenClaw bitten, sie auszugeben, oder per SSH cat /opt/bothook/UUID.txt ausführen."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "10) Wofür ist mein UUID‑Link?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Der UUID‑Link (https://p.bothook.me/p/<uuid>?lang=<lang>) ist deine Kontrollseite. Je nach Status zeigt er Geräte‑Verknüpfung (neu), Relink/Kündigen/Upgrade (aktiv) oder Neu‑Abo (abgelaufen/gekündigt)."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "11) Kann ich meine UUID / den UUID‑Link teilen?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Nein. Behandle ihn wie einen Konto‑Zugang. Nicht öffentlich posten. Bei Support‑Anfragen nur mit dem offiziellen Support teilen (support@bothook.me)."
+        }
     }
   ],
   "url": "https://bothook.me/"
@@ -303,6 +327,21 @@
         <details class="faq">
           <summary>8) Wo nutze ich den Assistenten?</summary>
           <div>In WhatsApp. Am einfachsten ist es, den Chat „Message yourself“ zu öffnen und dort mit dem Assistenten zu schreiben.</div>
+        </details>
+
+        <details class="faq">
+          <summary>9) Wie kann ich meine UUID wiederfinden?</summary>
+          <div>Deine UUID wird auf deinem Server in <code>/opt/bothook/UUID.txt</code> gespeichert. Du kannst OpenClaw bitten, sie auszugeben, oder per SSH <code>cat /opt/bothook/UUID.txt</code> ausführen.</div>
+        </details>
+
+        <details class="faq">
+          <summary>10) Wofür ist mein UUID‑Link?</summary>
+          <div>Der UUID‑Link (<code>https://p.bothook.me/p/&lt;uuid&gt;?lang=&lt;lang&gt;</code>) ist deine Kontrollseite. Je nach Status zeigt er Geräte‑Verknüpfung (neu), Relink/Kündigen/Upgrade (aktiv) oder Neu‑Abo (abgelaufen/gekündigt).</div>
+        </details>
+
+        <details class="faq">
+          <summary>11) Kann ich meine UUID / den UUID‑Link teilen?</summary>
+          <div>Nein. Behandle ihn wie einen Konto‑Zugang. Nicht öffentlich posten. Bei Support‑Anfragen nur mit dem offiziellen Support teilen (support@bothook.me).</div>
         </details>
       </section>
 

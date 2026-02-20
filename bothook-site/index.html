@@ -120,6 +120,30 @@
         "@type": "Answer",
         "text": "In WhatsApp. The easiest way is to open your “Message yourself” chat and talk to the assistant there (self‑chat)."
       }
+    },
+    {
+        "@type": "Question",
+        "name": "9) How do I recover my UUID?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Your UUID is saved on your server at /opt/bothook/UUID.txt. You can ask OpenClaw to print it, or SSH in and run cat /opt/bothook/UUID.txt."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "10) What is my UUID link for?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Your UUID link (https://p.bothook.me/p/<uuid>?lang=<lang>) is your control page. It shows different actions based on your status: device linking (new users), relink/cancel/upgrade (active subscribers), or resubscribe (expired/canceled)."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "11) Can I share my UUID / UUID link with others?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Treat it like an account entry point. Do not post it publicly. If you need help, only share it with official support (support@bothook.me)."
+        }
     }
   ],
   "url": "https://bothook.me/"
@@ -303,6 +327,21 @@
         <details class="faq">
           <summary>8) Where do I use the assistant?</summary>
           <div>In WhatsApp. The easiest way is to open your “Message yourself” chat and talk to the assistant there (self‑chat).</div>
+        </details>
+
+        <details class="faq">
+          <summary>9) How do I recover my UUID?</summary>
+          <div>Your UUID is saved on your server at <code>/opt/bothook/UUID.txt</code>. You can ask OpenClaw to print it, or SSH in and run <code>cat /opt/bothook/UUID.txt</code>.</div>
+        </details>
+
+        <details class="faq">
+          <summary>10) What is my UUID link for?</summary>
+          <div>Your UUID link (<code>https://p.bothook.me/p/&lt;uuid&gt;?lang=&lt;lang&gt;</code>) is your control page. It shows different actions based on your status: device linking (new users), relink/cancel/upgrade (active subscribers), or resubscribe (expired/canceled).</div>
+        </details>
+
+        <details class="faq">
+          <summary>11) Can I share my UUID / UUID link with others?</summary>
+          <div>No. Treat it like an account entry point. Do not post it publicly. If you need help, only share it with official support (support@bothook.me).</div>
         </details>
       </section>
 

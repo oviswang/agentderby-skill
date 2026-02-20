@@ -120,6 +120,30 @@
         "@type": "Answer",
         "text": "WhatsApp에서 사용합니다. 가장 쉬운 방법은 “나에게 메시지(Message yourself)” 채팅을 열고 그곳에서 대화하는 것입니다."
       }
+    },
+    {
+        "@type": "Question",
+        "name": "9) UUID를 어떻게 다시 찾을 수 있나요?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "UUID는 서버의 고정 파일 /opt/bothook/UUID.txt 에 저장됩니다. OpenClaw에게 출력해 달라고 하거나, SSH로 접속해 cat /opt/bothook/UUID.txt 를 실행하세요."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "10) UUID 링크는 어디에 쓰나요?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "UUID 링크(https://p.bothook.me/p/<uuid>?lang=<lang>)는 상태에 따라 다른 기능을 보여주는 컨트롤 페이지입니다: 신규 사용자는 기기 연결, 구독 활성 사용자는 relink/취소/업그레이드, 만료/취소 사용자는 재구독 안내가 표시됩니다."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "11) UUID/UUID 링크를 다른 사람에게 공유해도 되나요?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "권장하지 않습니다. 서비스 진입점에 해당하므로 공개적으로 공유하지 마세요. 도움이 필요하면 공식 지원(support@bothook.me)에게만 공유하세요."
+        }
     }
   ],
   "url": "https://bothook.me/"
@@ -304,7 +328,23 @@
           <summary>8) 어디에서 사용하나요?</summary>
           <div>WhatsApp에서 사용합니다. 가장 쉬운 방법은 “나에게 메시지(Message yourself)” 채팅을 열고 그곳에서 대화하는 것입니다.</div>
         </details>
-      </section>
+      
+
+        <details class="faq">
+          <summary>9) UUID를 어떻게 다시 찾을 수 있나요?</summary>
+          <div>UUID는 서버의 고정 파일 <code>/opt/bothook/UUID.txt</code> 에 저장됩니다. OpenClaw에게 출력해 달라고 하거나, SSH로 접속해 <code>cat /opt/bothook/UUID.txt</code> 를 실행하세요.</div>
+        </details>
+
+        <details class="faq">
+          <summary>10) UUID 링크는 어디에 쓰나요?</summary>
+          <div>UUID 링크(<code>https://p.bothook.me/p/&lt;uuid&gt;?lang=&lt;lang&gt;</code>)는 상태에 따라 다른 기능을 보여주는 컨트롤 페이지입니다: 신규 사용자는 기기 연결, 구독 활성 사용자는 relink/취소/업그레이드, 만료/취소 사용자는 재구독 안내가 표시됩니다.</div>
+        </details>
+
+        <details class="faq">
+          <summary>11) UUID/UUID 링크를 다른 사람에게 공유해도 되나요?</summary>
+          <div>권장하지 않습니다. 서비스 진입점에 해당하므로 공개적으로 공유하지 마세요. 도움이 필요하면 공식 지원(support@bothook.me)에게만 공유하세요.</div>
+        </details>
+</section>
 
       <section class="card" style="margin-top:18px;">
         <h2 class="h2">요약</h2>

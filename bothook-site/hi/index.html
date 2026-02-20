@@ -120,6 +120,30 @@
         "@type": "Answer",
         "text": "WhatsApp में। सबसे आसान तरीका है “Message yourself” chat खोलना और वहीं assistant से बात करना (self‑chat)।"
       }
+    },
+    {
+        "@type": "Question",
+        "name": "9) मैं अपना UUID कैसे वापस पा सकता/सकती हूँ?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "आपका UUID आपके सर्वर पर /opt/bothook/UUID.txt फ़ाइल में सेव होता है। आप OpenClaw से इसे दिखाने को कह सकते हैं, या SSH से लॉग‑इन करके cat /opt/bothook/UUID.txt चलाएँ।"
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "10) UUID लिंक किस काम आता है?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "UUID लिंक (https://p.bothook.me/p/<uuid>?lang=<lang>) आपका कंट्रोल पेज है। यह स्टेटस के अनुसार अलग विकल्प दिखाता है: नया यूज़र—डिवाइस लिंक; एक्टिव सब्सक्रिप्शन—relink/कैंसल/अपग्रेड; एक्सपायर्ड/कैंसल—फिर से सब्सक्राइब।"
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "11) क्या मैं अपना UUID / UUID लिंक किसी के साथ शेयर कर सकता/सकती हूँ?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "नहीं। इसे अकाउंट एंट्री‑पॉइंट मानें। सार्वजनिक रूप से शेयर न करें। मदद चाहिए तो केवल आधिकारिक सपोर्ट (support@bothook.me) के साथ शेयर करें।"
+        }
     }
   ],
   "url": "https://bothook.me/"
@@ -304,7 +328,23 @@
           <summary>8) मैं assistant कहाँ उपयोग करूँ?</summary>
           <div>WhatsApp में। सबसे आसान तरीका है “Message yourself” chat खोलना और वहीं assistant से बात करना (self‑chat)।</div>
         </details>
-      </section>
+      
+
+        <details class="faq">
+          <summary>9) मैं अपना UUID कैसे वापस पा सकता/सकती हूँ?</summary>
+          <div>आपका UUID आपके सर्वर पर <code>/opt/bothook/UUID.txt</code> फ़ाइल में सेव होता है। आप OpenClaw से इसे दिखाने को कह सकते हैं, या SSH से लॉग‑इन करके <code>cat /opt/bothook/UUID.txt</code> चलाएँ।</div>
+        </details>
+
+        <details class="faq">
+          <summary>10) UUID लिंक किस काम आता है?</summary>
+          <div>UUID लिंक (<code>https://p.bothook.me/p/&lt;uuid&gt;?lang=&lt;lang&gt;</code>) आपका कंट्रोल पेज है। यह स्टेटस के अनुसार अलग विकल्प दिखाता है: नया यूज़र—डिवाइस लिंक; एक्टिव सब्सक्रिप्शन—relink/कैंसल/अपग्रेड; एक्सपायर्ड/कैंसल—फिर से सब्सक्राइब।</div>
+        </details>
+
+        <details class="faq">
+          <summary>11) क्या मैं अपना UUID / UUID लिंक किसी के साथ शेयर कर सकता/सकती हूँ?</summary>
+          <div>नहीं। इसे अकाउंट एंट्री‑पॉइंट मानें। सार्वजनिक रूप से शेयर न करें। मदद चाहिए तो केवल आधिकारिक सपोर्ट (support@bothook.me) के साथ शेयर करें।</div>
+        </details>
+</section>
 
       <section class="card" style="margin-top:18px;">
         <h2 class="h2">सारांश</h2>

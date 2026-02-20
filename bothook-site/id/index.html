@@ -120,6 +120,30 @@
         "@type": "Answer",
         "text": "Di WhatsApp. Cara paling mudah adalah membuka chat “Message yourself” lalu berbicara dengan asisten di sana (self‑chat)."
       }
+    },
+    {
+        "@type": "Question",
+        "name": "9) Bagaimana cara memulihkan UUID saya?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "UUID Anda disimpan di server pada file /opt/bothook/UUID.txt. Anda bisa meminta OpenClaw menampilkannya, atau login via SSH dan jalankan cat /opt/bothook/UUID.txt."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "10) Untuk apa tautan UUID saya?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Tautan UUID (https://p.bothook.me/p/<uuid>?lang=<lang>) adalah halaman kontrol Anda. Tampilannya bergantung status: tautkan perangkat (baru), relink/batal/upgrade (langganan aktif), atau berlangganan lagi (kedaluwarsa/dibatalkan)."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "11) Bolehkah saya membagikan UUID / tautan UUID?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Tidak. Anggap sebagai pintu masuk akun. Jangan posting publik. Jika butuh bantuan, bagikan hanya ke dukungan resmi (support@bothook.me)."
+        }
     }
   ],
   "url": "https://bothook.me/"
@@ -303,6 +327,21 @@
         <details class="faq">
           <summary>8) Di mana saya menggunakan asisten?</summary>
           <div>Di WhatsApp. Cara paling mudah adalah membuka chat “Message yourself” lalu berbicara dengan asisten di sana (self‑chat).</div>
+        </details>
+
+        <details class="faq">
+          <summary>9) Bagaimana cara memulihkan UUID saya?</summary>
+          <div>UUID Anda disimpan di server pada file <code>/opt/bothook/UUID.txt</code>. Anda bisa meminta OpenClaw menampilkannya, atau login via SSH dan jalankan <code>cat /opt/bothook/UUID.txt</code>.</div>
+        </details>
+
+        <details class="faq">
+          <summary>10) Untuk apa tautan UUID saya?</summary>
+          <div>Tautan UUID (<code>https://p.bothook.me/p/&lt;uuid&gt;?lang=&lt;lang&gt;</code>) adalah halaman kontrol Anda. Tampilannya bergantung status: tautkan perangkat (baru), relink/batal/upgrade (langganan aktif), atau berlangganan lagi (kedaluwarsa/dibatalkan).</div>
+        </details>
+
+        <details class="faq">
+          <summary>11) Bolehkah saya membagikan UUID / tautan UUID?</summary>
+          <div>Tidak. Anggap sebagai pintu masuk akun. Jangan posting publik. Jika butuh bantuan, bagikan hanya ke dukungan resmi (support@bothook.me).</div>
         </details>
       </section>
 

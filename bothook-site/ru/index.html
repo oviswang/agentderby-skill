@@ -120,6 +120,30 @@
         "@type": "Answer",
         "text": "В WhatsApp. Самый простой способ — открыть чат “Message yourself” и общаться с ассистентом там (self‑chat)."
       }
+    },
+    {
+        "@type": "Question",
+        "name": "9) Как восстановить мой UUID?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Ваш UUID сохранён на сервере в файле /opt/bothook/UUID.txt. Попросите OpenClaw вывести его или зайдите по SSH и выполните cat /opt/bothook/UUID.txt."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "10) Для чего нужен мой UUID‑ссылкой?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "UUID‑ссылка (https://p.bothook.me/p/<uuid>?lang=<lang>) — это ваша страница управления. В зависимости от статуса она покажет: привязку устройства (новый пользователь), relink/отмену/апгрейд (активная подписка) или повторную подписку (истекла/отменена)."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "11) Можно ли делиться UUID / UUID‑ссылкой?",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Нет. Это вход в ваш сервис. Не публикуйте её. Для поддержки делитесь только с официальной поддержкой (support@bothook.me)."
+        }
     }
   ],
   "url": "https://bothook.me/"
@@ -304,7 +328,23 @@
           <summary>8) Где использовать ассистента?</summary>
           <div>В WhatsApp. Самый простой способ — открыть чат “Message yourself” и общаться с ассистентом там (self‑chat).</div>
         </details>
-      </section>
+      
+
+        <details class="faq">
+          <summary>9) Как восстановить мой UUID?</summary>
+          <div>Ваш UUID сохранён на сервере в файле <code>/opt/bothook/UUID.txt</code>. Попросите OpenClaw вывести его или зайдите по SSH и выполните <code>cat /opt/bothook/UUID.txt</code>.</div>
+        </details>
+
+        <details class="faq">
+          <summary>10) Для чего нужен мой UUID‑ссылкой?</summary>
+          <div>UUID‑ссылка (<code>https://p.bothook.me/p/&lt;uuid&gt;?lang=&lt;lang&gt;</code>) — это ваша страница управления. В зависимости от статуса она покажет: привязку устройства (новый пользователь), relink/отмену/апгрейд (активная подписка) или повторную подписку (истекла/отменена).</div>
+        </details>
+
+        <details class="faq">
+          <summary>11) Можно ли делиться UUID / UUID‑ссылкой?</summary>
+          <div>Нет. Это вход в ваш сервис. Не публикуйте её. Для поддержки делитесь только с официальной поддержкой (support@bothook.me).</div>
+        </details>
+</section>
 
       <section class="card" style="margin-top:18px;">
         <h2 class="h2">Итог</h2>

@@ -120,6 +120,30 @@
         "@type": "Answer",
         "text": "在 WhatsApp 裡使用。最簡單的方式是打開「傳訊息給自己/自聊（Message yourself）」的對話，直接在裡面和助手聊天。"
       }
+    },
+    {
+        "@type": "Question",
+        "name": "9) 如何找回我的 UUID？",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "你的 UUID 會保存在伺服器本機固定檔案：/opt/bothook/UUID.txt。你可以請 OpenClaw 幫你輸出該檔案內容；或用 SSH 登入後執行：cat /opt/bothook/UUID.txt。"
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "10) UUID 連結有什麼用？",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "UUID 連結（https://p.bothook.me/p/<uuid>?lang=<lang>）是你的控制入口，會依狀態顯示不同內容：新用戶掃碼綁定；已付費未到期提供 Relink/取消訂閱/升級；已到期或已取消引導重新訂閱。"
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "11) UUID/UUID 連結可以分享給別人嗎？",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "不建議。它相當於你的服務入口。請勿公開張貼。如需協助，請只透過官方支援（support@bothook.me）。"
+        }
     }
   ],
   "url": "https://bothook.me/"
@@ -304,7 +328,23 @@
           <summary>8）我在哪裡使用助手？</summary>
           <div>在 WhatsApp 裡使用。最簡單的方式是打開「傳訊息給自己/自聊（Message yourself）」的對話，直接在裡面和助手聊天。</div>
         </details>
-      </section>
+      
+
+        <details class="faq">
+          <summary>9) 如何找回我的 UUID？</summary>
+          <div>你的 UUID 會保存在伺服器本機固定檔案：<code>/opt/bothook/UUID.txt</code>。你可以請 OpenClaw 幫你輸出該檔案內容；或用 SSH 登入後執行：<code>cat /opt/bothook/UUID.txt</code>。</div>
+        </details>
+
+        <details class="faq">
+          <summary>10) UUID 連結有什麼用？</summary>
+          <div>UUID 連結（<code>https://p.bothook.me/p/&lt;uuid&gt;?lang=&lt;lang&gt;</code>）是你的控制入口，會依狀態顯示不同內容：新用戶掃碼綁定；已付費未到期提供 Relink/取消訂閱/升級；已到期或已取消引導重新訂閱。</div>
+        </details>
+
+        <details class="faq">
+          <summary>11) UUID/UUID 連結可以分享給別人嗎？</summary>
+          <div>不建議。它相當於你的服務入口。請勿公開張貼。如需協助，請只透過官方支援（support@bothook.me）。</div>
+        </details>
+</section>
 
       <section class="card" style="margin-top:18px;">
         <h2 class="h2">總結</h2>

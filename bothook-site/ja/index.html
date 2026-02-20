@@ -120,6 +120,30 @@
         "@type": "Answer",
         "text": "WhatsApp です。いちばん簡単なのは「自分宛てメッセージ（Message yourself）」を開いて、そこで会話する方法です。"
       }
+    },
+    {
+        "@type": "Question",
+        "name": "9) UUID を忘れた場合はどうすればいいですか？",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "UUID はサーバー上の固定ファイル /opt/bothook/UUID.txt に保存されています。OpenClaw に表示させるか、SSH でログインして cat /opt/bothook/UUID.txt を実行してください。"
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "10) UUID リンクは何に使いますか？",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "UUID リンク（https://p.bothook.me/p/<uuid>?lang=<lang>）はあなた専用のコントロールページです。状態により、デバイス連携（新規）、Relink/解約/プラン変更（有効）、再購読（期限切れ/解約）などが表示されます。"
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "11) UUID/UUID リンクを他人に共有してもいいですか？",
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "共有しないでください。アカウントの入口に相当します。公開の場所に投稿しないでください。サポートが必要な場合は公式（support@bothook.me）のみ共有してください。"
+        }
     }
   ],
   "url": "https://bothook.me/"
@@ -303,6 +327,21 @@
         <details class="faq">
           <summary>8) どこで使いますか？</summary>
           <div>WhatsApp です。いちばん簡単なのは「自分宛てメッセージ（Message yourself）」を開いて、そこで会話する方法です。</div>
+        </details>
+
+        <details class="faq">
+          <summary>9) UUID を忘れた場合はどうすればいいですか？</summary>
+          <div>UUID はサーバー上の固定ファイル <code>/opt/bothook/UUID.txt</code> に保存されています。OpenClaw に表示させるか、SSH でログインして <code>cat /opt/bothook/UUID.txt</code> を実行してください。</div>
+        </details>
+
+        <details class="faq">
+          <summary>10) UUID リンクは何に使いますか？</summary>
+          <div>UUID リンク（<code>https://p.bothook.me/p/&lt;uuid&gt;?lang=&lt;lang&gt;</code>）はあなた専用のコントロールページです。状態により、デバイス連携（新規）、Relink/解約/プラン変更（有効）、再購読（期限切れ/解約）などが表示されます。</div>
+        </details>
+
+        <details class="faq">
+          <summary>11) UUID/UUID リンクを他人に共有してもいいですか？</summary>
+          <div>共有しないでください。アカウントの入口に相当します。公開の場所に投稿しないでください。サポートが必要な場合は公式（support@bothook.me）のみ共有してください。</div>
         </details>
       </section>
 
