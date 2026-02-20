@@ -54,9 +54,42 @@ done
 
 require_root
 
+# ---------- helpers (run as ubuntu) ----------
+as_ubuntu() {
+  sudo -u ubuntu -H bash -lc "$*"
+}
+
+auto_detect_self() {
+  # Pull WhatsApp self e164 from gateway health JSON.
+  # Avoid jq dependency; python3 exists on our base images.
+  as_ubuntu "openclaw health --json" | python3 - <<'PY'
+import json,sys
+try:
+  d=json.load(sys.stdin)
+  w=d.get('channels',{}).get('whatsapp',{})
+  self_e164=(w.get('self') or {}).get('e164')
+  if not self_e164:
+    # fallback: accounts.default.self.e164
+    accts=w.get('accounts') or {}
+    for _,a in accts.items():
+      se=(a.get('self') or {}).get('e164')
+      if se:
+        self_e164=se
+        break
+  if self_e164:
+    print(self_e164)
+except Exception:
+  pass
+PY
+}
+
 if [[ -z "$SELF" ]]; then SELF="${SELF_E164:-}"; fi
 if [[ -z "$SELF" ]]; then
-  echo "ERROR: missing --self / SELF_E164" >&2
+  log "--self not provided; auto-detecting WhatsApp self E.164 from gateway health..."
+  SELF="$(auto_detect_self | tr -d '\r\n' | xargs)"
+fi
+if [[ -z "$SELF" ]]; then
+  echo "ERROR: missing --self / SELF_E164 and auto-detect failed" >&2
   exit 2
 fi
 
@@ -78,11 +111,6 @@ if ! curl -fsS --max-time 10 \
   exit 10
 fi
 log "OpenAI key OK"
-
-# ---------- helpers (run as ubuntu) ----------
-as_ubuntu() {
-  sudo -u ubuntu -H bash -lc "$*"
-}
 
 basic_gateway_check() {
   # Prefer an RPC-level check that doesn't rely on systemd --user.
