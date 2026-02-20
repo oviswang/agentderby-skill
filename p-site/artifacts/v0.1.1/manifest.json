@@ -1,0 +1,35 @@
+{
+  "name": "bothook-cloudinit-artifacts",
+  "version": "v0.1.1",
+  "baseUrl": "https://p.bothook.me/artifacts/v0.1.1",
+  "files": [
+    {
+      "path": "bootstrap.sh",
+      "sha256": "e2f68c783e3e7095a792b088b927352b9e7bedb69129da559613fb7e9361a0e6"
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "d2bd774bef0651549e17575e4d8edfef9453e4f9a07f501d8240da66638e2923"
+    },
+    {
+      "path": "scripts/healthcheck.sh",
+      "sha256": "d96b47ae403515ac1d9598720ac3d87d6ddb9e4aacac1db030a2d59d540a6baf"
+    },
+    {
+      "path": "scripts/openclaw-gateway-start.sh",
+      "sha256": "496f692797a5dfa5a7bdae0d2cb30f044a4d3646e294d00aff866a05e5265863"
+    },
+    {
+      "path": "systemd/bothook-provision.service",
+      "sha256": "4194120b0bf5f2903bee9747b6cc8ee13b4f53014445c2e65fb587a77e50a8c3"
+    },
+    {
+      "path": "systemd/openclaw-gateway.service",
+      "sha256": "a7ea0b674506e5fd00e8ef76be3dce950a6183f1f7e76c038301dcd94f05f0f8"
+    },
+    {
+      "path": "README.md",
+      "sha256": "f17927dd9a3da85181cd29ac270a4ff6799e9f85df88a8798a895eb1d9d6bdae"
+    }
+  ]
+}
