@@ -85,8 +85,16 @@ function sanitizeText(s, maxLen) {
 
 ensureDir(DATA_DIR);
 
+function logLine(line){
+  try {
+    fs.appendFileSync(path.join(DATA_DIR, 'inbound.log'), line + '\n', { encoding: 'utf8' });
+  } catch {}
+}
+
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  // minimal access log
+  logLine(`[${nowIso()}] ${req.method} ${u.pathname}${u.search ? u.search : ''} ip=${req.socket?.remoteAddress || '-'} ua=${(req.headers['user-agent']||'').slice(0,120)}`);
 
   if (req.method === 'GET' && u.pathname === '/healthz') {
     res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
