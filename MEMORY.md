@@ -31,6 +31,10 @@
 - New pool instances default to **auto-renew ON** (monthly) to avoid cloud-expiry vs subscription-period mismatch.
 - Subscription invalidation policy: payment_failed/past_due grace=**24h**. After grace: reimage→return to pool; if pool exceeds target size, terminate some instances to reduce cost.
 
+### Pool replenisher schedule (owner)
+- Scheduler tick: **every 1 minute** (fast detection).
+- Heavy actions (create/bootstrap/reimage/terminate) must run via a queued worker with global locks + concurrency limits (do not increase heavy concurrency just because tick is faster).
+
 ## Workstation / master host (MUST NOT TOUCH)
 - Tencent Lighthouse instance: `lhins-npsqfxvn` (ap-singapore-1)
   - Public IP: `43.160.236.20`
