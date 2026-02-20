@@ -25,7 +25,7 @@
     },
     {
       "path": "scripts/openclaw-gateway-start.sh",
-      "sha256": "d8b1176fdf2259cd60c75ddba724aa7d679e93c1cd469e55b47a28ed1963e328"
+      "sha256": "77f75cfa6671d60c5e6dede53650e3514053c5f87a117a58ba391f64f5b8dd88"
     },
     {
       "path": "systemd/bothook-provision.service",
