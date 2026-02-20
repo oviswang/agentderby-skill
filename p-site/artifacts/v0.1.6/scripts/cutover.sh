@@ -84,22 +84,23 @@ as_ubuntu() {
   sudo -u ubuntu -H bash -lc "$*"
 }
 
-strong_gateway_check() {
-  log "Checking gateway status (ubuntu)..."
-  as_ubuntu "openclaw gateway status" >/dev/null
+basic_gateway_check() {
+  # Prefer an RPC-level check that doesn't rely on systemd --user.
+  log "Checking gateway health (ubuntu)..."
+  as_ubuntu "openclaw health --json" >/dev/null
 }
 
 send_test_message() {
   local msg
   msg="BOTHook P0.3 send-test $(date -Is)"
-  log "Phase A send-test to ${SELF} ..."
+  log "send-test to ${SELF} ..."
   # Hard gate: require the send call to succeed quickly.
   as_ubuntu "openclaw message send --channel whatsapp --target '${SELF}' --message '${msg}' --json" >/dev/null
   log "send-test OK"
 }
 
 # ---------- Phase A: WhatsApp OK (hard gate) ----------
-strong_gateway_check
+basic_gateway_check
 send_test_message
 
 # ---------- Phase B: stop provisioning responder ----------
@@ -114,15 +115,25 @@ fi
 rollback() {
   log "ROLLBACK: starting provision service: ${PROVISION_SERVICE}"
   systemctl start "${PROVISION_SERVICE}" || true
+  # Best-effort: ensure gateway is up too.
+  systemctl start openclaw-gateway.service >/dev/null 2>&1 || true
 }
 
-# If any subsequent step fails, rollback.
+# Optional test hook: force a post-check failure to validate rollback.
+if [[ "${BOTHOOK_CUTOVER_SIMULATE_POST_FAIL:-}" == "1" ]]; then
+  log "SIMULATE_POST_FAIL=1: stopping openclaw-gateway.service before post-check"
+  systemctl stop openclaw-gateway.service || true
+fi
+
+# Post-check must confirm user can still receive responses: re-run send-test.
 set +e
-strong_gateway_check
-RC=$?
+basic_gateway_check
+RC1=$?
+send_test_message
+RC2=$?
 set -e
-if [[ $RC -ne 0 ]]; then
-  echo "ERROR: gateway check failed after stopping provision; rolling back" >&2
+if [[ $RC1 -ne 0 || $RC2 -ne 0 ]]; then
+  echo "ERROR: post-check failed after stopping provision; rolling back" >&2
   rollback
   exit 30
 fi

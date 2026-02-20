@@ -17,7 +17,7 @@
     },
     {
       "path": "scripts/cutover.sh",
-      "sha256": "09e61913d8848a77729e622c12bbda52aa438c1d1d23a4f445da69c4db04ae05"
+      "sha256": "43c330538db6702713824195d24694f2ca95af8d6f66558f1f6638240821076f"
     },
     {
       "path": "scripts/healthcheck.sh",
