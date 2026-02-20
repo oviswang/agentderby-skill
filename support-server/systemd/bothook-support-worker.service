@@ -1,0 +1,14 @@
+[Unit]
+Description=BOTHook Support Worker (process new contact form tickets)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/.openclaw/workspace/support-server
+Environment=SUPPORT_DATA_DIR=/home/ubuntu/.openclaw/workspace/support
+Environment=SENDGRID_ENV=/home/ubuntu/.openclaw/credentials/sendgrid.env
+Environment=TELEGRAM_ENV=/home/ubuntu/.openclaw/credentials/telegram.env
+ExecStart=/usr/bin/node /home/ubuntu/.openclaw/workspace/support-server/pro-worker.js

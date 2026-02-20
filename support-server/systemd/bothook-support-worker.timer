@@ -1,0 +1,11 @@
+[Unit]
+Description=Run BOTHook Support Worker every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30
+Unit=bothook-support-worker.service
+
+[Install]
+WantedBy=timers.target
