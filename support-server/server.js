@@ -11,6 +11,7 @@ const { URL } = require('url');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { parseMultipart } = require('./multipart');
 
 const PORT = parseInt(process.env.SUPPORT_PORT || '18888', 10);
 const DATA_DIR = process.env.SUPPORT_DATA_DIR || '/home/ubuntu/.openclaw/workspace/support';
@@ -33,7 +34,7 @@ function makeTicketId() {
   return `BH-${y}${m}${day}-${rand}`;
 }
 
-function readJsonBody(req, limitBytes = 256 * 1024) {
+function readBody(req, limitBytes = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
@@ -46,16 +47,17 @@ function readJsonBody(req, limitBytes = 256 * 1024) {
       }
       chunks.push(c);
     });
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      if (!raw) return resolve({});
-      try {
-        resolve(JSON.parse(raw));
-      } catch {
-        reject(Object.assign(new Error('Invalid JSON'), { statusCode: 400 }));
-      }
-    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
+  });
+}
+
+function readJsonBody(req, limitBytes = 256 * 1024) {
+  return readBody(req, limitBytes).then((buf) => {
+    const raw = buf.toString('utf8');
+    if (!raw) return {};
+    try { return JSON.parse(raw); }
+    catch { throw Object.assign(new Error('Invalid JSON'), { statusCode: 400 }); }
   });
 }
 
@@ -90,6 +92,65 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('ok');
     return;
+  }
+
+  // SendGrid Inbound Parse webhook: handle_path /api/support/* strips prefix, so this may arrive as /inbound.
+  if (req.method === 'POST' && (u.pathname === '/inbound' || u.pathname === '/api/support/inbound')) {
+    try {
+      const token = sanitizeText(u.searchParams.get('token') || '', 256);
+      const expected = process.env.SUPPORT_INBOUND_TOKEN || '';
+      if (!expected || token !== expected) return send(res, 403, { ok: false, error: 'Forbidden' });
+
+      const ct = String(req.headers['content-type'] || '');
+      const m = ct.match(/boundary=(.+)$/i);
+      if (!m) return send(res, 400, { ok: false, error: 'Expected multipart/form-data' });
+      const boundary = m[1].replace(/^"|"$/g, '');
+
+      const buf = await readBody(req, 1024 * 1024);
+      const form = parseMultipart(buf, boundary);
+
+      // Fields we care about: from, subject, text
+      const fromRaw = sanitizeText(form.from || '', 400);
+      const subject = sanitizeText(form.subject || '', 400);
+      const text = sanitizeText(form.text || form.html || '', 12000);
+
+      // Extract sender email from "Name <email@x>".
+      const fromEmailMatch = fromRaw.match(/<([^>]+)>/) || fromRaw.match(/([^\s<>]+@[^\s<>]+\.[^\s<>]+)/);
+      const fromEmail = (fromEmailMatch ? fromEmailMatch[1] : '').trim();
+      if (!isEmail(fromEmail)) return send(res, 400, { ok: false, error: 'Invalid from email' });
+
+      // Extract ticket id BH-YYYYMMDD-XXXXXX from subject/body
+      const ticketIdMatch = (subject + '\n' + text).match(/\bBH-\d{8}-[A-Z0-9]{6}\b/);
+      if (!ticketIdMatch) return send(res, 200, { ok: true, ignored: true, reason: 'no_ticket_id' });
+      const ticketId = ticketIdMatch[0];
+
+      // Load state to reuse last language for this ticket if present; default en.
+      const stateFile = path.join(DATA_DIR, 'state.json');
+      let state = {};
+      try { if (fs.existsSync(stateFile)) state = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch {}
+      const lastLang = state.ticketReplies?.[ticketId]?.last_lang || 'en';
+
+      const ticket = {
+        ticket_id: ticketId,
+        created_at: nowIso(),
+        email: fromEmail,
+        uuid: '',
+        message: `[email follow-up]\nSubject: ${subject}\n\n${text}`,
+        page_lang: lastLang,
+        status: 'followup',
+        remote_ip: req.socket?.remoteAddress || null,
+        user_agent: req.headers['user-agent'] || null,
+      };
+
+      fs.appendFileSync(TICKETS_FILE, JSON.stringify(ticket) + '\n', { encoding: 'utf8' });
+
+      // Best-effort: kick the worker now; otherwise timer will pick it up.
+      try { require('child_process').spawn('systemctl', ['start', 'bothook-support-worker.service'], { stdio: 'ignore' }); } catch {}
+
+      return send(res, 200, { ok: true, ticket_id: ticketId });
+    } catch (err) {
+      return send(res, err.statusCode || 500, { ok: false, error: err.message || 'Server error' });
+    }
   }
 
   if (req.method === 'POST' && u.pathname === '/ticket') {
