@@ -27,6 +27,10 @@
 - Future: may add other providers, but do not assume; implement provider layer with Tencent first.
 - Unpaid/provision-ready server pool cap: **max 5 machines** by default; any change requires explicit owner confirmation.
 
+### Pool auto-renew policy (owner)
+- New pool instances default to **auto-renew ON** (monthly) to avoid cloud-expiry vs subscription-period mismatch.
+- Subscription invalidation policy: payment_failed/past_due grace=**24h**. After grace: reimage→return to pool; if pool exceeds target size, terminate some instances to reduce cost.
+
 ## Workstation / master host (MUST NOT TOUCH)
 - Tencent Lighthouse instance: `lhins-npsqfxvn` (ap-singapore-1)
   - Public IP: `43.160.236.20`

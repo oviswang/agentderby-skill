@@ -9,6 +9,7 @@ Last updated: 2026-02-19
 - WhatsApp chat hygiene: hourly work reports to **Telegram**.
 
 ## Hard constraints (owner)
+- Pool instances default: **auto-renew ON** (monthly). Grace for payment failures: **24h**. After grace: reimage→return to pool; if pool exceeds target size, terminate to reduce cost.
 - Pool cap = **max 5 machines** counts *all unpaid/temporary instances*:
   - creating
   - provision-ready
