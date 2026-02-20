@@ -5,7 +5,7 @@
 ## 1) Artifacts 目录（不含密钥）
 
 发布目录（示例版本）：
-- `https://p.bothook.me/artifacts/v0.1.0/`
+- `https://p.bothook.me/artifacts/v0.1.5/`
 
 文件清单：
 - `bootstrap.sh`
@@ -58,7 +58,22 @@
 - systemd units 已安装并可被识别
 - healthcheck 脚本可运行
 
-> 注：真正的端到端交付稳定性（WhatsApp linked/保持在线、两阶段切换/回滚、强健康检查）由 P0.2–P0.5 覆盖。
+### P0.2 单网关 systemd 回归验收（新增，建议至少做 1 次）
+目的：证明“单网关 system-level systemd 服务”在 reboot 后可自恢复，避免抢端口/抢会话类不稳定。
+
+1) 选择 1 台 IN_POOL 机器执行 bootstrap（按本文 1)–5)）。
+2) 确认 gateway 服务 active/enabled，且端口监听正常：
+   - `systemctl is-enabled openclaw-gateway.service` → enabled
+   - `systemctl is-active openclaw-gateway.service` → active
+   - `systemctl show -p ExecStart openclaw-gateway.service`
+   - `ss -ltnp | egrep "18789|18792"`
+3) 执行 reboot（允许 3–10 分钟 SSH 恢复窗口属正常）：
+   - `sudo reboot`
+4) SSH 恢复后重复步骤 2)。
+5) 将关键输出摘要落盘为证据链（建议保存到 docs 下，附机器 ID/IP/时间戳）。
+
+参考证据（示例）：
+- `p-site/docs/_evidence_p0_2_lhins-avvw30mh_postreboot.log`
 
 ## 3) 版本化与回滚
 - 每次变更 artifacts：

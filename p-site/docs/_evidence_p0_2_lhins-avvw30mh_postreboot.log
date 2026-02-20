@@ -1,0 +1,59 @@
+# BOTHook P0.2 acceptance
+ts_utc=20260220T160936Z
+host=VM-8-6-ubuntu
+whoami=ubuntu
+uptime=up 1 minute
+
+## OS
+Distributor ID:	Ubuntu
+Description:	Ubuntu 24.04 LTS
+Release:	24.04
+Codename:	noble
+Linux VM-8-6-ubuntu 6.8.0-71-generic #71-Ubuntu SMP PREEMPT_DYNAMIC Tue Jul 22 16:52:38 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+
+## openclaw binary
+/usr/bin/openclaw
+2026.2.19-2
+v22.22.0
+10.9.4
+
+## systemd: openclaw gateway
+openclaw-gateway.service                     enabled         enabled
+● openclaw-gateway.service - OpenClaw Gateway (system-level)
+     Loaded: loaded (/etc/systemd/system/openclaw-gateway.service; enabled; preset: enabled)
+     Active: active (running) since Sat 2026-02-21 00:08:34 CST; 1min 4s ago
+   Main PID: 881 (openclaw)
+      Tasks: 18 (limit: 2267)
+     Memory: 488.0M (peak: 1.0G)
+        CPU: 52.565s
+     CGroup: /system.slice/openclaw-gateway.service
+             ├─ 881 openclaw
+             └─1580 openclaw-gateway
+
+Feb 21 00:08:34 VM-8-6-ubuntu systemd[1]: Started openclaw-gateway.service - OpenClaw Gateway (system-level).
+Feb 21 00:08:35 VM-8-6-ubuntu openclaw-gateway-start.sh[881]: [openclaw-gateway] Starting (port=18789, config=/home/ubuntu/.openclaw/openclaw.json)
+Feb 21 00:09:20 VM-8-6-ubuntu openclaw-gateway-start.sh[1580]: 2026-02-20T16:09:20.770Z [canvas] host mounted at http://127.0.0.1:18789/__openclaw__/canvas/ (root /home/ubuntu/.openclaw/canvas)
+Feb 21 00:09:21 VM-8-6-ubuntu openclaw-gateway-start.sh[1580]: 2026-02-20T16:09:21.004Z [heartbeat] started
+Feb 21 00:09:21 VM-8-6-ubuntu openclaw-gateway-start.sh[1580]: 2026-02-20T16:09:21.007Z [health-monitor] started (interval: 300s, grace: 60s)
+Feb 21 00:09:21 VM-8-6-ubuntu openclaw-gateway-start.sh[1580]: 2026-02-20T16:09:21.011Z [gateway] agent model: anthropic/claude-opus-4-6
+Feb 21 00:09:21 VM-8-6-ubuntu openclaw-gateway-start.sh[1580]: 2026-02-20T16:09:21.012Z [gateway] listening on ws://127.0.0.1:18789 (PID 1580)
+Feb 21 00:09:21 VM-8-6-ubuntu openclaw-gateway-start.sh[1580]: 2026-02-20T16:09:21.014Z [gateway] listening on ws://[::1]:18789
+Feb 21 00:09:21 VM-8-6-ubuntu openclaw-gateway-start.sh[1580]: 2026-02-20T16:09:21.016Z [gateway] log file: /tmp/openclaw/openclaw-2026-02-21.log
+Feb 21 00:09:21 VM-8-6-ubuntu openclaw-gateway-start.sh[1580]: 2026-02-20T16:09:21.034Z [browser/service] Browser control service ready (profiles=2)
+Failed to get properties: Unit name openclaw-gateway@.service is neither a valid invocation ID nor unit name.
+
+## listening ports (top)
+State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess                                    
+LISTEN 0      511        127.0.0.1:18792      0.0.0.0:*    users:(("openclaw-gatewa",pid=1580,fd=28))
+LISTEN 0      511        127.0.0.1:18789      0.0.0.0:*    users:(("openclaw-gatewa",pid=1580,fd=22))
+LISTEN 0      4096      127.0.0.54:53         0.0.0.0:*                                              
+LISTEN 0      4096   127.0.0.53%lo:53         0.0.0.0:*                                              
+LISTEN 0      511            [::1]:18789         [::]:*    users:(("openclaw-gatewa",pid=1580,fd=23))
+LISTEN 0      4096               *:22               *:*                                              
+
+## processes (openclaw/node)
+ubuntu       881  0.1  2.7 1013388 55348 ?       Ssl  00:08   0:00 openclaw
+ubuntu      1580 84.9 17.9 11939216 362192 ?     Sl   00:08   0:48 openclaw-gateway
+ubuntu      2224  0.0  0.1   7756  2304 ?        S    00:09   0:00 grep -E -i openclaw|gateway|baileys|provision
+
+## DONE log=/tmp/bothook_p0_2_acceptance_20260220T160936Z.log
