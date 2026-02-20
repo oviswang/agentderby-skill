@@ -1,0 +1,19 @@
+[Unit]
+Description=BOTHook Support Server (contact form + inbound parse)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/.openclaw/workspace/support-server
+Environment=SUPPORT_PORT=18888
+Environment=SUPPORT_DATA_DIR=/home/ubuntu/.openclaw/workspace/support
+EnvironmentFile=/etc/bothook/support.env
+ExecStart=/usr/bin/node /home/ubuntu/.openclaw/workspace/support-server/server.js
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
