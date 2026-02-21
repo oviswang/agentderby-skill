@@ -21,6 +21,19 @@
 - New channels require end-to-end acceptance before declaring success.
 
 ## Pool provisioning constraint (owner)
+
+### Pool READY gate (owner)
+- Only mark a machine as ready-for-allocation when:
+  1) Cloud keypair binding is correct (Lighthouse `LoginSettings.KeyIds` includes `bothook_pool_key`).
+  2) Bootstrap completed (node/openclaw installed; systemd units present).
+  3) Minimal config present (gateway does not hang on missing config; QR flow can start).
+  4) P0.2 reboot acceptance passed and evidence log saved.
+- Use statuses like `IN_POOL_NOT_READY` vs `IN_POOL_READY` (or `health_status`) to avoid allocating half-initialized machines.
+
+### SSH keypair drift handling (owner)
+- Treat SSH reachability as a preflight gate for READY.
+- On every scheduler tick, cheaply audit Lighthouse instances for keypair drift (`LoginSettings.KeyIds`). If missing, auto-run `AssociateInstancesKeyPairs` to re-bind `bothook_pool_key` and re-probe SSH.
+
 - Pool cap=**max 5 machines** counts *all unpaid/temporary instances*, including creating + provision-ready + allocated/in-progress + bound-but-unpaid; never exceed without explicit owner confirmation.
 - Replenisher schedule: every 5 minutes; at most 1 new machine per run; write events for audit.
 - Pool cloud provider is **Tencent Cloud only** right now (this is the only API credentials available).
