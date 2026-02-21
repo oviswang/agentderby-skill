@@ -471,6 +471,20 @@ measure time-to-READY, and keep evidence. This is a trial-ops dress rehearsal.
               progress_bump: 5
             }];
           }
+          if (tid === 'T18') {
+            return [{
+              kind: 'repo_write_file',
+              file: 'docs/security_audit_uuid_links.md',
+              content: `# Security audit: UUID links + platform flows\n\n- generated: {{NOW}}\n\nGoal: identify vulnerabilities in the full platform flow, especially around UUID-based links,\nand propose mitigations. This audit must be performed after all core tasks are DONE.\n\n## Threat model (quick)\n- Attacker finds/guesses UUID\n- Attacker reuses leaked UUID link\n- Attacker triggers linking/relinking or views sensitive state\n- Abuse via shortlinks / referrers / logs\n\n## UUID surface inventory\n- p-site: /p/<uuid>?lang=...\n- api: /api/p/state?uuid=...\n- shortlinks: s.bothook.me/s/<code> -> redirect\n- local recovery: /opt/bothook/UUID.txt (on delivered machine)\n\n## Checks\n- [ ] UUID entropy + non-enumerability\n- [ ] State endpoints: no sensitive data leakage (IP, key, wa_jid) unless authenticated\n- [ ] Ensure actions are gated: paid(valid), wa bind ownership, timeouts\n- [ ] Rate limiting / abuse limits on state + QR endpoints\n- [ ] Turnstile/anti-bot coverage for public forms\n- [ ] Logs/telemetry: UUID not leaked to third parties via Referer\n\n## Mitigations\n- [ ] Add optional one-time tokens for sensitive actions\n- [ ] Add per-uuid attempt counters + backoff\n- [ ] Ensure strict separation: new users vs delivered users\n- [ ] Ensure post-delivery: external contacts ignored\n\n## Findings\n- TBD\n\n## Fix plan\n- TBD\n`,
+              commitMessage: 'T18: add security audit plan for UUID links',
+              progress_bump: 5,
+              fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T18 --force'
+            },{
+              kind: 'local_exec',
+              command: 'bash -lc "set -euo pipefail; echo \"== grep uuid surfaces ==\"; grep -RIn --exclude-dir=.git --exclude-dir=node_modules -E \"/p/\<uuid\>|/api/p/state\?|uuid=\" control-plane p-site bothook-site 2>/dev/null | head -n 200 || true"',
+              progress_bump: 5
+            }];
+          }
           return null;
         };
 
