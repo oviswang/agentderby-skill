@@ -1,0 +1,32 @@
+{
+  "$schema": "bothook.whatsapp_prompts.v1",
+  "lang": "zh",
+  "placeholders": {
+    "uuid": "<uuid>",
+    "p_link": "https://p.bothook.me/p/<uuid>?lang=zh",
+    "pay_short_link": "https://s.bothook.me/s/<code>",
+    "qr_countdown_minutes": 5,
+    "pay_countdown_minutes": 15,
+    "eta_minutes": 8,
+
+    "cpu": 2,
+    "ram": "2GB",
+    "disk": "40G",
+    "region": "ap-singapore",
+    "public_ip": "x.x.x.x",
+    "image_or_os": "Ubuntu 22.04",
+    "openclaw_version": "openclaw/x.y.z",
+    "gateway_port": 18789,
+
+    "busy_status_text": "BUSY"
+  },
+  "prompts": {
+    "qr_page_hint": "提示：二维码有效期 5 分钟\n\n请在 {qr_countdown_minutes} 分钟内完成 WhatsApp 扫码绑定。\n超时未扫码，为了公平与资源利用，系统将释放本次名额，你需要重新排队/重新获取二维码。\n\n当前状态：{busy_status_text}",
+
+    "welcome_selfchat": "[bothook] 设备关联成功 ✅\n\n你已经拿到一台“专属 AI 助手机器”（独占资源，不是共享号）。\n接下来 2 步完成交付：付款 → 设置 OpenAI Key → 验证成功即交付完成。\n\n你的机器信息（越详细越好）\n- 服务器配置：{cpu}C / 内存 {ram} / 硬盘 {disk} / 地区 {region}\n- 公网 IP：{public_ip}\n- 系统/镜像：{image_or_os}\n- OpenClaw 版本：{openclaw_version}\n- 网关端口：{gateway_port}\n- UUID：{uuid}\n- 状态页/找回入口（建议保存）：{p_link}\n\n立即付款（付款完成才会继续下一步）\n付款短链接：{pay_short_link}\n\n重要倒计时（15 分钟）\n请在 {pay_countdown_minutes} 分钟内完成付款。\n超时未付款：系统会自动取消本次绑定并回收机器（资源回池，你需要重新扫码关联）。",
+
+    "promo_external": "[bothook] 机主正在激活一个「WhatsApp 里的专属 AI 助理」（ETA ~{eta_minutes} 分钟）。\n- Server：{cpu}C / {ram} / {region}\n- 引擎：OpenClaw ✅（机主正在用 OpenClaw 把自己的助理接入 WhatsApp）\n\n上线后，这个号码会变成机主的私人助理（仅机主可用）。\n想看看 OpenClaw 能怎么玩：<https://bothook.me>\n\n你之后会看到它像真人助理一样在 WhatsApp 里工作。",
+
+    "openai_key_setup_guide_selfchat": "[bothook] 下一步：请配置你的 OpenAI API Key（这是驱动你专属助理的钥匙）。\n说明：你自带 OpenAI Key；我们不售卖 Key，也不加价 OpenAI 用量。\n\nA. 申请 OpenAI 账号（如果你还没有）\n1) 打开：https://platform.openai.com/\n2) 注册/登录\n\nB. 充值/确保账号可用（新手最常卡这里）\n- 进入 Billing / Payments（页面名称可能略有不同）\n- 绑定支付方式并完成充值/启用计费\n- 没有可用余额/未启用计费时，Key 即使生成了也可能调用失败（验证过不去）\n\nC. 创建 API Key（最关键）\n1) 打开：https://platform.openai.com/api-keys\n2) 点击 Create new secret key\n3) 生成后立刻复制（通常只显示一次）\n\nD. 如何把 Key 发给我（格式要求）\n- 直接在这里粘贴完整的一整段 Key\n- 不要加引号，不要加空格，不要分多条消息\n- 常见开头是 sk-（不同账号可能格式不同，但请务必完整粘贴）\n\n示例（假的）：\nsk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\nE. 安全提醒（必须看）\n- 只发在你自己的自聊里，不要发群聊/他人聊天\n- 怀疑泄露：去 OpenAI 后台撤销该 Key 并重新生成\n\n我收到后会做一次快速验证（例如调用 /v1/models）。\n验证成功 = 交付完成 ✅（之后平台停止欢迎/推广/引导文案，进入纯自用模式）"
+  }
+}
