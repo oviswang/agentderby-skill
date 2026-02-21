@@ -322,9 +322,9 @@ function main() {
           if (tid === 'T7') {
             return [{
               kind: 'repo_write_file',
-              file: 'scripts/publish_evidence.mjs',
-              content: `#!/usr/bin/env node\n// publish_evidence (autofill)\n// TODO: redact + copy cmd.log to p-site/docs, output URL\nconsole.log(\"publish_evidence placeholder\", new Date().toISOString());\n`,
-              commitMessage: 'T7: autofill publish_evidence placeholder',
+              file: 'scripts/evidence_summary.mjs',
+              content: `#!/usr/bin/env node\n// evidence_summary (autofill)\n// Purpose: generate a short, safe, Telegram-friendly text summary from a checkpoint dir.\n// Usage: node scripts/evidence_summary.mjs <checkpoint_dir>\n\nimport fs from \"node:fs\";\nimport path from \"node:path\";\n\nconst cp = process.argv[2];\nif (!cp) {\n  console.error(\"usage: evidence_summary <checkpoint_dir>\");\n  process.exit(2);\n}\n\nconst cmd = path.join(cp, \"cmd.log\");\nlet body = \"\";\ntry { body = fs.readFileSync(cmd, \"utf8\"); } catch { body = \"(cmd.log missing)\"; }\n\n// redact obvious patterns\nbody = body.replace(/(secret|token|password|key)=\S+/gi, \"$1=***REDACTED***\");\n\nconst lines = body.split(/\n/).slice(0, 80);\nconsole.log(lines.join(\"\\n\"));\n`,
+              commitMessage: 'T7: add evidence_summary helper (Telegram-only; no public publish)',
               progress_bump: 5,
               fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T7 --force'
             }];
