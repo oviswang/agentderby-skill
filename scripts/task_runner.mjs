@@ -228,8 +228,16 @@ function main() {
       runnable2 = runnable2.filter(e => e.task && (e.task.task_id === onlyTask || e.name === `${onlyTask}.json` || e.name === `${onlyTask}.json`.replace('.json.json','.json')));
     }
 
+    // Priority override: if any runnable tasks have the minimal priority value,
+    // only pick from that bucket. This ensures P0 blockers (e.g., T12) are always selected.
+    let pickPool = runnable2;
+    if (!onlyTask && runnable2.length > 0) {
+      const minPri = Math.min(...runnable2.map(e => (e.task.priority ?? 999)));
+      pickPool = runnable2.filter(e => (e.task.priority ?? 999) === minPri);
+    }
+
     const picked = pickRoundRobin(
-      runnable2,
+      pickPool,
       state.rrIndex || 0,
       maxTasks
     );
