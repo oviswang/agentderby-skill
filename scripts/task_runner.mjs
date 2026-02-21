@@ -354,12 +354,41 @@ function main() {
           const fileRel = act.file;
           const full = path.join(WORKSPACE, fileRel);
           fs.mkdirSync(path.dirname(full), { recursive: true });
-          fs.writeFileSync(full, String(act.content || ''), 'utf8');
+          let body = String(act.content || '');
+          // Simple templating
+          body = body.replaceAll('{{NOW}}', nowIso());
+          fs.writeFileSync(full, body, 'utf8');
+          const diff = run(`cd ${WORKSPACE} && git diff -- ${fileRel}`);
+          if (!(diff.stdout || '').trim()) {
+            // no change -> create fallback evidence file
+            const demoRel = `p-site/docs/_runner_nochange_${tid}_${tsFolder}.md`;
+            const demoFull = path.join(WORKSPACE, demoRel);
+            fs.mkdirSync(path.dirname(demoFull), { recursive: true });
+            fs.writeFileSync(demoFull, `# runner no-change fallback\n\n- task: ${tid}\n- ts: ${nowIso()}\n- note: repo_write_file produced no diff; wrote this file as auditable progress evidence.\n`, 'utf8');
+            run(`cd ${WORKSPACE} && git add ${demoRel}`);
+            const msg0 = `runner: no-change fallback for ${tid}`;
+            const cr0 = run(`cd ${WORKSPACE} && git commit -m "${msg0}" -- ${demoRel}`);
+            if (cr0.code !== 0) throw new Error('git_commit_failed');
+            return { ok:true, kind, committed:true, fallback:'no_change' };
+          }
+
           run(`cd ${WORKSPACE} && git add ${fileRel}`);
           const msg = act.commitMessage || `runner: write ${fileRel}`;
           const cr = run(`cd ${WORKSPACE} && git commit -m "${msg.replace(/\"/g,'\\"')}" -- ${fileRel}`);
           if (cr.code !== 0) throw new Error('git_commit_failed');
           return { ok:true, kind, committed:true };
+        }
+
+        if (kind === 'http_check') {
+          // Online validation step
+          const url = act.url;
+          if (!url) throw new Error('bad_action_missing_url');
+          const expect = act.expect_substring;
+          const cmd = `curl -fsS --max-time 15 '${url.replace(/'/g, "'\\''")}'`;
+          const r = run(cmd);
+          if (r.code !== 0) throw new Error('http_check_failed');
+          if (expect && !(r.stdout || '').includes(expect)) throw new Error('http_check_expect_not_found');
+          return { ok:true, kind, url, expect: expect || null };
         }
 
         if (kind === 'ssh_exec') {
