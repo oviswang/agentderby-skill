@@ -349,6 +349,26 @@ function main() {
               fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T14 --force'
             }];
           }
+          if (tid === 'T9') {
+            return [{
+              kind: 'repo_write_file',
+              file: 'p-site/i18n/T9_multilang_plan.md',
+              content: `# T9 multilang 15-langs plan (autofill)\n\n- updated: ${ts}\n\nTODO:\n- enumerate target languages\n- ensure p-site routes + copy coverage\n- align with bothook-site language list\n`,
+              commitMessage: 'T9: add multilang plan scaffold (autofill)',
+              progress_bump: 5,
+              fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T9 --force'
+            }];
+          }
+          if (tid === 'T10') {
+            return [{
+              kind: 'repo_write_file',
+              file: 'docs/T10_base_image_plan.md',
+              content: `# T10 base image delivery plan (autofill)\n\n- updated: ${ts}\n\nTODO:\n- define image build pipeline\n- versioning + rollback\n- acceptance checklist\n`,
+              commitMessage: 'T10: add base image plan scaffold (autofill)',
+              progress_bump: 5,
+              fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T10 --force'
+            }];
+          }
           return null;
         };
 
