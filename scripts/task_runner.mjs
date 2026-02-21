@@ -323,7 +323,8 @@ function main() {
 
           const msg = act.commitMessage || `runner: patch ${fileRel}`;
           run(`cd ${WORKSPACE} && git add ${fileRel}`);
-          const cr = run(`cd ${WORKSPACE} && git commit -m "${msg.replace(/\"/g,'\\"')}"`);
+          // Commit only the intended pathspec to avoid unrelated dirty workspace blocking commits.
+          const cr = run(`cd ${WORKSPACE} && git commit -m "${msg.replace(/\"/g,'\\"')}" -- ${fileRel}`);
           if (cr.code !== 0) throw new Error('git_commit_failed');
           return { ok:true, kind, committed:true };
         }
@@ -336,7 +337,7 @@ function main() {
           fs.writeFileSync(full, String(act.content || ''), 'utf8');
           run(`cd ${WORKSPACE} && git add ${fileRel}`);
           const msg = act.commitMessage || `runner: write ${fileRel}`;
-          const cr = run(`cd ${WORKSPACE} && git commit -m "${msg.replace(/\"/g,'\\"')}"`);
+          const cr = run(`cd ${WORKSPACE} && git commit -m "${msg.replace(/\"/g,'\\"')}" -- ${fileRel}`);
           if (cr.code !== 0) throw new Error('git_commit_failed');
           return { ok:true, kind, committed:true };
         }
