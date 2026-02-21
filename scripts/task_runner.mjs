@@ -421,6 +421,42 @@ function main() {
               progress_bump: 5
             }];
           }
+          if (tid === 'T16') {
+            return [{
+              kind: 'repo_write_file',
+              file: 'docs/T16_pool_reimage_and_ready_runbook.md',
+              content: `# T16 Pool reimage + init + READY runbook (trial ops)
+
+- generated: {{NOW}}
+
+Goal: After final self-audit, reimage + bootstrap *all 5 pool machines* end-to-end,
+measure time-to-READY, and keep evidence. This is a trial-ops dress rehearsal.
+
+## Scope
+- Target: 5 pool instances
+- Actions: reimage -> keypair bind -> bootstrap -> minimal config -> reboot -> P0.2 evidence -> mark READY
+
+## Metrics
+- For each instance: start_ts, ready_ts, duration_minutes
+- Output avg/min/max
+
+## Evidence requirements
+- Checkpoints for each instance
+- Cloud RequestIds for ResetInstance/AssociateInstancesKeyPairs
+- Post-reboot systemd + port checks
+
+## Safety
+- Never touch master host (lhins-npsqfxvn / 43.160.236.20)
+- Cap=5 is already full: do not create extra instances
+
+## Next
+- Implement worker automation to do this as queued jobs
+`,
+              commitMessage: 'T16: add pool reimage+READY trial ops runbook scaffold',
+              progress_bump: 5,
+              fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T16 --force'
+            }];
+          }
           return null;
         };
 
