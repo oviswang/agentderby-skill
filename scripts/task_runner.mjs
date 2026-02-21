@@ -457,6 +457,20 @@ measure time-to-READY, and keep evidence. This is a trial-ops dress rehearsal.
               fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T16 --force'
             }];
           }
+          if (tid === 'T17') {
+            return [{
+              kind: 'repo_write_file',
+              file: 'docs/ops_timers_plan.md',
+              content: `# Ops timers plan (systemd)\n\n- generated: {{NOW}}\n\nGoal: make the control-plane self-operating after reboot (systemd services + timers).\nOpenClaw cron stays for human-facing notifications (hourly report, alerts).\n\n## Timers/services to implement\n\n### P0\n1) pool-controller tick (timer, every 1 min, Persistent=true)\n- responsibility: compute pool gap (cap=5), enqueue heavy actions into write_queue\n- MUST NOT execute heavy actions directly\n\n2) write_queue worker (service, Restart=always)\n- responsibility: execute heavy jobs with global locks + evidence + events\n\n3) reconcile sweep (timer, every 2-5 min, Persistent=true)\n- responsibility: DB ↔ Cloud Describe ↔ Stripe reconcile; failure blocks READY\n\n4) timeout reclaim sweep (timer, every 1 min)\n- responsibility: QR 5-min timeout, linked-but-unpaid 15-min timeout\n\n### P1\n5) subscription sweep (timer, every 10 min)\n- responsibility: past_due/payment_failed grace=24h; after grace reclaim/reimage\n\n6) keypair drift audit/fix (timer, every 10-60 min)\n- responsibility: ensure LoginSettings.KeyIds contains bothook_pool_key\n\n7) gateway watchdog (timer, every 1 min)\n- responsibility: probe openclaw gateway; long disconnect -> restart + alert\n\n## Self-check checklist (must pass)\n- [ ] systemctl --user list-timers shows all bothook timers\n- [ ] systemctl --user status <service> is active (or timers waiting)\n- [ ] journalctl --user -u <service> shows no crash loop\n- [ ] Reboot test: timers/services come back without manual intervention\n- [ ] Evidence: store check outputs in checkpoints\n\n## Notes\n- Use systemd timers/services for ops; use OpenClaw cron for Telegram notifications only.\n- Heavy actions always go through queue + lock; tick only enqueues.\n`,
+              commitMessage: 'T17: add ops systemd timers plan (self-operating after reboot)',
+              progress_bump: 5,
+              fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T17 --force'
+            },{
+              kind: 'local_exec',
+              command: 'bash -lc "set -euo pipefail; echo \"== systemd user timers ==\"; systemctl --user list-timers --all | sed -n \"1,200p\"; echo; echo \"== openclaw gateway probe ==\"; openclaw gateway status | sed -n \"1,80p\""',
+              progress_bump: 5
+            }];
+          }
           return null;
         };
 
