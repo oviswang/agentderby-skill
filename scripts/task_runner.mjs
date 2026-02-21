@@ -319,6 +319,36 @@ function main() {
               fix_once: 'ssh -i /home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519 ubuntu@43.160.238.83 "which openclaw; systemctl cat openclaw-gateway.service"'
             }];
           }
+          if (tid === 'T7') {
+            return [{
+              kind: 'repo_write_file',
+              file: 'scripts/publish_evidence.mjs',
+              content: `#!/usr/bin/env node\n// publish_evidence (autofill)\n// TODO: redact + copy cmd.log to p-site/docs, output URL\nconsole.log(\"publish_evidence placeholder\", new Date().toISOString());\n`,
+              commitMessage: 'T7: autofill publish_evidence placeholder',
+              progress_bump: 5,
+              fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T7 --force'
+            }];
+          }
+          if (tid === 'T13') {
+            return [{
+              kind: 'repo_write_file',
+              file: 'scripts/gateway_cleanup_plan.md',
+              content: `# Gateway cleanup plan (autofill)\n\n- updated: ${ts}\n\nTODO:\n- inventory: systemctl --user list-unit-files | grep openclaw\n- disable extra gateway-like units\n- evidence: openclaw doctor / gateway status\n- rollback steps\n`,
+              commitMessage: 'T13: autofill gateway cleanup plan scaffold',
+              progress_bump: 5,
+              fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T13 --force'
+            }];
+          }
+          if (tid === 'T14') {
+            return [{
+              kind: 'repo_write_file',
+              file: 'scripts/i18n_end_to_end_audit.mjs',
+              content: `#!/usr/bin/env node\n// i18n_end_to_end_audit (autofill)\n// TODO: run bothook-site i18n_strict_audit + audit p-site + whatsapp prompts coverage\nconsole.log(\"i18n_end_to_end_audit placeholder\", new Date().toISOString());\n`,
+              commitMessage: 'T14: autofill i18n end-to-end audit placeholder',
+              progress_bump: 5,
+              fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T14 --force'
+            }];
+          }
           return null;
         };
 
