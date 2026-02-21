@@ -287,11 +287,16 @@ function main() {
         continue;
       }
 
-      // Prepare evidence skeleton
-      writeCheckpoint(cpDir, 'plan.md', planLines.join('\n'));
-
       // Execute at most 1 action per task per run
       const act = taskActions[0];
+      if (act && Array.isArray(act.rollback_commands) && act.rollback_commands.length) {
+        planLines.push('');
+        planLines.push('rollback_commands (from action spec):');
+        for (const c of act.rollback_commands) planLines.push(String(c));
+      }
+
+      // Prepare evidence skeleton
+      writeCheckpoint(cpDir, 'plan.md', planLines.join('\n'));
       let cmdLog = '';
 
       const run = (cmd) => {
@@ -429,9 +434,18 @@ function main() {
       e.task.last_action = `runner_execute_${RUNNER_MODE}@${nowIso()} (${act.kind})`;
       e.task.last_updated = nowIso();
       e.task.evidence_path = cpDir;
+
+      // Advance action queue (whitelist)
+      e.task.actions = taskActions.slice(1);
+
       e.task.recent_evidence = Array.isArray(e.task.recent_evidence) ? e.task.recent_evidence : [];
       e.task.recent_evidence.unshift(`runner: executed ${act.kind} @ ${e.task.last_updated} evidence=${cpDir}`);
       e.task.recent_evidence = e.task.recent_evidence.slice(0, 10);
+
+      if ((e.task.actions || []).length === 0 && e.task.progress_percent >= 100) {
+        e.task.status = 'DONE';
+      }
+
       writeJsonAtomic(e.file, e.task);
       touched.push(e.name);
     }
