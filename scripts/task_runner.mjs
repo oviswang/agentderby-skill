@@ -407,6 +407,20 @@ function main() {
               fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T8 --force'
             }];
           }
+          if (tid === 'T15') {
+            return [{
+              kind: 'repo_write_file',
+              file: 'docs/final_e2e_audit_checklist.md',
+              content: `# FINAL end-to-end audit checklist\n\n- generated: {{NOW}}\n\nThis is a *last* audit after all tasks are DONE. Two lines:\n- User line: QR -> WA linked -> self-chat welcome -> pay -> back to p/<uuid> -> OpenAI key guide -> key verify -> DELIVERED.\n- Ops line: pool-controller tick -> lifecycle actions -> reconcile -> READY gate -> allocator READY-only -> delivery -> reclaim.\n\n## User line (what the user experiences)\n- [ ] QR page: shows 5-min scan countdown (qr_countdown_minutes=5)\n- [ ] After scan success: self-chat welcome sent (contains config + IP + OpenClaw version + pay short link + 15-min countdown)\n- [ ] External promo copy: sent before delivery only; stops after key verified\n- [ ] Stripe success_url returns to p/<uuid>?lang=... (browser history on main phone)\n- [ ] OpenAI key guide is clear for beginners (account/billing/key copy/paste format)\n- [ ] Key verification: one lightweight call (e.g., /v1/models)\n- [ ] After delivery: platform prompts stop; only self-chat control remains\n\n## Ops line (platform truth + gates)\n- [ ] Pool READY gate is enforced (keypair + bootstrap + minimal config + P0.2 reboot evidence)\n- [ ] T4 reconcile gates READY (cloud Describe ↔ DB ↔ Stripe)\n- [ ] T6 allocator selects READY-only\n- [ ] Cap=5 enforced across creating/ready/allocated/bound-but-unpaid\n- [ ] All destructive actions are queued + locked + auditable (events)\n\n## Online checks (run + capture evidence)\n- [ ] openclaw gateway status: RPC probe ok\n- [ ] p-site /healthz and /api/p/state respond\n\n## Findings\n- None\n\n## Next improvements\n- TBD\n`,
+              commitMessage: 'T15: add final end-to-end audit checklist scaffold',
+              progress_bump: 5,
+              fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T15 --force'
+            },{
+              kind: 'local_exec',
+              command: 'bash -lc "set -euo pipefail; echo \"== openclaw gateway status ==\"; openclaw gateway status | sed -n \"1,120p\"; echo; echo \"== p-site healthz ==\"; curl -fsS --max-time 15 http://127.0.0.1:18998/healthz; echo; echo \"== p-site state sample ==\"; curl -fsS --max-time 15 https://p.bothook.me/api/p/state?uuid=dummy 2>/dev/null | head -c 400 || true; echo"',
+              progress_bump: 5
+            }];
+          }
           return null;
         };
 
