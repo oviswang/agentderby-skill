@@ -42,13 +42,14 @@ function releaseLock(){
 
 function parseArgs(){
   const args = process.argv.slice(2);
-  const out = { once: false, dryRun: true, maxRows: 5 };
+  const out = { once: false, dryRun: true, maxRows: 5, confirm: false };
   for (let i=0;i<args.length;i++){
     const a=args[i];
     if (a==='--once') out.once=true;
     else if (a==='--dry-run') out.dryRun=true;
     else if (a==='--no-dry-run') out.dryRun=false;
     else if (a==='--max-rows') out.maxRows=parseInt(args[++i]||'5',10);
+    else if (a==='--confirm') out.confirm=true;
   }
   return out;
 }
@@ -87,7 +88,7 @@ function failRow(db, qid, err){
   db.prepare('UPDATE write_queue SET last_error=? WHERE qid=?').run(msg.slice(0, 2000), qid);
 }
 
-async function handleAction(db, payload, { dryRun }){
+async function handleAction(db, payload, { dryRun, confirm }){
   const { action, instance_id, reason } = payload || {};
   if (!action || !instance_id) throw new Error('bad_payload_missing_fields');
 
@@ -98,6 +99,17 @@ async function handleAction(db, payload, { dryRun }){
     event_type: 'LIFECYCLE_ACTION_START',
     payload: { action, reason: reason || null, dryRun }
   });
+
+  const irreversible = ['REIMAGE_TO_POOL','TERMINATE_INSTANCE'];
+  if (!dryRun && irreversible.includes(action) && !confirm) {
+    appendEvent(db, {
+      entity_type: 'instance',
+      entity_id: instance_id,
+      event_type: 'LIFECYCLE_ACTION_BLOCKED',
+      payload: { action, reason: 'missing_confirm_flag' }
+    });
+    throw new Error('blocked_missing_confirm_flag');
+  }
 
   if (dryRun) {
     appendEvent(db, {
@@ -122,7 +134,7 @@ async function main(){
   }
 
   const { db, dbPath } = openDb();
-  console.log(JSON.stringify({ ok:true, dbPath, mode: opts.once ? 'once':'loop', dryRun: opts.dryRun, maxRows: opts.maxRows }, null, 2));
+  console.log(JSON.stringify({ ok:true, dbPath, mode: opts.once ? 'once':'loop', dryRun: opts.dryRun, confirm: opts.confirm, maxRows: opts.maxRows }, null, 2));
 
   let processed=0;
   try {
@@ -137,7 +149,7 @@ async function main(){
       try { payload = JSON.parse(row.payload_json); } catch { payload = null; }
 
       try {
-        const res = await handleAction(db, payload, { dryRun: opts.dryRun });
+        const res = await handleAction(db, payload, { dryRun: opts.dryRun, confirm: opts.confirm });
         finishRow(db, row.qid);
         processed++;
         console.log(JSON.stringify({ qid: row.qid, action: payload?.action, instance_id: payload?.instance_id, result: res }, null, 2));
