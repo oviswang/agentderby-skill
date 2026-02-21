@@ -185,6 +185,7 @@ function main() {
   const jsonOut = args.has('--json');
   const maxTasks = Number((argv.find(a => a.startsWith('--maxTasks=')) || '').split('=')[1] || 3);
   const onlyTask = (argv.find(a => a.startsWith('--only=')) || '').split('=')[1] || null;
+  const force = args.has('--force');
 
   if (!ALLOWED_MODES.has(RUNNER_MODE)) {
     const res = { ok: false, status: 'bad_runner_mode', runnerMode: RUNNER_MODE };
@@ -256,8 +257,8 @@ function main() {
         ''
       ];
 
-      // Safety: if too fresh, don't spam.
-      if (!shouldTouch(e.file, 1)) {
+      // Safety: if too fresh, don't spam (unless --force).
+      if (!force && !shouldTouch(e.file, 1)) {
         planLines.push('decision: skip (too_fresh_mtime)');
         writeCheckpoint(cpDir, 'plan.md', planLines.join('\n'));
         actions.push({ task: tid, checkpoint: cpDir, action: 'skip', reason: 'too_fresh_mtime' });
