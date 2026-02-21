@@ -1,0 +1,48 @@
+# BOTHook P0.2 acceptance
+ts_utc=20260221T033752Z
+host=VM-0-3-ubuntu
+whoami=ubuntu
+uptime=up 0 minutes
+
+## OS
+Distributor ID:	Ubuntu
+Description:	Ubuntu 24.04 LTS
+Release:	24.04
+Codename:	noble
+Linux VM-0-3-ubuntu 6.8.0-71-generic #71-Ubuntu SMP PREEMPT_DYNAMIC Tue Jul 22 16:52:38 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+
+## openclaw binary
+/usr/bin/openclaw
+2026.2.19-2
+v22.22.0
+10.9.4
+
+## systemd: openclaw gateway
+openclaw-gateway.service                     enabled         enabled
+● openclaw-gateway.service - OpenClaw Gateway (system-level)
+     Loaded: loaded (/etc/systemd/system/openclaw-gateway.service; enabled; preset: enabled)
+     Active: active (running) since Sat 2026-02-21 11:37:26 CST; 33s ago
+   Main PID: 876 (openclaw)
+      Tasks: 18 (limit: 2267)
+     Memory: 948.2M (peak: 948.2M)
+        CPU: 35.314s
+     CGroup: /system.slice/openclaw-gateway.service
+             ├─ 876 openclaw
+             └─1243 openclaw-gateway
+
+Feb 21 11:37:26 VM-0-3-ubuntu systemd[1]: Started openclaw-gateway.service - OpenClaw Gateway (system-level).
+Feb 21 11:37:27 VM-0-3-ubuntu openclaw-gateway-start.sh[876]: [openclaw-gateway] Starting (port=18789, config=/home/ubuntu/.openclaw/openclaw.json)
+Failed to get properties: Unit name openclaw-gateway@.service is neither a valid invocation ID nor unit name.
+
+## listening ports (top)
+State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+LISTEN 0      4096      127.0.0.54:53        0.0.0.0:*          
+LISTEN 0      4096   127.0.0.53%lo:53        0.0.0.0:*          
+LISTEN 0      4096               *:22              *:*          
+
+## processes (openclaw/node)
+ubuntu       876  0.8  2.7 1013748 54996 ?       Ssl  11:37   0:00 openclaw
+ubuntu      1243  111 42.4 12297824 854364 ?     Rl   11:37   0:35 openclaw-gateway
+ubuntu      1842  0.0  0.1   7756  2304 ?        S    11:37   0:00 grep -E -i openclaw|gateway|baileys|provision
+
+## DONE log=/tmp/bothook_p0_2_acceptance_20260221T033752Z.log
