@@ -274,96 +274,150 @@ function main() {
         continue;
       }
 
-      // execute modes
-      if (tid === 'T3') {
-        planLines.push('decision: execute handler T3 (L1-safe repo patch + commit, no push)');
+      // execute modes: action-spec whitelist (DO NOT execute free-text next_action)
+      const taskActions = Array.isArray(e.task?.actions) ? e.task.actions : [];
+      if (taskActions.length === 0) {
+        planLines.push('decision: ERROR (missing actions[] spec)');
+        planLines.push('fix_once: add actions[] to task json; runner will not execute next_action free text');
         writeCheckpoint(cpDir, 'plan.md', planLines.join('\n'));
-
-        // Handler: fix p-site index hard-coded 127.0.0.1 -> same-origin /api/p/state
-        const targetFile = path.join(WORKSPACE, 'p-site', 'index.html');
-        const before = fs.readFileSync(targetFile, 'utf8');
-        const after = before.replace(/http:\/\/127\.0\.0\.1:18998\/api\/p\/state/g, '/api/p/state');
-        if (after === before) {
-          // Fallback L1-safe action: create an auditable local file and commit it.
-          const demoPath = path.join(WORKSPACE, 'p-site', 'docs', `_runner_demo_T3_${tsFolder}.md`);
-          const demoBody = `# runner demo (T3)\n\n- ts: ${nowIso()}\n- note: pattern already replaced; created this file as a safe L1 action.\n`;
-          fs.mkdirSync(path.dirname(demoPath), { recursive: true });
-          fs.writeFileSync(demoPath, demoBody, 'utf8');
-          const diff2 = sh(`cd ${WORKSPACE} && git diff -- p-site/docs`, { cwd: WORKSPACE });
-          writeCheckpoint(cpDir, 'patch.diff', diff2.stdout || diff2.stderr || '');
-
-          const addRes2 = sh(`cd ${WORKSPACE} && git add ${demoPath.replace(WORKSPACE+'/', '')}`, { cwd: WORKSPACE });
-          const msg2 = `T3: runner demo evidence file (${tsFolder})`;
-          const commitRes2 = sh(`cd ${WORKSPACE} && git commit -m "${msg2}"`, { cwd: WORKSPACE });
-          writeCheckpoint(cpDir, 'git.txt', `add_code=${addRes2.code}\ncommit_code=${commitRes2.code}\nstdout=\n${commitRes2.stdout}\nstderr=\n${commitRes2.stderr}\n`);
-
-          if (hasBadKeywords(commitRes2.stdout + commitRes2.stderr)) {
-            markError(e, 'auth_or_network_failure_detected');
-            actions.push({ task: tid, checkpoint: cpDir, action: 'execute', result: 'error', reason: 'auth_or_network_failure_detected' });
-            state.forceMode = 'tick';
-            continue;
-          }
-
-          const prev = Number(e.task.progress_percent || 0);
-          e.task.progress_percent = Math.min(100, Math.max(prev, prev + 3));
-          e.task.last_action = `runner_execute_l1@${nowIso()} (commit local, demo file)`;
-          e.task.last_updated = nowIso();
-          e.task.no_progress_count = 0;
-          e.task.recent_evidence = Array.isArray(e.task.recent_evidence) ? e.task.recent_evidence : [];
-          e.task.recent_evidence.unshift(`runner: committed demo file for T3 (no push) @ ${e.task.last_updated}`);
-          e.task.recent_evidence = e.task.recent_evidence.slice(0, 10);
-          writeJsonAtomic(e.file, e.task);
-          touched.push(e.name);
-          actions.push({ task: tid, checkpoint: cpDir, action: 'execute', result: 'committed_demo', progress_before: prev, progress_after: e.task.progress_percent });
-          continue;
-        }
-
-        fs.writeFileSync(targetFile, after, 'utf8');
-        const diff = sh(`cd ${WORKSPACE} && git diff -- p-site/index.html`, { cwd: WORKSPACE });
-        writeCheckpoint(cpDir, 'patch.diff', diff.stdout || diff.stderr || '');
-
-        // lightweight test: ensure file contains /api/p/state
-        const ok = after.includes('/api/p/state');
-        writeCheckpoint(cpDir, 'test.txt', ok ? 'OK: contains /api/p/state\n' : 'FAIL\n');
-        if (!ok) {
-          markError(e, 'test_failed:missing_/api/p/state');
-          actions.push({ task: tid, checkpoint: cpDir, action: 'execute', result: 'error', reason: 'test_failed' });
-          continue;
-        }
-
-        const msg = 'T3: p-site use same-origin /api/p/state (remove 127.0.0.1 hardcode)';
-        const addRes = sh(`cd ${WORKSPACE} && git add p-site/index.html`, { cwd: WORKSPACE });
-        const commitRes = sh(`cd ${WORKSPACE} && git commit -m "${msg}"`, { cwd: WORKSPACE });
-        writeCheckpoint(cpDir, 'git.txt', `add_code=${addRes.code}\ncommit_code=${commitRes.code}\nstdout=\n${commitRes.stdout}\nstderr=\n${commitRes.stderr}\n`);
-
-        if (hasBadKeywords(commitRes.stdout + commitRes.stderr)) {
-          markError(e, 'auth_or_network_failure_detected');
-          actions.push({ task: tid, checkpoint: cpDir, action: 'execute', result: 'error', reason: 'auth_or_network_failure_detected' });
-          state.forceMode = 'tick';
-          continue;
-        }
-
-        // progress update is conservative: bump by 5 points max.
-        const prev = Number(e.task.progress_percent || 0);
-        e.task.progress_percent = Math.min(100, Math.max(prev, prev + 5));
-        e.task.last_action = `runner_execute_l1@${nowIso()} (commit local, no push)`;
-        e.task.last_updated = nowIso();
-        e.task.no_progress_count = 0;
-        e.task.recent_evidence = Array.isArray(e.task.recent_evidence) ? e.task.recent_evidence : [];
-        e.task.recent_evidence.unshift(`runner: committed patch for T3 (no push) @ ${e.task.last_updated}`);
-        e.task.recent_evidence = e.task.recent_evidence.slice(0, 10);
-        writeJsonAtomic(e.file, e.task);
+        markError(e, 'missing_actions_spec');
+        actions.push({ task: tid, checkpoint: cpDir, action: 'error', reason: 'missing_actions_spec' });
         touched.push(e.name);
-        actions.push({ task: tid, checkpoint: cpDir, action: 'execute', result: 'committed', progress_before: prev, progress_after: e.task.progress_percent });
         continue;
       }
 
-      // For other tasks in execute modes: only tick but with plan.
-      planLines.push('decision: no execute handler for this task yet -> tick');
+      // Prepare evidence skeleton
       writeCheckpoint(cpDir, 'plan.md', planLines.join('\n'));
-      tickTask(e, 'execute_mode_no_handler');
+
+      // Execute at most 1 action per task per run
+      const act = taskActions[0];
+      let cmdLog = '';
+
+      const run = (cmd) => {
+        const r = sh(cmd, { cwd: WORKSPACE });
+        cmdLog += `\n$ ${cmd}\nexit=${r.code}\n${r.stdout}${r.stderr}\n`;
+        return r;
+      };
+
+      const doActionOnce = () => {
+        const kind = act?.kind;
+        if (!kind) throw new Error('bad_action_missing_kind');
+
+        if (kind === 'repo_patch_replace') {
+          if (RUNNER_MODE !== 'execute_l1' && RUNNER_MODE !== 'execute_l2') throw new Error('repo_actions_require_execute');
+          const fileRel = act.file;
+          const re = new RegExp(act.search, act.flags || 'g');
+          const replacement = act.replace;
+          const full = path.join(WORKSPACE, fileRel);
+          const before = fs.readFileSync(full, 'utf8');
+          const after = before.replace(re, replacement);
+          fs.writeFileSync(full, after, 'utf8');
+          const diff = run(`cd ${WORKSPACE} && git diff -- ${fileRel}`);
+          writeCheckpoint(cpDir, 'patch.diff', diff.stdout || diff.stderr || '');
+
+          const tests = Array.isArray(act.tests) ? act.tests : [];
+          for (const tcmd of tests) {
+            const tr = run(`cd ${WORKSPACE} && ${tcmd}`);
+            if (tr.code !== 0) throw new Error(`test_failed:${tcmd}`);
+          }
+
+          const msg = act.commitMessage || `runner: patch ${fileRel}`;
+          run(`cd ${WORKSPACE} && git add ${fileRel}`);
+          const cr = run(`cd ${WORKSPACE} && git commit -m "${msg.replace(/\"/g,'\\"')}"`);
+          if (cr.code !== 0) throw new Error('git_commit_failed');
+          return { ok:true, kind, committed:true };
+        }
+
+        if (kind === 'repo_write_file') {
+          if (RUNNER_MODE !== 'execute_l1' && RUNNER_MODE !== 'execute_l2') throw new Error('repo_actions_require_execute');
+          const fileRel = act.file;
+          const full = path.join(WORKSPACE, fileRel);
+          fs.mkdirSync(path.dirname(full), { recursive: true });
+          fs.writeFileSync(full, String(act.content || ''), 'utf8');
+          run(`cd ${WORKSPACE} && git add ${fileRel}`);
+          const msg = act.commitMessage || `runner: write ${fileRel}`;
+          const cr = run(`cd ${WORKSPACE} && git commit -m "${msg.replace(/\"/g,'\\"')}"`);
+          if (cr.code !== 0) throw new Error('git_commit_failed');
+          return { ok:true, kind, committed:true };
+        }
+
+        if (kind === 'ssh_exec') {
+          if (RUNNER_MODE !== 'execute_l2') throw new Error('ssh_exec_requires_execute_l2');
+          const instanceId = act.instance_id;
+          if (!instanceId) throw new Error('bad_action_missing_instance_id');
+          if (instanceId === 'lhins-npsqfxvn') throw new Error('forbidden_master_host');
+
+          // lookup ip via python sqlite (sqlite3 cli not installed)
+          const ipq = sh(`python3 - <<'PY'\nimport sqlite3\ncon=sqlite3.connect('${WORKSPACE}/control-plane/data/bothook.sqlite')\ncur=con.cursor()\nrow=cur.execute('select public_ip,lifecycle_status from instances where instance_id=?', ('${instanceId}',)).fetchone()\nprint((row[0] if row else '')+'|'+(row[1] if row else ''))\nPY`);
+          const out = (ipq.stdout||'').trim();
+          const parts = out.split('|');
+          const ip = parts[0] || '';
+          const lifecycle = parts[1] || '';
+          if (!ip) throw new Error('instance_ip_not_found');
+          if (ip === '127.0.0.1') throw new Error('forbidden_localhost');
+          if (lifecycle === 'DELIVERING') throw new Error('forbidden_delivering_machine');
+
+          const user = act.user || 'ubuntu';
+          const cmds = Array.isArray(act.commands) ? act.commands : [];
+          const reboot = !!act.reboot;
+
+          const script = cmds.join(' && ');
+          const remoteCmd = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${user}@${ip} '${script.replace(/'/g, "'\\''")}'`;
+          const r1 = run(remoteCmd);
+          if (r1.code !== 0) throw new Error('ssh_exec_failed');
+
+          if (reboot) {
+            const rb = run(`ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${user}@${ip} 'sudo reboot || true'`);
+            // reboot may drop connection; don't fail on it
+            void rb;
+          }
+          return { ok:true, kind, ip, reboot };
+        }
+
+        throw new Error(`unsupported_action_kind:${kind}`);
+      };
+
+      let errMsg = null;
+      let result = null;
+      for (let attempt=1; attempt<=2; attempt++) {
+        try {
+          result = doActionOnce();
+          actions.push({ task: tid, checkpoint: cpDir, action: 'execute', attempt, result });
+          errMsg = null;
+          break;
+        } catch (e2) {
+          errMsg = String(e2?.message || e2);
+          actions.push({ task: tid, checkpoint: cpDir, action: 'execute', attempt, result: 'error', error: errMsg });
+        }
+      }
+
+      writeCheckpoint(cpDir, 'cmd.log', cmdLog);
+      writeCheckpoint(cpDir, 'post.json', redactTaskForEvidence(readJson(e.file)) + '\n');
+
+      if (errMsg) {
+        e.task.status = 'PAUSED';
+        e.task.error_reason = errMsg;
+        e.task.fix_once = act.fix_once || `RUNNER_MODE=${RUNNER_MODE} node ${WORKSPACE}/scripts/task_runner.mjs --json --only=${tid} --force`;
+        e.task.last_action = `runner_failed@${nowIso()}`;
+        e.task.last_updated = nowIso();
+        e.task.evidence_path = cpDir;
+        writeJsonAtomic(e.file, e.task);
+        touched.push(e.name);
+        continue;
+      }
+
+      // Success: bump progress + record evidence path
+      const prev = Number(e.task.progress_percent || 0);
+      const bump = Number(act.progress_bump || 5);
+      e.task.progress_percent = Math.min(100, Math.max(prev, prev + bump));
+      e.task.last_action = `runner_execute_${RUNNER_MODE}@${nowIso()} (${act.kind})`;
+      e.task.last_updated = nowIso();
+      e.task.evidence_path = cpDir;
+      e.task.recent_evidence = Array.isArray(e.task.recent_evidence) ? e.task.recent_evidence : [];
+      e.task.recent_evidence.unshift(`runner: executed ${act.kind} @ ${e.task.last_updated} evidence=${cpDir}`);
+      e.task.recent_evidence = e.task.recent_evidence.slice(0, 10);
+      writeJsonAtomic(e.file, e.task);
       touched.push(e.name);
-      actions.push({ task: tid, checkpoint: cpDir, action: 'tick', note: 'no_handler' });
     }
 
     state.rrIndex = (state.rrIndex || 0) + Math.max(1, picked.length);
