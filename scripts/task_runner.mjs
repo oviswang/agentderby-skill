@@ -369,6 +369,16 @@ function main() {
               fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T10 --force'
             }];
           }
+          if (tid === 'T6') {
+            return [{
+              kind: 'repo_write_file',
+              file: 'control-plane/lib/allocator.mjs',
+              content: `// allocator (autofill refresh)\n// updated: ${ts}\n\nimport { openDb } from "./db.mjs";\n\nexport function pickReadyInstance() {\n  const { db } = openDb();\n  const row = db.prepare("SELECT instance_id, public_ip FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='READY' ORDER BY instance_id LIMIT 1").get();\n  return row || null;\n}\n`,
+              commitMessage: 'T6: refresh allocator placeholder (autofill)',
+              progress_bump: 5,
+              fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T6 --force'
+            }];
+          }
           return null;
         };
 
