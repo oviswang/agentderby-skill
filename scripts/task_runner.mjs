@@ -26,6 +26,7 @@ const LOCK_PATH = '/tmp/bothook.task-runner.lock';
 
 const RUNNER_MODE = (process.env.RUNNER_MODE || 'tick').trim();
 const ALLOWED_MODES = new Set(['tick', 'execute_l1', 'execute_l2']);
+const SSH_IDENTITY_FILE = (process.env.SSH_IDENTITY_FILE || '/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519').trim();
 
 function nowIso() {
   return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -377,12 +378,12 @@ function main() {
           const reboot = !!act.reboot;
 
           const script = cmds.join(' && ');
-          const remoteCmd = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${user}@${ip} '${script.replace(/'/g, "'\\''")}'`;
+          const remoteCmd = `ssh -i ${SSH_IDENTITY_FILE} -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${user}@${ip} '${script.replace(/'/g, "'\\''")}'`;
           const r1 = run(remoteCmd);
           if (r1.code !== 0) throw new Error('ssh_exec_failed');
 
           if (reboot) {
-            const rb = run(`ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${user}@${ip} 'sudo reboot || true'`);
+            const rb = run(`ssh -i ${SSH_IDENTITY_FILE} -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${user}@${ip} 'sudo reboot || true'`);
             // reboot may drop connection; don't fail on it
             void rb;
           }
