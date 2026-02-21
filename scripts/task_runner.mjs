@@ -391,6 +391,37 @@ function main() {
           return { ok:true, kind, url, expect: expect || null };
         }
 
+        if (kind === 'local_exec') {
+          // Local command execution (work machine). Keep strict: only allow specific prefixes.
+          const cmd = String(act.command || '');
+          const allow = [
+            'node /home/ubuntu/.openclaw/workspace/control-plane/workers/lifecycle-worker.mjs',
+            'node control-plane/workers/lifecycle-worker.mjs',
+            'python3 -',
+            'bash -lc'
+          ];
+          if (!allow.some(p => cmd.startsWith(p))) throw new Error('local_exec_not_allowed');
+          const r = run(cmd);
+          if (r.code !== 0) throw new Error('local_exec_failed');
+          return { ok:true, kind, exit: r.code };
+        }
+
+        if (kind === 'tccli_lighthouse_reset_instance') {
+          // REAL cloud action: reset/reimage lighthouse instance. Irreversible.
+          const instanceId = act.instance_id;
+          const blueprintId = act.blueprint_id;
+          if (!instanceId) throw new Error('bad_action_missing_instance_id');
+          if (instanceId === 'lhins-npsqfxvn') throw new Error('forbidden_master_host');
+          if (!blueprintId) throw new Error('bad_action_missing_blueprint_id');
+
+          const region = act.region || 'ap-singapore';
+          const cred = act.cred_env || '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env';
+          const cmd = `set -a; source ${cred}; set +a; tccli lighthouse ResetInstance --region ${region} --InstanceId ${instanceId} --BlueprintId ${blueprintId} --output json`;
+          const r = run(cmd);
+          if (r.code !== 0) throw new Error('tccli_reset_instance_failed');
+          return { ok:true, kind, instance_id: instanceId, blueprint_id: blueprintId, region };
+        }
+
         if (kind === 'ssh_exec') {
           if (RUNNER_MODE !== 'execute_l2') throw new Error('ssh_exec_requires_execute_l2');
           const instanceId = act.instance_id;
