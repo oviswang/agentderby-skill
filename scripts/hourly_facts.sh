@@ -9,6 +9,37 @@ SINCE='1 hour ago'
 echo "时间窗：过去 1 小时（截至 ${NOW_LOCAL}）"
 echo
 
+echo "【事实源 0：Heartbeat 最近一次事件（Gateway）】"
+HB_LAST=$(openclaw system heartbeat last --json 2>/dev/null || true)
+if [ -n "$HB_LAST" ] && [ "$HB_LAST" != "null" ]; then
+  echo "$HB_LAST"
+else
+  echo "- 无 last heartbeat 事件（null）"
+fi
+
+echo
+
+echo "【事实源 0.1：任务进度快照（/home/ubuntu/.openclaw/tasks/T*.json）】"
+python3 - <<'PY'
+import glob, json, os, time
+paths=sorted(glob.glob('/home/ubuntu/.openclaw/tasks/T*.json'))
+if not paths:
+    print('- tasks 目录无 T*.json')
+    raise SystemExit(0)
+now=time.time()
+for p in paths:
+    st=os.stat(p)
+    j=json.load(open(p))
+    age_min=(now-st.st_mtime)/60
+    touched = 'UPDATED_WITHIN_1H' if age_min <= 60 else 'stale'
+    print(f"- {os.path.basename(p)} {touched} mtime={time.strftime('%Y-%m-%d %H:%M:%S %z', time.localtime(st.st_mtime))} status={j.get('status')} progress_percent={j.get('progress_percent')} last_updated={j.get('last_updated')}")
+    na=j.get('next_action')
+    if na:
+        print(f"  next_action: {na}")
+PY
+
+echo
+
 echo "【事实源 1：Git commits（过去 1 小时）】"
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   GIT_LOG=$(git log --since="$SINCE" --pretty=format:'- %h %ad %s' --date=iso --no-merges || true)
