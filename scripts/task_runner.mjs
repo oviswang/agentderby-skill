@@ -379,6 +379,26 @@ function main() {
               fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T6 --force'
             }];
           }
+          if (tid === 'T4') {
+            return [{
+              kind: 'repo_write_file',
+              file: 'control-plane/workers/reconcile-worker.mjs',
+              content: `#!/usr/bin/env node\n// reconcile-worker (autofill scaffold)\n// updated: ${ts}\n// TODO: reconcile DB <-> cloud DescribeInstances <-> Stripe subscription truth\n\nconsole.log(\"reconcile-worker placeholder\", new Date().toISOString());\n`,
+              commitMessage: 'T4: scaffold reconcile-worker (autofill)',
+              progress_bump: 5,
+              fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T4 --force'
+            }];
+          }
+          if (tid === 'T8') {
+            return [{
+              kind: 'repo_write_file',
+              file: 'control-plane/workers/pool-controller.mjs',
+              content: `#!/usr/bin/env node\n// pool-controller (autofill scaffold)\n// updated: ${ts}\n// TODO: tick=1min, cap=5, enqueue heavy actions into write_queue (dry-run)\n\nconsole.log(\"pool-controller placeholder\", new Date().toISOString());\n`,
+              commitMessage: 'T8: scaffold pool-controller (autofill)',
+              progress_bump: 5,
+              fix_once: 'cd /home/ubuntu/.openclaw/workspace && RUNNER_MODE=execute_l1 node scripts/task_runner.mjs --json --only=T8 --force'
+            }];
+          }
           return null;
         };
 
