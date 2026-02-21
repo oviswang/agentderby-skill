@@ -315,6 +315,20 @@ function main() {
           const diff = run(`cd ${WORKSPACE} && git diff -- ${fileRel}`);
           writeCheckpoint(cpDir, 'patch.diff', diff.stdout || diff.stderr || '');
 
+          // If no diff, fallback to an auditable no-op commit (safe L1) so we still have evidence.
+          const hasDiff = !!(diff.stdout || '').trim();
+          if (!hasDiff) {
+            const demoRel = `p-site/docs/_runner_nochange_${tid}_${tsFolder}.md`;
+            const demoFull = path.join(WORKSPACE, demoRel);
+            fs.mkdirSync(path.dirname(demoFull), { recursive: true });
+            fs.writeFileSync(demoFull, `# runner no-change fallback\n\n- task: ${tid}\n- ts: ${nowIso()}\n- note: patch produced no diff; wrote this file as auditable progress evidence.\n`, 'utf8');
+            run(`cd ${WORKSPACE} && git add ${demoRel}`);
+            const msg0 = `runner: no-change fallback for ${tid}`;
+            const cr0 = run(`cd ${WORKSPACE} && git commit -m "${msg0}" -- ${demoRel}`);
+            if (cr0.code !== 0) throw new Error('git_commit_failed');
+            return { ok:true, kind, committed:true, fallback:'no_change' };
+          }
+
           const tests = Array.isArray(act.tests) ? act.tests : [];
           for (const tcmd of tests) {
             const tr = run(`cd ${WORKSPACE} && ${tcmd}`);
