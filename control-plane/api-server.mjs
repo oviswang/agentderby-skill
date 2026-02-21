@@ -246,6 +246,52 @@ app.use(express.json({ limit: '256kb', verify: (req, res, buf) => { req.rawBody 
 
 app.get('/healthz', (req, res) => res.type('text/plain').send('ok'));
 
+// C (Relink v2 / p-site state): minimal state endpoint (Phase 1)
+// Returns a coarse state derived from local DB only (Stripe integration later).
+app.get('/api/p/state', (req, res) => {
+  try {
+    const uuid = String(req.query?.uuid || '').trim();
+    const lang = String(req.query?.lang || '').trim() || null;
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+
+    const { db } = openDb();
+
+    // Busy signal: no READY capacity
+    const ready = db.prepare("SELECT COUNT(*) as c FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='READY'").get()?.c ?? 0;
+    const busy = ready <= 0;
+
+    const delivery = getDeliveryByUuid(db, uuid);
+    const status = delivery?.status || 'NEW';
+
+    // Coarse state machine (Phase 1, DB-only)
+    // - NEW: no delivery mapping
+    // - LINKING: user not yet linked
+    // - ACTIVE: placeholder (Stripe not yet wired)
+    // - INACTIVE: placeholder (Stripe not yet wired)
+    let state = 'NEW';
+    if (delivery) state = 'LINKING';
+
+    return send(res, 200, {
+      ok: true,
+      uuid,
+      lang,
+      busy,
+      readyCapacity: ready,
+      state,
+      delivery: delivery ? {
+        delivery_id: delivery.delivery_id,
+        instance_id: delivery.instance_id,
+        status,
+        wa_jid: delivery.wa_jid ? '[set]' : null,
+        bound_at: delivery.bound_at || null,
+        updated_at: delivery.updated_at,
+      } : null,
+    });
+  } catch (e) {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 app.post('/api/wa/start', async (req, res) => {
   try {
     const uuid = String(req.body?.uuid || '').trim();
