@@ -164,7 +164,7 @@
       async function fetchState(){
         try {
           const u = el.textContent;
-          const url = `http://127.0.0.1:18998/api/p/state?uuid=${encodeURIComponent(u)}&lang=${encodeURIComponent(best)}`;
+          const url = `/api/p/state?uuid=${encodeURIComponent(u)}&lang=${encodeURIComponent(best)}`;
           const resp = await fetch(url);
           if (!resp.ok) return null;
           return await resp.json();
