@@ -309,39 +309,10 @@
         continueBtn.disabled = !hasOtherDevice.checked;
       });
 
-      // Paid-mode buttons
-      if (paidRelinkBtn) {
-        paidRelinkBtn.addEventListener('click', () => {
-          // Reuse existing QR flow UI.
-          verifyCard.style.display = 'block';
-          verifyCard.scrollIntoView({behavior:'smooth', block:'start'});
-          // Require verification before enabling QR
-          getQrBtn.disabled = true;
-          qrStatus.textContent = '请先完成验证，通过后点击“获取二维码”。';
-          // show restart button as relink entry
-          restartBtn.style.display = 'inline-flex';
-          restartBtn.disabled = false;
-          getQrBtn.style.display = 'none';
-        });
-      }
-      if (paidCancelBtn) {
-        paidCancelBtn.addEventListener('click', async () => {
-          const uuid = el.textContent.trim();
-          if (!uuid) return;
-          paidCancelBtn.disabled = true;
-          try {
-            const r = await fetch(`/api/billing/portal?uuid=${encodeURIComponent(uuid)}&lang=zh`);
-            const j = await r.json().catch(()=>null);
-            if (!r.ok || !j || !j.ok || !j.url) throw new Error((j && j.error) ? j.error : 'portal_failed');
-            location.href = j.url;
-          } catch (e) {
-            alert('打开 Stripe 取消订阅页面失败，请稍后重试或联系 support@bothook.me。');
-            paidCancelBtn.disabled = false;
-          }
-        });
-      }
+      // Paid-mode relink: same flow as normal QR, but force=true on /api/wa/start
+      let forceRelink = false;
 
-      continueBtn.addEventListener('click', () => {
+      function openVerifyFlow(){
         uuidCard.style.opacity = '1';
         uuidCard.style.pointerEvents = 'auto';
         verifyCard.style.display = 'block';
@@ -358,7 +329,6 @@
           s.async = true; s.defer = true;
 
           const failLoad = (msg) => {
-            if (h) h.textContent = msg;
             getQrBtn.disabled = true;
             qrStatus.textContent = msg;
           };
@@ -403,7 +373,49 @@
             }
           };
           document.head.appendChild(s);
+        } else {
+          // Script already loaded: show box again if it was hidden.
+          const box=document.getElementById('turnstileBox'); if(box) box.style.display='flex';
+          try { if (window.turnstile) window.turnstile.reset(); } catch {}
         }
+
+        // Default controls
+        restartBtn.style.display = 'none';
+        getQrBtn.style.display = 'inline-flex';
+      }
+
+      // Paid-mode buttons
+      if (paidRelinkBtn) {
+        paidRelinkBtn.addEventListener('click', () => {
+          forceRelink = true;
+          // Require re-verification each relink
+          turnstileToken = null;
+          const img = document.getElementById('qrImg');
+          if (img) img.style.display = 'none';
+          openVerifyFlow();
+          qrStatus.textContent = 'Relink：请先完成人机验证，然后点击“获取二维码”。';
+        });
+      }
+      if (paidCancelBtn) {
+        paidCancelBtn.addEventListener('click', async () => {
+          const uuid = el.textContent.trim();
+          if (!uuid) return;
+          paidCancelBtn.disabled = true;
+          try {
+            const r = await fetch(`/api/billing/portal?uuid=${encodeURIComponent(uuid)}&lang=zh`);
+            const j = await r.json().catch(()=>null);
+            if (!r.ok || !j || !j.ok || !j.url) throw new Error((j && j.error) ? j.error : 'portal_failed');
+            location.href = j.url;
+          } catch (e) {
+            alert('打开 Stripe 取消订阅页面失败，请稍后重试或联系 support@bothook.me。');
+            paidCancelBtn.disabled = false;
+          }
+        });
+      }
+
+      continueBtn.addEventListener('click', () => {
+        forceRelink = false;
+        openVerifyFlow();
       });
 
       async function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
@@ -478,7 +490,9 @@
         qrStatus.textContent = '正在请求二维码…';
 
         try {
-          await startProvision(uuid);
+          await startProvision(uuid, forceRelink);
+          // After a forced relink session is started, reset flag to avoid surprising retries.
+          forceRelink = false;
 
           let img = document.getElementById('qrImg');
           if (!img) {
