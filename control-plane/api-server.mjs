@@ -18,11 +18,15 @@
 import express from 'express';
 import cors from 'cors';
 import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 
 import { openDb, nowIso } from './lib/db.mjs';
 
 const PORT = parseInt(process.env.BOTHOOK_API_PORT || '18998', 10);
 const POOL_HTTP_PORT = parseInt(process.env.BOTHOOK_POOL_HTTP_PORT || '80', 10);
+const POOL_LOCAL_PORT = parseInt(process.env.BOTHOOK_POOL_LOCAL_PORT || '18999', 10);
+const POOL_FETCH_MODE = String(process.env.BOTHOOK_POOL_FETCH_MODE || 'ssh').toLowerCase(); // ssh|http
+const POOL_SSH_KEY = process.env.BOTHOOK_POOL_SSH_KEY || '/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519';
 
 function normalizeWaBase(waJid){
   try {
@@ -130,8 +134,46 @@ function getInstanceById(db, instance_id) {
   ).get(instance_id);
 }
 
+function sh(cmd, { timeoutMs = 12000 } = {}) {
+  const res = spawnSync('bash', ['-lc', cmd], {
+    encoding: 'utf8',
+    maxBuffer: 5 * 1024 * 1024,
+    timeout: timeoutMs,
+    env: { ...process.env }
+  });
+  return { code: res.status ?? 0, stdout: res.stdout || '', stderr: res.stderr || '' };
+}
+
 async function poolFetch(instance, path, opts = {}) {
   const ip = instance.public_ip;
+  if (!ip) return { ok: false, status: 0, json: null, text: 'instance_missing_ip', url: null };
+
+  // Default mode is SSH: keep pool provision server bound to 127.0.0.1 (no public exposure).
+  if (POOL_FETCH_MODE === 'ssh') {
+    const method = String(opts.method || 'GET').toUpperCase();
+    const headers = opts.headers || {};
+    const body = opts.body ? String(opts.body) : '';
+    const timeoutMs = opts.timeoutMs || 12000;
+
+    const remoteUrl = `http://127.0.0.1:${POOL_LOCAL_PORT}${path}`;
+    const headerFlags = Object.entries(headers)
+      .map(([k, v]) => `-H '${String(k).replace(/'/g, "'\\''")}: ${String(v).replace(/'/g, "'\\''")}'`)
+      .join(' ');
+
+    const dataFlag = body ? `--data '${body.replace(/'/g, "'\\''")}'` : '';
+    const curl = `curl -sS -m ${Math.ceil(timeoutMs / 1000)} -X ${method} ${headerFlags} ${dataFlag} '${remoteUrl}'`;
+
+    const cmd = `ssh -i '${POOL_SSH_KEY}' -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ubuntu@${ip} '${curl.replace(/'/g, "'\\''")}'`;
+    const r = sh(cmd, { timeoutMs: timeoutMs + 3000 });
+    const text = (r.stdout || r.stderr || '').trim();
+    let json;
+    try { json = JSON.parse(text); } catch { json = null; }
+    // SSH mode cannot reliably get HTTP status; treat JSON ok:false as failure.
+    const ok = Boolean(json ? json.ok !== false : (r.code === 0));
+    return { ok, status: ok ? 200 : 502, json, text, url: `ssh://${ip}${path}` };
+  }
+
+  // HTTP mode: requires pool provision server exposed on POOL_HTTP_PORT
   const url = `http://${ip}:${POOL_HTTP_PORT}${path}`;
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), opts.timeoutMs || 8000);
