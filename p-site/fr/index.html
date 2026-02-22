@@ -275,6 +275,9 @@
         } catch {}
       }
 
+      // Paid-mode relink flag
+      let forceRelink = false;
+
       // Paid mode: show paid UI and hide unpaid guidance
       fetchState().then((st)=>{
         if (!st || !st.ok) return;
@@ -292,14 +295,14 @@
           const relinkBtn = document.getElementById('paidRelinkBtn');
           if (relinkBtn) {
             relinkBtn.addEventListener('click', () => {
-              // Use existing restart flow (force=true)
-              verifyCard.style.display = 'block';
-              verifyCard.scrollIntoView({behavior:'smooth', block:'start'});
-              restartBtn.style.display = 'inline-block';
-              restartBtn.disabled = false;
-              getQrBtn.style.display = 'none';
+              // Paid relink: require Turnstile verification and then force a fresh QR session.
+              forceRelink = true;
+              try { hasOtherDevice.checked = true; } catch {}
+              try { continueBtn.disabled = false; } catch {}
+              // Reuse existing verification flow (continue button handler loads Turnstile).
+              try { continueBtn.click(); } catch {}
               const s = window.__bothook_i18n || {};
-              qrStatus.textContent = s.verifyFirst || 'Complete verification first, then refresh QR.';
+              qrStatus.textContent = (s.verifyFirst || 'Complete verification first. After it passes, click “Get QR code”.') + ' (Relink)';
             });
           }
         }
@@ -334,6 +337,15 @@
         if (back) back.href = mainHome;
         const brand = document.getElementById('brandHome');
         if (brand) brand.href = mainHome;
+      } catch {}
+
+      // Help link: follow the same-language contact page
+      try {
+        const helpLink = document.getElementById('helpLink');
+        if (helpLink) {
+          const contactUrl = (best && best !== 'en') ? (`https://bothook.me/${best}/contact.html`) : 'https://bothook.me/contact.html';
+          helpLink.href = contactUrl;
+        }
       } catch {}
 
       // ---- i18n (T9.1) ----
@@ -641,7 +653,8 @@
         }
 
         try {
-          await startProvision(uuid);
+          await startProvision(uuid, forceRelink);
+          forceRelink = false;
 
           // Create / reuse QR image element
           let img = document.getElementById('qrImg');
