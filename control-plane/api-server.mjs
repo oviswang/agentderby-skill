@@ -263,13 +263,27 @@ app.get('/api/p/state', (req, res) => {
     const delivery = getDeliveryByUuid(db, uuid);
     const status = delivery?.status || 'NEW';
 
-    // Coarse state machine (Phase 1, DB-only)
+    // Coarse state machine (Phase 1.5, DB-only)
     // - NEW: no delivery mapping
     // - LINKING: user not yet linked
-    // - ACTIVE: placeholder (Stripe not yet wired)
-    // - INACTIVE: placeholder (Stripe not yet wired)
+    // - PAID_ACTIVE: paid subscription active (relink/cancel shown)
+    // NOTE: Stripe webhook not wired yet; we rely on local `subscriptions` table only.
     let state = 'NEW';
-    if (delivery) state = 'LINKING';
+    let subscription = null;
+
+    if (delivery) {
+      state = 'LINKING';
+      try {
+        subscription = db.prepare(
+          "SELECT provider_sub_id, provider, user_id, plan, status, current_period_end, cancel_at_period_end, updated_at FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1"
+        ).get(delivery.user_id) || null;
+      } catch {
+        subscription = null;
+      }
+      if (subscription && String(subscription.status || '').toLowerCase() === 'active') {
+        state = 'PAID_ACTIVE';
+      }
+    }
 
     return send(res, 200, {
       ok: true,
@@ -278,6 +292,14 @@ app.get('/api/p/state', (req, res) => {
       busy,
       readyCapacity: ready,
       state,
+      state,
+      subscription: subscription ? {
+        plan: subscription.plan,
+        status: subscription.status,
+        current_period_end: subscription.current_period_end || null,
+        cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+        updated_at: subscription.updated_at
+      } : null,
       delivery: delivery ? {
         delivery_id: delivery.delivery_id,
         instance_id: delivery.instance_id,

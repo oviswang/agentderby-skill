@@ -40,7 +40,7 @@
     <h1>交付</h1>
     <p>本页面会生成一个唯一的交付会话（UUID）。下一步你将用它完成 WhatsApp 设备关联。</p>
 
-    <div class="card" style="margin-top:12px;">
+    <div class="card" id="linkingCard" style="margin-top:12px;">
       <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">重要提醒</div>
       <p><strong>请用另一台设备打开本页面</strong>（另一部手机或电脑）。</p>
       <p class="hint">你无法用同一部手机去扫描自己屏幕上的二维码。</p>
@@ -51,6 +51,17 @@
       <div class="btns" style="margin-top:10px;">
         <button class="primary" id="continueBtn" type="button" disabled>继续</button>
       </div>
+    </div>
+
+    <div class="card" id="paidCard" style="margin-top:12px; display:none;">
+      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">✅ 订阅已激活</div>
+      <p class="hint" style="margin-top:8px;">你可以在这里进行设备重新关联（Relink）或取消订阅。升级套餐暂未开放。</p>
+      <div class="btns" style="margin-top:12px;">
+        <button class="primary" id="paidRelinkBtn" type="button">重新关联设备（Relink）</button>
+        <button class="primary" id="paidCancelBtn" type="button">取消订阅</button>
+        <button id="paidUpgradeBtn" type="button" disabled>升级套餐（即将推出）</button>
+      </div>
+      <p class="hint" style="margin-top:12px;">安全提示：Relink 将校验扫码 WhatsApp 账号是否与已付费绑定账号一致，不一致会被拒绝并产生审计记录。</p>
     </div>
 
     <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
@@ -74,7 +85,7 @@
       <p class="hint">如果你在 WhatsApp 里看到“已关联的设备”，就说明已经成功。</p>
     </div>
 
-    <div class="row">
+    <div class="row" id="linkingRow">
       <div class="card">
         <div class="hint">下一步</div>
         <p>当 WhatsApp 二维码就绪后，你会在 WhatsApp →「已关联的设备」中扫描二维码完成连接。</p>
@@ -86,6 +97,7 @@
 
 
     <div class="card" id="uuidCard" style="margin-top:12px;">
+      <div class="hint" id="modeHint" style="display:none; color:rgba(232,238,252,.92); font-weight:700;">已付费用户模式</div>
       <div class="hint">你的交付链接（请保存）</div>
       <div class="uuid" id="provisionLink">生成中…</div>
       <span id="uuid" style="display:none"></span>
@@ -109,8 +121,14 @@
       const linkEl = document.getElementById('provisionLink');
       const copyBtn = document.getElementById('copyBtn');
       const uuidCard = document.getElementById('uuidCard');
+      const modeHint = document.getElementById('modeHint');
+      const paidCard = document.getElementById('paidCard');
+      const paidRelinkBtn = document.getElementById('paidRelinkBtn');
+      const paidCancelBtn = document.getElementById('paidCancelBtn');
       const verifyCard = document.getElementById('verifyCard');
       const linkedCard = document.getElementById('linkedCard');
+      const linkingCard = document.getElementById('linkingCard');
+      const linkingRow = document.getElementById('linkingRow');
       const hasOtherDevice = document.getElementById('hasOtherDevice');
       const continueBtn = document.getElementById('continueBtn');
       const getQrBtn = document.getElementById('getQrBtn');
@@ -157,6 +175,29 @@
       const existing = params.get('uuid') || getUuidFromPath() || loadStoredUuid();
       setUuid(existing || uuidv4());
 
+      // State: decide whether to show PAID UI (temporary: DB-only subscription table)
+      async function fetchPState(){
+        try {
+          const u = el.textContent;
+          const resp = await fetch(`/api/p/state?uuid=${encodeURIComponent(u)}&lang=zh`);
+          if (!resp.ok) return null;
+          return await resp.json();
+        } catch {
+          return null;
+        }
+      }
+
+      fetchPState().then((st)=>{
+        if (!st || !st.ok) return;
+        if (st.state === 'PAID_ACTIVE') {
+          if (modeHint) modeHint.style.display = 'block';
+          if (paidCard) paidCard.style.display = 'block';
+          // Hide unpaid/linking guidance (paid users already passed payment)
+          if (linkingCard) linkingCard.style.display = 'none';
+          if (linkingRow) linkingRow.style.display = 'none';
+        }
+      });
+
       copyBtn.addEventListener('click', async () => {
         const link = linkEl ? linkEl.textContent : `${location.origin}/zh/p/${encodeURIComponent(el.textContent)}`;
         try {
@@ -177,6 +218,28 @@
       hasOtherDevice.addEventListener('change', () => {
         continueBtn.disabled = !hasOtherDevice.checked;
       });
+
+      // Paid-mode buttons
+      if (paidRelinkBtn) {
+        paidRelinkBtn.addEventListener('click', () => {
+          // Reuse existing QR flow UI.
+          verifyCard.style.display = 'block';
+          verifyCard.scrollIntoView({behavior:'smooth', block:'start'});
+          // Require verification before enabling QR
+          getQrBtn.disabled = true;
+          qrStatus.textContent = '请先完成验证，通过后点击“获取二维码”。';
+          // show restart button as relink entry
+          restartBtn.style.display = 'inline-flex';
+          restartBtn.disabled = false;
+          getQrBtn.style.display = 'none';
+        });
+      }
+      if (paidCancelBtn) {
+        paidCancelBtn.addEventListener('click', () => {
+          // Temporary: show instructions until Stripe wiring is done.
+          alert('取消订阅：即将接入自助取消。当前请联系 support@bothook.me，并附上你的 UUID。');
+        });
+      }
 
       continueBtn.addEventListener('click', () => {
         uuidCard.style.opacity = '1';
