@@ -666,7 +666,7 @@
 
           // Create / reuse QR image element
           let img = document.getElementById('qrImg');
-          let hadQr = false;
+          // NOTE: do not shadow outer hadQr; it drives relink UI decisions.
           if (!img) {
             img = document.createElement('img');
             img.id = 'qrImg';
