@@ -205,7 +205,12 @@
       async function fetchState(){
         try {
           const u = el.textContent;
-          const url = `/api/p/state?uuid=${encodeURIComponent(u)}&lang=${encodeURIComponent(best)}`;
+          const urlLangRaw = (new URLSearchParams(location.search)).get('lang');
+          const pathLangRaw = (location.pathname.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\//i) || [null, null])[1];
+          const pref = localStorage.getItem('bothook_lang_pref');
+          const navLang = (navigator.language || '').toLowerCase();
+          const bestLang = (urlLangRaw || pathLangRaw || pref || (navLang.startsWith('zh') ? 'zh' : 'en')).toLowerCase();
+          const url = `/api/p/state?uuid=${encodeURIComponent(u)}&lang=${encodeURIComponent(bestLang)}`;
           const resp = await fetch(url);
           if (!resp.ok) return null;
           return await resp.json();
