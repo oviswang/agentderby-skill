@@ -421,11 +421,45 @@ app.post('/api/wa/start', async (req, res) => {
 
     const force = Boolean(req.body?.force);
 
-    // SECURITY (A-style relink: same instance): if the UUID is already in use,
-    // only allow force relink after Stripe payment is confirmed.
+    // SECURITY (A-style relink: same instance): force relink must be authorized.
+    // Policy: allow when either
+    // - delivery.status is PAID (legacy MVP), OR
+    // - Stripe subscription is still in the paid effective period (including cancel_at_period_end but not yet ended).
     // Rationale: without this gate, a leaked UUID can be used to trigger relink/QR spam or takeover attempts.
-    if (force && String(delivery.status || '') !== 'PAID') {
-      return send(res, 403, { ok: false, error: 'relink_requires_paid' });
+    if (force) {
+      const st = String(delivery.status || '');
+      let entitled = (st === 'PAID');
+
+      if (!entitled) {
+        const uid = String(delivery.user_id || '').trim();
+        if (uid) {
+          const sub = db.prepare(
+            `SELECT provider_sub_id, provider, user_id, status,
+                    current_period_end, cancel_at, canceled_at, ended_at, updated_at
+             FROM subscriptions
+             WHERE user_id = ?
+             ORDER BY updated_at DESC
+             LIMIT 1`
+          ).get(uid) || null;
+
+          const now = Date.now();
+          const providerOk = String(sub?.provider || '') === 'stripe' && !!sub?.provider_sub_id;
+          const endedAt = sub?.ended_at ? Date.parse(sub.ended_at) : null;
+          const cpe = sub?.current_period_end ? Date.parse(sub.current_period_end) : null;
+          const cancelAt = sub?.cancel_at ? Date.parse(sub.cancel_at) : null;
+
+          // Active entitlement if period end is in the future (or cancel_at in the future), and not ended.
+          const notEnded = !endedAt || endedAt > now;
+          const inPeriod = (cpe && cpe > now) || (cancelAt && cancelAt > now);
+          const statusOk = ['active', 'trialing'].includes(String(sub?.status || '').toLowerCase());
+
+          entitled = Boolean(providerOk && notEnded && inPeriod && statusOk);
+        }
+      }
+
+      if (!entitled) {
+        return send(res, 403, { ok: false, error: 'relink_requires_active_subscription' });
+      }
     }
 
     const r = await poolFetch(instance, '/api/wa/start', {
