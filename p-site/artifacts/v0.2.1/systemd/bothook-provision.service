@@ -1,0 +1,24 @@
+[Unit]
+Description=BOTHook Provisioning Server (Baileys)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bothook/provision
+Environment=PROVISION_DATA_DIR=/opt/bothook/provision/data
+Environment=PROVISION_PORT=18999
+Environment=OPENCLAW_HOME=/home/ubuntu
+Environment=OPENCLAW_STATE_DIR=/home/ubuntu/.openclaw
+ExecStart=/usr/bin/node /opt/bothook/provision/server.mjs
+Restart=always
+RestartSec=2
+
+# Hardening (minimal, but must allow HOME for OpenClaw session persistence)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=false
+
+[Install]
+WantedBy=multi-user.target
