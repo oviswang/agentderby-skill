@@ -104,7 +104,8 @@ function loadState() {
 function listTasks() {
   if (!fs.existsSync(TASK_DIR)) return [];
   const files = fs.readdirSync(TASK_DIR)
-    .filter(f => /^T\d+\.json$/.test(f))
+    // Support sub-tasks like T9.1.json
+    .filter(f => /^T\d+(?:\.\d+)?\.json$/.test(f))
     .sort();
 
   const tasks = [];
