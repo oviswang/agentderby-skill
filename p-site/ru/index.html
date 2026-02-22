@@ -345,6 +345,7 @@
         if (helpLink) {
           const contactUrl = (best && best !== 'en') ? (`https://bothook.me/${best}/contact.html`) : 'https://bothook.me/contact.html';
           helpLink.href = contactUrl;
+          helpLink.textContent = contactUrl.replace('https://','');
         }
       } catch {}
 
