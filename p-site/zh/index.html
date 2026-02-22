@@ -769,6 +769,20 @@
             }
 
             if (everLinked && !isConnected) {
+              // Relink flow: even if previously linked, we MUST keep showing the QR so the user has time to scan.
+              // Only fall back to Retry UI when we truly have no QR to show.
+              if (hadQr && img && img.src) {
+                {
+                  const s = window.__bothook_i18n || {};
+                  qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
+                }
+                img.style.display = 'block';
+                getQrBtn.style.display = 'none';
+                restartBtn.style.display = 'none';
+                await sleep(1200);
+                continue;
+              }
+
               {
                 const s = window.__bothook_i18n || {};
                 qrStatus.textContent = s.previouslyLinkedDisconnected || '⚠️ Previously linked, but currently disconnected. Click “Retry” to relink and generate a new QR.';
