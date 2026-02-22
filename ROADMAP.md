@@ -4,7 +4,7 @@ Last updated: 2026-02-19
 
 ## Guiding principles (owner)
 - Internationalization (hard rule): language selected on the main site must propagate end-to-end across the whole journey (p-site, relink, onboarding/welcome copy, promo copy, support). Treat `lang` as first-class state.
-- Delivery engineering strategy: **A (cloud-init / bootstrapping) primary, C (base image) secondary**. No manual on-machine ops (B) in delivery.
+- Delivery engineering strategy (owner): **A (cloud-init / bootstrapping) only (for now)**. Temporarily cancel C (base image) to reduce complexity and risk. No manual on-machine ops (B) in delivery.
 - WhatsApp stability is HIGH RISK: backup → change → validate → minimal restart → strong health checks → auto-rollback.
 - WhatsApp chat hygiene: hourly work reports to **Telegram**.
 
