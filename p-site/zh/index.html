@@ -10,17 +10,8 @@
   <link rel="stylesheet" href="https://bothook.me/styles.css" />
   <style>
     /* p-site specific tweaks */
-    /* Wider desktop layout than main-site default (980px) to fit server/account details */
-    @media (min-width: 980px){
-      .header,.main,.banner,.footer{max-width:1180px;}
-      .hero{grid-template-columns:1.1fr .9fr;}
-    }
-
-    /* Paid info grid: ensure each card has enough minimum width on desktop */
-    #paidInfoGrid{grid-template-columns: minmax(520px,1fr) minmax(520px,1fr);}
-    @media (max-width: 1100px){
-      #paidInfoGrid{grid-template-columns:1fr;}
-    }
+    /* Keep main-site default width (980px). For paid details, prefer single-column blocks to avoid squeezing. */
+    #paidInfoGrid{grid-template-columns:1fr;}
 
     .kv{display:grid;grid-template-columns:140px minmax(0,1fr);gap:8px 12px;margin-top:10px}
     .kv .k{color:rgba(169,182,214,.85);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
