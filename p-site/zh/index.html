@@ -10,10 +10,22 @@
   <link rel="stylesheet" href="https://bothook.me/styles.css" />
   <style>
     /* p-site specific tweaks */
-    .kv{display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px 12px;margin-top:10px}
+    /* Wider desktop layout than main-site default (980px) to fit server/account details */
+    @media (min-width: 980px){
+      .header,.main,.banner,.footer{max-width:1180px;}
+      .hero{grid-template-columns:1.1fr .9fr;}
+    }
+
+    /* Paid info grid: ensure each card has enough minimum width on desktop */
+    #paidInfoGrid{grid-template-columns: minmax(520px,1fr) minmax(520px,1fr);}
+    @media (max-width: 1100px){
+      #paidInfoGrid{grid-template-columns:1fr;}
+    }
+
+    .kv{display:grid;grid-template-columns:140px minmax(0,1fr);gap:8px 12px;margin-top:10px}
     .kv .k{color:rgba(169,182,214,.85);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
     .kv .v{color:rgba(232,238,252,.95);font-size:13px;overflow-wrap:anywhere;word-break:normal}
-    .uuid{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:14px;background:rgba(255,255,255,.06);padding:10px 12px;border-radius:14px;word-break:break-all;color:rgba(232,238,252,.95)}
+    .uuid{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:14px;background:rgba(255,255,255,.06);padding:10px 12px;border-radius:14px;overflow-wrap:anywhere;word-break:normal;color:rgba(232,238,252,.95)}
     button{font:inherit}
     button.cta{border:0;cursor:pointer}
     button.cta:disabled{opacity:.55; cursor:not-allowed; filter:saturate(.3);}
