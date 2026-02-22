@@ -310,21 +310,32 @@ app.get('/api/p/state', (req, res) => {
         cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
         updated_at: subscription.updated_at
       } : null,
-      instance: instance ? {
-        instance_id: instance.instance_id,
-        provider: instance.provider,
-        region: instance.region,
-        zone: instance.zone,
-        public_ip: instance.public_ip,
-        bundle_id: instance.bundle_id,
-        blueprint_id: instance.blueprint_id,
-        lifecycle_status: instance.lifecycle_status,
-        health_status: instance.health_status,
-        created_at: instance.created_at,
-        expired_at: instance.expired_at,
-        last_ok_at: instance.last_ok_at,
-        last_probe_at: instance.last_probe_at
-      } : null,
+      instance: instance ? (() => {
+        let meta = {};
+        try { meta = instance.meta_json ? JSON.parse(instance.meta_json) : {}; } catch { meta = {}; }
+        return {
+          // SECURITY: do not expose cloud provider instance_id to end-users.
+          provider: instance.provider,
+          region: instance.region,
+          zone: instance.zone,
+          public_ip: instance.public_ip,
+          lifecycle_status: instance.lifecycle_status,
+          health_status: instance.health_status,
+          created_at: instance.created_at,
+          expired_at: instance.expired_at,
+          last_ok_at: instance.last_ok_at,
+          last_probe_at: instance.last_probe_at,
+
+          // Server configuration (best-effort)
+          config: {
+            cpu: meta.cpu ?? null,
+            memory_gb: meta.memory ?? null,
+            internet_max_bw_out_mbps: meta.internet_max_bw_out ?? null,
+            bundle_id: instance.bundle_id || null,
+            blueprint_id: instance.blueprint_id || null,
+          }
+        };
+      })() : null,
       delivery: delivery ? {
         delivery_id: delivery.delivery_id,
         instance_id: delivery.instance_id,

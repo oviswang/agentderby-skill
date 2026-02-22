@@ -252,13 +252,13 @@
           const acctBox = document.getElementById('paidAccountKv');
 
           const serverPairs = [];
-          serverPairs.push(['实例 ID', inst && inst.instance_id]);
+          // SECURITY: do not show cloud instance id.
           serverPairs.push(['公网 IP', inst && inst.public_ip]);
           serverPairs.push(['区域/可用区', inst ? `${inst.region || ''} ${inst.zone || ''}`.trim() : '']);
+          serverPairs.push(['配置', (inst && inst.config) ? `${inst.config.cpu || '—'} vCPU · ${inst.config.memory_gb || '—'} GB RAM` : '—']);
+          serverPairs.push(['出口带宽', (inst && inst.config && inst.config.internet_max_bw_out_mbps) ? `${inst.config.internet_max_bw_out_mbps} Mbps` : '—']);
           serverPairs.push(['健康', inst && inst.health_status]);
           serverPairs.push(['生命周期', inst && inst.lifecycle_status]);
-          serverPairs.push(['配置(BUNDLE)', inst && inst.bundle_id]);
-          serverPairs.push(['系统(BLUEPRINT)', inst && inst.blueprint_id]);
           serverPairs.push(['最近 OK', inst && inst.last_ok_at]);
           serverPairs.push(['最近探测', inst && inst.last_probe_at]);
 
