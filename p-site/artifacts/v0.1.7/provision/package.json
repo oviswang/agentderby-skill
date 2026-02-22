@@ -1,0 +1,12 @@
+{
+  "name": "bothook-provision",
+  "version": "0.1.7",
+  "private": true,
+  "type": "module",
+  "main": "server.mjs",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.18",
+    "express": "^4.19.2",
+    "qrcode": "^1.5.3"
+  }
+}
