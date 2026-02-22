@@ -1,0 +1,46 @@
+{
+  "version": "v0.2.2",
+  "generated": "2026-02-22",
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "8a5142c27376262ab007044a6efcf6ac075b7c61c7d0b1028975003f4fe7a487"
+    },
+    {
+      "path": "bootstrap.sh",
+      "sha256": "57318a747c6dd8664d2e161f7545a4e6d3adaf513d80c3e052da6e3dad061a76"
+    },
+    {
+      "path": "provision/package.json",
+      "sha256": "b93094ea079984f007575f07ab636db5ec400e35017290fcb24e4b5a5ce11d7c"
+    },
+    {
+      "path": "provision/provision.tgz",
+      "sha256": "3ddf040bc84296ad02a31e29a2b53ecdef4d1906c4bcb702c53c37786fcdb95e"
+    },
+    {
+      "path": "provision/server.mjs",
+      "sha256": "82353b79595844a0ea1ddb82e9a1566edd21b9f588a95d4d73763903ff335e89"
+    },
+    {
+      "path": "scripts/cutover.sh",
+      "sha256": "9f32af70ba9f090545ff385fa8099c59535847c70fc76fe14e3a6d2013086222"
+    },
+    {
+      "path": "scripts/healthcheck.sh",
+      "sha256": "6933513d3bc2aa8d4ee4e230cefe3c7a5933b26316af897f4cd65c925252526f"
+    },
+    {
+      "path": "scripts/openclaw-gateway-start.sh",
+      "sha256": "77f75cfa6671d60c5e6dede53650e3514053c5f87a117a58ba391f64f5b8dd88"
+    },
+    {
+      "path": "systemd/bothook-provision.service",
+      "sha256": "38aa719711a0a8889fc6ed576dfd2d5dc792335a21138228fb6055d6509fa9bc"
+    },
+    {
+      "path": "systemd/openclaw-gateway.service",
+      "sha256": "a7ea0b674506e5fd00e8ef76be3dce950a6183f1f7e76c038301dcd94f05f0f8"
+    }
+  ]
+}
