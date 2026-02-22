@@ -149,11 +149,17 @@
         storeUuid(u);
         const link = `${location.origin}/p/${encodeURIComponent(u)}`;
         if (linkEl) linkEl.textContent = link;
-        // Prefer shareable path /p/<id> if user landed there, else fallback to query param.
+
+        // Preserve other query params (especially lang=xx from main-site CTA).
+        const q = new URLSearchParams(location.search);
+        q.set('uuid', u);
+        const qs = q.toString();
+
+        // Prefer shareable path /p/<id> if user landed there, else use query param.
         if (location.pathname.startsWith('/p/')) {
-          history.replaceState(null,'',`/p/${encodeURIComponent(u)}`);
+          history.replaceState(null,'',`/p/${encodeURIComponent(u)}${qs ? ('?' + qs) : ''}`);
         } else {
-          history.replaceState(null,'',`/?uuid=${encodeURIComponent(u)}`);
+          history.replaceState(null,'',`/${qs ? ('?' + qs) : ''}`);
         }
       }
 

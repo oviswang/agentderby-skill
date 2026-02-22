@@ -139,11 +139,17 @@
         storeUuid(u);
         const link = `${location.origin}/zh/p/${encodeURIComponent(u)}`;
         if (linkEl) linkEl.textContent = link;
+
+        // 保留其它 query 参数（尤其是主站 CTA 传来的 lang=xx），避免被覆盖导致语言回退。
+        const q = new URLSearchParams(location.search);
+        q.set('uuid', u);
+        const qs = q.toString();
+
         // 如果用户是从 /zh/p/<id> 进入，则保持该形式，方便复制分享
         if (location.pathname.startsWith('/zh/p/')) {
-          history.replaceState(null,'',`/zh/p/${encodeURIComponent(u)}`);
+          history.replaceState(null,'',`/zh/p/${encodeURIComponent(u)}${qs ? ('?' + qs) : ''}`);
         } else {
-          history.replaceState(null,'',`/zh/?uuid=${encodeURIComponent(u)}`);
+          history.replaceState(null,'',`/zh/${qs ? ('?' + qs) : ''}`);
         }
       }
 
