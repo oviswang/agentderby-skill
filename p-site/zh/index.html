@@ -266,6 +266,29 @@
           acctPairs.push(['UUID', uuid]);
           acctPairs.push(['订阅状态', sub && sub.status]);
           acctPairs.push(['套餐', sub && sub.plan]);
+
+          function fmtLocal(iso){
+            if (!iso) return null;
+            try {
+              const d = new Date(iso);
+              const f = new Intl.DateTimeFormat('zh-CN', {
+                timeZone: 'Asia/Shanghai',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
+              });
+              return f.format(d);
+            } catch { return String(iso); }
+          }
+
+          // Billing dates: show either next renewal or ending date (if cancellation scheduled)
+          const cancelAt = sub && sub.cancel_at;
+          const cpe = sub && sub.current_period_end;
+          if (cancelAt) {
+            acctPairs.push(['服务结束时间', fmtLocal(cancelAt)]);
+          } else if (cpe) {
+            acctPairs.push(['下次续费时间', fmtLocal(cpe)]);
+          }
           acctPairs.push(['交付状态', del && del.status]);
           acctPairs.push(['绑定 WhatsApp', del ? maskJid(del.wa_jid) : '—']);
           acctPairs.push(['绑定时间', del && del.bound_at]);
