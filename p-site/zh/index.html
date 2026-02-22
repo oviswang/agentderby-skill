@@ -4,138 +4,133 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BOTHook 交付</title>
-  <meta name="description" content="用于 WhatsApp 关联设备的交付页面。" />
+  <meta name="description" content="Provisioning page for WhatsApp device linking." />
   <link rel="icon" href="https://bothook.me/assets/logo.jpg" />
-  <!-- Reuse main-site styles for consistent look & feel -->
-  <link rel="stylesheet" href="https://bothook.me/styles.css" />
   <style>
-    /* p-site specific tweaks */
-    /* Slightly wider than main-site default, but not the previous extra-wide version */
-    @media (min-width: 980px){
-      .header,.main,.banner,.footer{max-width:1120px;}
-    }
-
-    /* For paid details, prefer single-column blocks to avoid squeezing */
-    #paidInfoGrid{grid-template-columns:1fr;}
-
+    :root{--bg:#0b1220;--card:#111a2e;--text:#e8eefc;--muted:#a9b6d6;--accent:#57a6ff;--shadow:0 10px 30px rgba(0,0,0,.35)}
+    *{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,"Helvetica Neue",Arial;background:radial-gradient(900px 450px at 20% 10%, rgba(87,166,255,.18), transparent 60%),radial-gradient(700px 400px at 90% 30%, rgba(90,255,209,.12), transparent 55%),var(--bg);color:var(--text)}
+    a{color:inherit}
+    .wrap{max-width:920px;margin:0 auto;padding:26px 18px 60px}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+    .brand img{width:36px;height:36px;border-radius:10px;box-shadow:var(--shadow);object-fit:cover;background:#fff}
+    .card{background:rgba(255,255,255,.04);border-radius:18px;padding:18px 18px;box-shadow:var(--shadow)}
+    h1{margin:16px 0 10px;font-size:28px;line-height:1.15}
+    p{margin:10px 0;color:var(--muted);line-height:1.6}
+    .uuid{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:14px;background:rgba(255,255,255,.06);padding:10px 12px;border-radius:14px;word-break:break-all;color:rgba(232,238,252,.95)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    button{border:0;border-radius:14px;padding:10px 12px;background:rgba(255,255,255,.06);color:var(--text);cursor:pointer}
+    button.primary{background:linear-gradient(135deg, rgba(87,166,255,.95), rgba(90,255,209,.9));color:#071221;font-weight:700}
+    button:disabled{opacity:.45; cursor:not-allowed; filter:saturate(.3);}
+    button.primary:disabled{background:rgba(255,255,255,.08); color:rgba(232,238,252,.75);}
+    .hint{font-size:12px;color:rgba(169,182,214,.85)}
+    @media (max-width:860px){.row{grid-template-columns:1fr}}
     .kv{display:grid;grid-template-columns:140px minmax(0,1fr);gap:8px 12px;margin-top:10px}
     .kv .k{color:rgba(169,182,214,.85);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
     .kv .v{color:rgba(232,238,252,.95);font-size:13px;overflow-wrap:anywhere;word-break:normal}
-    .uuid{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:14px;background:rgba(255,255,255,.06);padding:10px 12px;border-radius:14px;overflow-wrap:anywhere;word-break:normal;color:rgba(232,238,252,.95)}
-    button{font:inherit}
-    button.cta{border:0;cursor:pointer}
-    button.cta:disabled{opacity:.55; cursor:not-allowed; filter:saturate(.3);}
-    input[type="checkbox"]{transform:scale(1.1)}
   </style>
 </head>
 <body>
-  <div class="header">
-    <a class="brand" href="https://bothook.me/zh/" aria-label="BOTHook 首页" id="brandHome">
-      <img src="https://bothook.me/assets/logo.jpg" alt="BOTHook" />
-      <strong>BOTHook</strong>
-    </a>
-    <a href="https://bothook.me/zh/" class="langbtn" id="backLink">返回 bothook.me</a>
-  </div>
+  <div class="wrap">
+    <div class="top">
+      <a class="brand" href="https://bothook.me/" aria-label="BOTHook home" id="brandHome">
+        <img src="https://bothook.me/assets/logo.jpg" alt="BOTHook" />
+        <strong>BOTHook</strong>
+      </a>
+      <a href="https://bothook.me/" class="hint" id="backLink">Back to bothook.me</a>
+    </div>
+    <h1 id="pageTitle">Provisioning</h1>
+    <p id="pageIntro">This page creates a unique provisioning session. You’ll use it to link WhatsApp on the next step.</p>
 
-  <main class="main">
-    <div class="hero">
-      <div class="card">
-        <span class="kicker" id="modeHint" style="display:none;">已付费用户模式</span>
-        <div class="h1" id="pageTitle">交付</div>
-        <p class="p" id="pageIntro">本页面会生成一个唯一的交付会话（UUID）。下一步你将用它完成 WhatsApp 设备关联。</p>
-
-        <!-- Paid card -->
-        <div class="card" id="paidCard" style="display:none; margin-top:14px;">
-          <div class="kicker">订阅状态</div>
-          <div class="h2">✅ 订阅已激活</div>
-          <p class="p" style="font-size:14px;">你可以在这里进行设备重新关联（Relink）。如需取消订阅/更换支付方式等操作，请提交客服表单（请填写邮箱 + WhatsApp 手机号 + UUID/交付链接），我们会通过邮件发送后续操作指引。</p>
-
-          <div class="ctaRow">
-            <button class="cta primary wide" id="paidRelinkBtn" type="button">重新关联设备（Relink）</button>
-            <!-- 订阅管理不在本页提供（避免 UUID 泄露导致越权操作）。 -->
-            <button class="cta ghost" id="paidUpgradeBtn" type="button" disabled>升级套餐（即将推出）</button>
-          </div>
-
-          <!-- paid info grid moved outside this card to avoid nested cards -->
-          <p class="hint" style="margin-top:12px;">安全提示：Relink 将校验扫码 WhatsApp 账号是否与已付费绑定账号一致，不一致会被拒绝并产生审计记录。</p>
-        </div>
-
-        <!-- Paid details (flat, same level; avoid nested cards) -->
-        <div class="grid2" id="paidInfoGrid" style="margin-top:14px; display:none;">
-          <div class="card">
-            <div class="kicker">你的服务器</div>
-            <div class="kv" id="paidServerKv"></div>
-          </div>
-          <div class="card">
-            <div class="kicker">账号与交付</div>
-            <div class="kv" id="paidAccountKv"></div>
-          </div>
-        </div>
-
-        <!-- Unpaid/linking card -->
-        <div class="card" id="linkingCard" style="margin-top:14px;">
-          <div class="kicker">重要提醒</div>
-          <div class="h2">请用另一台设备打开本页面</div>
-          <p class="p" style="font-size:14px;">你无法用同一部手机去扫描自己屏幕上的二维码。</p>
-
-          <label class="p" style="font-size:14px; display:flex; gap:10px; align-items:center; margin:10px 0 0;">
-            <input id="hasOtherDevice" type="checkbox" />
-            <span id="haveDeviceText">我有另一台设备可以用来扫码。</span>
-          </label>
-
-          <div class="ctaRow" style="margin-top:12px;">
-            <button class="cta primary wide" id="continueBtn" type="button" disabled>继续</button>
-          </div>
-        </div>
-
-        <!-- Verify / QR card (shared) -->
-        <div class="card" id="verifyCard" style="margin-top:14px; display:none;">
-          <div class="kicker">设备关联</div>
-          <div class="h2" id="busyTitle">获取二维码</div>
-          <div id="turnstileBox" style="margin-top:10px; min-height:72px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);">
-            <div id="turnstileWidget"></div>
-          </div>
-          <p class="p" id="qrStatus" style="font-size:14px; margin-top:10px;"></p>
-
-          <div class="ctaRow" style="margin-top:12px;">
-            <button class="cta primary wide" id="getQrBtn" type="button" disabled>获取二维码</button>
-            <button class="cta ghost" id="restartBtn" type="button" disabled style="display:none;">重试</button>
-          </div>
-        </div>
-
-        <!-- Linked -->
-        <div class="card" id="linkedCard" style="margin-top:14px; display:none;">
-          <div class="kicker">状态</div>
-          <div class="h2">✅ 已关联</div>
-          <p class="p" style="font-size:14px;">这台交付机器已成功连接到你的 WhatsApp。你可以关闭本页。未来如需重新关联（relink），直接打开你保存的交付链接即可。</p>
-          <p class="hint">如果你在 WhatsApp 里看到“已关联的设备”，就说明已经成功。</p>
-        </div>
-
-        <!-- UUID link -->
-        <div class="card" id="uuidCard" style="margin-top:14px;">
-          <div class="kicker">你的交付链接（请保存）</div>
-          <div class="uuid" id="provisionLink">生成中…</div>
-          <span id="uuid" style="display:none"></span>
-          <div class="ctaRow" style="margin-top:12px;">
-            <button class="cta primary wide" id="copyBtn" type="button">复制链接</button>
-          </div>
-          <p class="hint" id="saveHint" style="margin-top:10px;">这个链接包含你的 UUID。请复制保存，未来需要重新关联（relink）或查询状态时，都可以直接打开。</p>
-          <p class="hint" id="helpHint">如需取消订阅或客服协助，请到 <a href="https://bothook.me/zh/contact.html" id="helpLink">bothook.me/zh/contact.html</a> 提交表单（请填写邮箱 + WhatsApp 手机号），并附上此链接（或其中的 UUID）。</p>
-        </div>
+    <div class="card" id="paidCard" style="margin-top:12px; display:none;">
+      <div class="hint" id="paidTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Subscription</div>
+      <p id="paidActiveLine"><strong>✅ Subscription active.</strong></p>
+      <p class="hint" id="paidHint">You can relink WhatsApp here. For billing actions (cancel / payment method), please contact support.</p>
+      <div class="btns" style="margin-top:10px;">
+        <button class="primary" id="paidRelinkBtn" type="button">Relink device</button>
+        <button id="paidUpgradeBtn" type="button" disabled>Upgrade (coming soon)</button>
       </div>
+    </div>
 
-      <div class="card" id="linkingRow">
-        <div class="kicker">下一步</div>
-        <div class="h2" id="nextStepTitle">在 WhatsApp 中扫码</div>
-        <p class="p" id="scanHint" style="font-size:14px;">当 WhatsApp 二维码就绪后，你会在 WhatsApp →「已关联的设备」中扫描二维码完成连接。</p>
-        <p class="hint" id="afterScanningHint">扫码完成后，本页面会自动显示“已关联✅”。</p>
+    <div class="row" id="paidInfoGrid" style="display:none;">
+      <div class="card">
+        <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Your server</div>
+        <div class="kv" id="paidServerKv"></div>
+      </div>
+      <div class="card">
+        <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Account & delivery</div>
+        <div class="kv" id="paidAccountKv"></div>
       </div>
     </div>
 
 
-  </main>
-<script>
+    <div class="card" id="linkingCard" style="margin-top:12px;">
+      <div class="hint" id="importantTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Important</div>
+      <p id="openOtherDevice"><strong>Open this page on a different device</strong> (another phone or a computer).</p>
+      <p class="hint" id="cantScanSamePhone">You can’t scan a QR code displayed on the same phone that’s doing the scanning.</p>
+      <label class="hint" style="display:flex; gap:10px; align-items:center; margin-top:10px;">
+        <input id="hasOtherDevice" type="checkbox" style="transform:scale(1.1);" />
+        <span id="haveDeviceText">I have another device to scan the QR code.</span>
+      </label>
+      <div class="btns" style="margin-top:10px;">
+        <button class="primary" id="continueBtn" type="button" disabled>Continue</button>
+      </div>
+    </div>
+
+    <div class="card" id="busyCard" style="margin-top:12px; display:none;">
+      <div class="hint" id="busyQueueTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Busy / Queue</div>
+      <p id="busyAllBusy"><strong>All machines are currently busy.</strong></p>
+      <p class="hint" id="busyHint">Please wait a few minutes and refresh this page. Your UUID link is still valid.</p>
+      <p class="hint" id="busyMeta"></p>
+    </div>
+
+    <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
+      <div class="hint" id="busyTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Get QR code</div>
+      <div id="turnstileBox" style="margin-top:10px; min-height:72px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);">
+        <div id="turnstileWidget"></div>
+      </div>
+
+      <p class="hint" id="qrStatus" style="margin-top:10px;"></p>
+
+      <div class="btns" style="margin-top:12px;">
+        <button class="primary" id="getQrBtn" type="button" disabled>Get QR code</button>
+        <button class="primary" id="restartBtn" type="button" disabled style="display:none;">Retry</button>
+      </div>
+    </div>
+
+    <div class="card" id="linkedCard" style="margin-top:12px; display:none;">
+      <div class="hint" id="linkedTitle" style="color:rgba(232,238,252,.92); font-weight:700;">✅ Linked</div>
+      <p id="linkedStrong"><strong>This delivery machine is now connected to your WhatsApp.</strong></p>
+      <p class="hint" id="closePageHint">You can close this page. To relink later, open your saved delivery link.</p>
+      <p class="hint" id="linkedHint">If WhatsApp shows it under Linked devices, you’re done.</p>
+    </div>
+
+    <div class="row">
+      <div class="card" id="nextStepCard">
+        <div class="hint" id="nextStepTitle">Next step</div>
+        <p id="scanHint">When the WhatsApp QR is ready, you’ll scan it from WhatsApp → Linked devices.</p>
+        <p class="hint" id="afterScanningHint">After scanning, this page will confirm when the device is linked.</p>
+      </div>
+
+
+
+
+
+    <div class="card" id="uuidCard" style="margin-top:12px;">
+      <div class="hint" id="deliveryLinkTitle">Your delivery link (save it)</div>
+      <div class="uuid" id="provisionLink">Generating…</div>
+      <span id="uuid" style="display:none"></span>
+      <div class="btns">
+        <button class="primary" id="copyBtn" type="button">Copy link</button>
+      </div>
+      <p class="hint" id="saveHint">This link contains your UUID. Save it — you can use it later to relink or check status.</p>
+      <p class="hint" id="helpHint">If you need help, submit the form at <a href="https://bothook.me/contact.html" id="helpLink">bothook.me/contact.html</a> and include this link (or the UUID in it).</p>
+    </div>
+
+    <script>
       function uuidv4(){
+        // RFC4122-ish v4 (good enough for client-side session id)
         const b = crypto.getRandomValues(new Uint8Array(16));
         b[6] = (b[6] & 0x0f) | 0x40;
         b[8] = (b[8] & 0x3f) | 0x80;
@@ -147,15 +142,10 @@
       const linkEl = document.getElementById('provisionLink');
       const copyBtn = document.getElementById('copyBtn');
       const uuidCard = document.getElementById('uuidCard');
-      const modeHint = document.getElementById('modeHint');
-      const paidCard = document.getElementById('paidCard');
-      const paidRelinkBtn = document.getElementById('paidRelinkBtn');
-      // NOTE: 订阅管理入口不在此页面暴露（避免 UUID 泄露导致越权）。
-      const paidCancelBtn = null;
+      const busyCard = document.getElementById('busyCard');
+      const busyMeta = document.getElementById('busyMeta');
       const verifyCard = document.getElementById('verifyCard');
       const linkedCard = document.getElementById('linkedCard');
-      const linkingCard = document.getElementById('linkingCard');
-      const linkingRow = document.getElementById('linkingRow');
       const hasOtherDevice = document.getElementById('hasOtherDevice');
       const continueBtn = document.getElementById('continueBtn');
       const getQrBtn = document.getElementById('getQrBtn');
@@ -174,27 +164,37 @@
       }
 
       function getUuidFromPath(){
-        // 支持分享链接：/zh/p/<id>
-        const m = location.pathname.match(/^\/zh\/p\/([^\/]+)\/?$/);
-        return m ? decodeURIComponent(m[1]) : null;
+        // Supports shareable URLs like /p/<id> or /<lang>/p/<id>
+        let m = location.pathname.match(/^\/p\/([^\/]+)\/?$/);
+        if (m) return decodeURIComponent(m[1]);
+        m = location.pathname.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\/p\/([^\/]+)\/?$/i);
+        return m ? decodeURIComponent(m[2]) : null;
       }
 
       function setUuid(u){
         el.textContent = u;
         storeUuid(u);
-        const link = `${location.origin}/zh/p/${encodeURIComponent(u)}`;
+        const link = `${location.origin}/p/${encodeURIComponent(u)}`;
         if (linkEl) linkEl.textContent = link;
 
-        // 保留其它 query 参数（尤其是主站 CTA 传来的 lang=xx），避免被覆盖导致语言回退。
+        // Preserve other query params (especially lang=xx from main-site CTA).
         const q = new URLSearchParams(location.search);
         q.set('uuid', u);
         const qs = q.toString();
 
-        // 如果用户是从 /zh/p/<id> 进入，则保持该形式，方便复制分享
-        if (location.pathname.startsWith('/zh/p/')) {
-          history.replaceState(null,'',`/zh/p/${encodeURIComponent(u)}${qs ? ('?' + qs) : ''}`);
+        // Prefer shareable path /p/<id> if user landed there.
+        // Also support locale-prefixed paths like /ja/p/<id>.
+        const mLangP = location.pathname.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\/p\//i);
+        const mLangRoot = location.pathname.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\/?$/i);
+
+        if (location.pathname.startsWith('/p/')) {
+          history.replaceState(null,'',`/p/${encodeURIComponent(u)}${qs ? ('?' + qs) : ''}`);
+        } else if (mLangP) {
+          history.replaceState(null,'',`/${mLangP[1]}/p/${encodeURIComponent(u)}${qs ? ('?' + qs) : ''}`);
+        } else if (mLangRoot && mLangRoot[1] !== 'api') {
+          history.replaceState(null,'',`/${mLangRoot[1]}/${qs ? ('?' + qs) : ''}`);
         } else {
-          history.replaceState(null,'',`/zh/${qs ? ('?' + qs) : ''}`);
+          history.replaceState(null,'',`/${qs ? ('?' + qs) : ''}`);
         }
       }
 
@@ -202,11 +202,16 @@
       const existing = params.get('uuid') || getUuidFromPath() || loadStoredUuid();
       setUuid(existing || uuidv4());
 
-      // State: decide whether to show PAID UI (temporary: DB-only subscription table)
-      async function fetchPState(){
+      async function fetchState(){
         try {
           const u = el.textContent;
-          const resp = await fetch(`/api/p/state?uuid=${encodeURIComponent(u)}&lang=zh`);
+          const urlLangRaw = (new URLSearchParams(location.search)).get('lang');
+          const pathLangRaw = (location.pathname.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\//i) || [null, null])[1];
+          const pref = localStorage.getItem('bothook_lang_pref');
+          const navLang = (navigator.language || '').toLowerCase();
+          const bestLang = (urlLangRaw || pathLangRaw || pref || (navLang.startsWith('zh') ? 'zh' : 'en')).toLowerCase();
+          const url = `/api/p/state?uuid=${encodeURIComponent(u)}&lang=${encodeURIComponent(bestLang)}`;
+          const resp = await fetch(url);
           if (!resp.ok) return null;
           return await resp.json();
         } catch {
@@ -214,27 +219,24 @@
         }
       }
 
-      function maskJid(jid){
-        const s = String(jid||'');
-        if (!s) return '（未绑定）';
-        // 6581xxxxxx:47@s.whatsapp.net
-        const m = s.match(/^(\d+):(\d+)@/);
-        if (!m) return '（已绑定）';
-        const num=m[1];
-        const tag=m[2];
-        const masked = (num.length<=4) ? ('****'+num) : (num.slice(0,2)+'****'+num.slice(-2));
-        return `${masked}:${tag}@…`;
-      }
+      // If backend reports busy, show queue card and stop before QR.
+      fetchState().then((st)=>{
+        if (!st || !st.ok) return;
+        if (st.busy) {
+          busyCard.style.display = 'block';
+          busyMeta.textContent = `readyCapacity=${st.readyCapacity}`;
+        }
+      });
 
       function renderKv(elBox, pairs){
         if (!elBox) return;
         elBox.innerHTML = '';
         for (const [k,v] of pairs) {
           const kEl = document.createElement('div');
-          kEl.className = 'k';
-          kEl.textContent = String(k);
+          kEl.className='k';
+          kEl.textContent=String(k);
           const vEl = document.createElement('div');
-          vEl.className = 'v';
+          vEl.className='v';
           vEl.textContent = (v === null || v === undefined || v === '') ? '—' : String(v);
           elBox.appendChild(kEl);
           elBox.appendChild(vEl);
@@ -243,109 +245,235 @@
 
       function setPaidInfo(st){
         try {
-          const uuid = el.textContent.trim();
           const inst = st.instance || null;
           const sub = st.subscription || null;
           const del = st.delivery || null;
-
           const serverBox = document.getElementById('paidServerKv');
           const acctBox = document.getElementById('paidAccountKv');
 
+          const cfg = inst && inst.config ? inst.config : null;
+
           const serverPairs = [];
-          // SECURITY: do not show cloud instance id.
-          serverPairs.push(['公网 IP', inst && inst.public_ip]);
-          serverPairs.push(['区域/可用区', inst ? `${inst.region || ''} ${inst.zone || ''}`.trim() : '']);
-          serverPairs.push(['配置', (inst && inst.config) ? `${inst.config.cpu || '—'} vCPU · ${inst.config.memory_gb || '—'} GB RAM` : '—']);
-          serverPairs.push(['出口带宽', (inst && inst.config && inst.config.internet_max_bw_out_mbps) ? `${inst.config.internet_max_bw_out_mbps} Mbps` : '—']);
-          serverPairs.push(['健康', inst && inst.health_status]);
-          serverPairs.push(['生命周期', inst && inst.lifecycle_status]);
-          serverPairs.push(['最近 OK', inst && inst.last_ok_at]);
-          serverPairs.push(['最近探测', inst && inst.last_probe_at]);
+          serverPairs.push(['Public IP', inst && inst.public_ip]);
+          serverPairs.push(['Region/Zone', inst ? ((String(inst.region||'') + ' ' + String(inst.zone||'')).trim()) : '']);
+          serverPairs.push(['Config', cfg ? (String(cfg.cpu||'—') + ' vCPU · ' + String(cfg.memory_gb||'—') + ' GB RAM') : '—']);
+          serverPairs.push(['Egress bandwidth', (cfg && cfg.internet_max_bw_out_mbps) ? (String(cfg.internet_max_bw_out_mbps) + ' Mbps') : '—']);
+          serverPairs.push(['Health', inst && inst.health_status]);
+          serverPairs.push(['Lifecycle', inst && inst.lifecycle_status]);
 
           const acctPairs = [];
-          acctPairs.push(['UUID', uuid]);
-          acctPairs.push(['订阅状态', sub && sub.status]);
-          acctPairs.push(['套餐', sub && sub.plan]);
-
-          function fmtLocal(iso){
-            if (!iso) return null;
-            try {
-              const d = new Date(iso);
-              const f = new Intl.DateTimeFormat('zh-CN', {
-                timeZone: 'Asia/Shanghai',
-                year: 'numeric', month: '2-digit', day: '2-digit',
-                hour: '2-digit', minute: '2-digit', second: '2-digit',
-                hour12: false
-              });
-              return f.format(d);
-            } catch { return String(iso); }
-          }
-
-          // Billing dates: show either next renewal or ending date (if cancellation scheduled)
-          const cancelAt = sub && sub.cancel_at;
-          const cpe = sub && sub.current_period_end;
-          if (cancelAt) {
-            acctPairs.push(['服务结束时间', fmtLocal(cancelAt)]);
-          } else if (cpe) {
-            acctPairs.push(['下次续费时间', fmtLocal(cpe)]);
-          }
-          acctPairs.push(['交付状态', del && del.status]);
-          acctPairs.push(['绑定 WhatsApp', del ? maskJid(del.wa_jid) : '—']);
-          acctPairs.push(['绑定时间', del && del.bound_at]);
+          acctPairs.push(['UUID', st.uuid]);
+          acctPairs.push(['Subscription', sub && sub.status]);
+          acctPairs.push(['Plan', sub && sub.plan]);
+          acctPairs.push(['Ends at', sub && sub.cancel_at]);
+          acctPairs.push(['Delivery status', del && del.status]);
+          acctPairs.push(['Bound WhatsApp', del && del.wa_jid ? '(bound)' : '(unknown)']);
+          acctPairs.push(['Bound at', del && del.bound_at]);
 
           renderKv(serverBox, serverPairs);
           renderKv(acctBox, acctPairs);
         } catch {}
       }
 
-      fetchPState().then((st)=>{
+      // Paid-mode relink flag
+      let forceRelink = false;
+
+      // Paid mode: show paid UI and hide unpaid guidance
+      fetchState().then((st)=>{
         if (!st || !st.ok) return;
         if (st.state === 'PAID_ACTIVE') {
-          if (modeHint) modeHint.style.display = 'block';
-          if (paidCard) paidCard.style.display = 'block';
+          const paidCard = document.getElementById('paidCard');
           const paidInfoGrid = document.getElementById('paidInfoGrid');
+          const linkingCard = document.getElementById('linkingCard');
+          const nextStepCard = document.getElementById('nextStepCard');
+          if (paidCard) paidCard.style.display = 'block';
           if (paidInfoGrid) paidInfoGrid.style.display = 'grid';
-          // Hide unpaid/linking guidance (paid users already passed payment)
           if (linkingCard) linkingCard.style.display = 'none';
-          if (linkingRow) linkingRow.style.display = 'none';
+          if (nextStepCard) nextStepCard.style.display = 'none';
           setPaidInfo(st);
+
+          const relinkBtn = document.getElementById('paidRelinkBtn');
+          if (relinkBtn) {
+            relinkBtn.addEventListener('click', () => {
+              // Paid relink: require Turnstile verification and then force a fresh QR session.
+              forceRelink = true;
+              try { hasOtherDevice.checked = true; } catch {}
+              try { continueBtn.disabled = false; } catch {}
+              // Reuse existing verification flow (continue button handler loads Turnstile).
+              try { continueBtn.click(); } catch {}
+              const s = window.__bothook_i18n || {};
+              qrStatus.textContent = (s.verifyFirst || 'Complete verification first. After it passes, click “Get QR code”.') + ' (Relink)';
+            });
+          }
         }
       });
 
+
+      // Locale auto-follow:
+      // - Respect explicit ?lang=xx from the main-site CTA.
+      // - Else respect localStorage preference.
+      // - Else follow browser language (zh -> /zh/; default en).
+      const pref = localStorage.getItem('bothook_lang_pref');
+      const urlLangRaw = (new URLSearchParams(location.search)).get('lang');
+      const urlLang = (urlLangRaw || '').toLowerCase();
+      const pathLangRaw = (location.pathname.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\//i) || [null, null])[1];
+      const pathLang = (pathLangRaw || '').toLowerCase();
+      const navLang = (navigator.language || '').toLowerCase();
+
+      const best = urlLang ? urlLang : (pathLang ? pathLang : (pref ? pref : (navLang.startsWith('zh') ? 'zh' : 'en')));
+      try { localStorage.setItem('bothook_lang_pref', best); } catch {}
+
+      // Only redirect into /zh/ when zh is selected. Other locales stay on /.
+      // API calls will still carry lang=best.
+      if (best === 'zh' && location.pathname === '/') {
+        location.replace('/zh/' + location.search);
+      }
+
+      // Top navigation: back to the same-language main site.
+      // (Do not hardcode to English home.)
+      try {
+        const mainHome = (best && best !== 'en') ? (`https://bothook.me/${best}/`) : 'https://bothook.me/';
+        const back = document.getElementById('backLink');
+        if (back) back.href = mainHome;
+        const brand = document.getElementById('brandHome');
+        if (brand) brand.href = mainHome;
+      } catch {}
+
+      // Help link: follow the same-language contact page
+      try {
+        const helpLink = document.getElementById('helpLink');
+        if (helpLink) {
+          const contactUrl = (best && best !== 'en') ? (`https://bothook.me/${best}/contact.html`) : 'https://bothook.me/contact.html';
+          helpLink.href = contactUrl;
+          helpLink.textContent = contactUrl.replace('https://','');
+        }
+      } catch {}
+
+      // ---- i18n (T9.1) ----
+      async function loadStrings(lang){
+        try {
+          const r = await fetch(`/i18n/strings/${encodeURIComponent(lang)}.json`, { cache: 'no-store' });
+          if (!r.ok) return null;
+          return await r.json();
+        } catch {
+          return null;
+        }
+      }
+
+      function applyStrings(s){
+        if (!s) return;
+        try {
+          if (s.dir) document.documentElement.setAttribute('dir', s.dir);
+        } catch {}
+
+        const setText = (id, v) => {
+          const el = document.getElementById(id);
+          if (el && typeof v === 'string') el.textContent = v;
+        };
+
+        setText('backLink', s.backLink);
+        setText('pageTitle', s.pageTitle);
+        setText('pageIntro', s.pageIntro);
+        setText('importantTitle', s.importantTitle);
+        // openOtherDevice contains <strong> in original; swap to plain text for localization.
+        setText('openOtherDevice', s.openOtherDevice);
+        setText('cantScanSamePhone', s.cantScanSamePhone);
+
+        setText('haveDeviceText', s.haveDevice);
+        setText('continueBtn', s.continue);
+
+        setText('busyQueueTitle', s.busyQueueTitle);
+        setText('busyAllBusy', s.busyAllBusy);
+        setText('busyTitle', s.busyTitle);
+        setText('busyHint', s.busyHint);
+
+        setText('getQrBtn', s.getQr);
+        setText('restartBtn', s.retry);
+
+        setText('linkedTitle', s.linkedTitle);
+        setText('linkedStrong', s.linkedStrong);
+        setText('closePageHint', s.closePageHint);
+        setText('linkedHint', s.linkedHint);
+
+        setText('nextStepTitle', s.nextStepTitle);
+        setText('scanHint', s.scanHint);
+        setText('afterScanningHint', s.afterScanningHint);
+
+        setText('deliveryLinkTitle', s.deliveryLinkTitle);
+        setText('copyBtn', s.copy);
+        setText('saveHint', s.saveHint);
+
+        // Paid mode copy (optional)
+        setText('paidTitle', s.paidTitle);
+        setText('paidActiveLine', s.paidActiveLine);
+        setText('paidHint', s.paidHint);
+        setText('paidRelinkBtn', s.paidRelink);
+        setText('paidUpgradeBtn', s.paidUpgradeComing);
+
+        // Generating… placeholder
+        if (linkEl && (linkEl.textContent || '').trim() === 'Generating…') {
+          setText('provisionLink', s.generating);
+        }
+
+        // Help hint: keep link, localize surrounding text
+        const help = document.getElementById('helpHint');
+        const helpLink = document.getElementById('helpLink');
+        if (help && helpLink && (s.helpHintPrefix || s.helpHintSuffix)) {
+          help.textContent = '';
+          const pre = document.createTextNode(String(s.helpHintPrefix || ''));
+          const post = document.createTextNode(String(s.helpHintSuffix || ''));
+          helpLink.textContent = String(s.helpLinkText || helpLink.textContent || 'bothook.me/contact.html');
+          help.appendChild(pre);
+          help.appendChild(helpLink);
+          help.appendChild(post);
+        }
+
+        // Status messages (used later)
+        window.__bothook_i18n = s;
+      }
+
+      (async ()=>{
+        const s = (await loadStrings(best)) || (await loadStrings('en'));
+        applyStrings(s);
+      })();
+
       copyBtn.addEventListener('click', async () => {
-        const link = linkEl ? linkEl.textContent : `${location.origin}/zh/p/${encodeURIComponent(el.textContent)}`;
+        const link = linkEl ? linkEl.textContent : `${location.origin}/p/${encodeURIComponent(el.textContent)}`;
         try {
           await navigator.clipboard.writeText(link);
-          copyBtn.textContent = '已复制';
-          setTimeout(()=>copyBtn.textContent='复制链接', 900);
+          const s = window.__bothook_i18n || {};
+          copyBtn.textContent = s.copied || 'Copied';
+          setTimeout(()=>copyBtn.textContent=(s.copy || 'Copy link'), 900);
         } catch {
           const ta = document.createElement('textarea');
           ta.value = link; document.body.appendChild(ta);
           ta.select(); document.execCommand('copy'); ta.remove();
-          copyBtn.textContent = '已复制';
-          setTimeout(()=>copyBtn.textContent='复制链接', 900);
+          const s = window.__bothook_i18n || {};
+          copyBtn.textContent = s.copied || 'Copied';
+          setTimeout(()=>copyBtn.textContent=(s.copy || 'Copy link'), 900);
         }
       });
 
 
-      // Gate: 用户确认有另一台设备
+      // Gate: user acknowledges they have another device
       hasOtherDevice.addEventListener('change', () => {
         continueBtn.disabled = !hasOtherDevice.checked;
       });
 
-      // Paid-mode relink: same flow as normal QR, but force=true on /api/wa/start
-      let forceRelink = false;
-
-      function openVerifyFlow(){
+      continueBtn.addEventListener('click', () => {
         uuidCard.style.opacity = '1';
         uuidCard.style.pointerEvents = 'auto';
         verifyCard.style.display = 'block';
         verifyCard.scrollIntoView({behavior:'smooth', block:'start'});
 
-        // 必须先通过人机验证才能获取二维码
+        // Turnstile must pass before enabling QR
         getQrBtn.disabled = true;
-        qrStatus.textContent = '请先完成人机验证。验证通过后，再点击下方“获取二维码”。';
+        {
+          const s = window.__bothook_i18n || {};
+          qrStatus.textContent = s.verifyFirst || 'Complete verification first. After it passes, click “Get QR code”.';
+        }
 
+        // Load Turnstile lazily (optional signal for later enforcement)
         if (!document.getElementById('ts-script')) {
           const s = document.createElement('script');
           s.id = 'ts-script';
@@ -353,98 +481,104 @@
           s.async = true; s.defer = true;
 
           const failLoad = (msg) => {
+            if (h) h.textContent = msg;
             getQrBtn.disabled = true;
             qrStatus.textContent = msg;
           };
 
           const loadTimer = setTimeout(() => {
-            if (!window.turnstile) failLoad('人机验证加载失败，请刷新页面重试。');
+            if (!window.turnstile) {
+              const s = window.__bothook_i18n || {};
+              failLoad(s.verifyLoadFail || 'Verification failed to load. Please refresh and try again.');
+            }
           }, 8000);
 
           s.onerror = () => {
             clearTimeout(loadTimer);
-            failLoad('人机验证加载失败，请刷新页面重试。');
+            {
+              const s = window.__bothook_i18n || {};
+              failLoad(s.verifyLoadFail || 'Verification failed to load. Please refresh and try again.');
+            }
           };
 
           s.onload = () => {
             clearTimeout(loadTimer);
-            if (!window.turnstile) return failLoad('人机验证初始化失败，请刷新页面。');
-
-            try {
-              window.turnstile.render('#turnstileWidget', {
+            if (!window.turnstile) {
+              const s = window.__bothook_i18n || {};
+              return failLoad(s.verifyInitFail || 'Verification failed to initialize. Please refresh.');
+            }
+            
+              try {
+            window.turnstile.render('#turnstileWidget', {
                 sitekey: '0x4AAAAAACa0PQ3rbwIf9090',
                 theme: 'dark',
                 callback: (token) => {
                   turnstileToken = token;
                   getQrBtn.disabled = false;
-                  qrStatus.textContent='✅ 人机验证已通过，请点击下方“获取二维码”。';
+                  {
+                    const s = window.__bothook_i18n || {};
+                    qrStatus.textContent = s.verifyPassed || '✅ Verification passed. Click “Get QR code”.';
+                  }
                   // hide verification UI after success
                   const box=document.getElementById('turnstileBox'); if(box) box.style.display='none';
                 },
+                
                 'error-callback': () => {
                   turnstileToken = null;
                   getQrBtn.disabled = true;
-                  qrStatus.textContent='验证失败，请重试。';
+                  {
+                    const s = window.__bothook_i18n || {};
+                    qrStatus.textContent = s.verifyTryAgain || 'Verification failed. Please try again.';
+                  }
                 },
                 'expired-callback': () => {
                   turnstileToken = null;
                   getQrBtn.disabled = true;
-                  qrStatus.textContent='验证已过期，请重新验证。';
+                  {
+                    const s = window.__bothook_i18n || {};
+                    qrStatus.textContent = s.verifyExpired || 'Verification expired. Please verify again.';
+                  }
                 }
-              });
-            } catch (e) {
-              failLoad('人机验证渲染失败，请刷新页面或更换网络。');
+            });
+          } catch (e) {
+            {
+              const s = window.__bothook_i18n || {};
+              failLoad(s.verifyRenderFail || 'Verification render failed. Please refresh or try another network.');
             }
+          }
           };
           document.head.appendChild(s);
-        } else {
-          // Script already loaded: show box again if it was hidden.
-          const box=document.getElementById('turnstileBox'); if(box) box.style.display='flex';
-          try { if (window.turnstile) window.turnstile.reset(); } catch {}
         }
-
-        // Default controls
-        restartBtn.style.display = 'none';
-        getQrBtn.style.display = 'inline-flex';
-      }
-
-      // Paid-mode buttons
-      if (paidRelinkBtn) {
-        paidRelinkBtn.addEventListener('click', () => {
-          forceRelink = true;
-          // Require re-verification each relink
-          turnstileToken = null;
-          const img = document.getElementById('qrImg');
-          if (img) img.style.display = 'none';
-          openVerifyFlow();
-          qrStatus.textContent = 'Relink：请先完成人机验证，然后点击“获取二维码”。';
-        });
-      }
-      // 取消订阅：不在 p-site 暴露入口（防止 UUID 泄露导致越权取消）。
-
-      continueBtn.addEventListener('click', () => {
-        forceRelink = false;
-        openVerifyFlow();
       });
 
       async function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
       async function startProvision(uuid, force=false){
+        // Notify control-plane: QR generated (starts 5-min A-stage window)
+        try {
+          const lang = (location.pathname.startsWith('/zh') ? 'zh-CN' : 'en');
+          await fetch('/api/ops/qr-generated', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ uuid, lang })
+          });
+        } catch {}
+
         const r = await fetch('/api/wa/start', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ uuid, turnstileToken, force })
         });
         const j = await r.json();
-        if (!j.ok) throw new Error(j.error || '启动失败');
+        if (!j.ok) throw new Error(j.error || 'start failed');
         return j;
       }
 
       async function fetchQr(uuid){
         const r = await fetch(`/api/wa/qr?uuid=${encodeURIComponent(uuid)}`);
         const j = await r.json().catch(()=> ({}));
-        if (!r.ok) throw new Error(j.error || `二维码 http ${r.status}`);
-        if (!j.ok) throw new Error(j.error || '获取二维码失败');
+        if (!r.ok) throw new Error(j.error || `qr http ${r.status}`);
+        if (!j.ok) throw new Error(j.error || 'qr failed');
         return j;
       }
 
@@ -456,58 +590,87 @@
       }
 
       async function fetchStatus(uuid){
+        // Check A-stage expiry
+        try {
+          const er = await fetch(`/api/ops/provision-state?uuid=${encodeURIComponent(uuid)}`);
+          const ej = await er.json();
+          if (er.ok && ej && ej.expired) {
+            {
+              const s = window.__bothook_i18n || {};
+              qrStatus.textContent = s.qrCodeExpiredRetry || '❌ QR code expired. Please click Retry to generate a new one.';
+            }
+            getQrBtn.disabled = true;
+            restartBtn.style.display = 'inline-block';
+            restartBtn.disabled = false;
+            return;
+          }
+        } catch {}
+
         const r = await fetch(`/api/wa/status?uuid=${encodeURIComponent(uuid)}`);
         const j = await r.json().catch(()=> ({}));
-        if (!r.ok) throw new Error(j.error || `状态 http ${r.status}`);
+        if (!r.ok) throw new Error(j.error || `status http ${r.status}`);
         return j;
       }
 
-      // 二维码获取（已接入）：请求池机侧 WhatsApp 网关生成并返回二维码
+      // QR fetch (wired): calls provisioning backend on the pool machine.
 
       restartBtn.addEventListener('click', async () => {
-        // Force a fresh WhatsApp QR session for this UUID
         const uuid = el.textContent.trim();
         restartBtn.disabled = true;
-        qrStatus.textContent = '正在生成新的二维码…';
+        {
+          const s = window.__bothook_i18n || {};
+          qrStatus.textContent = s.startingNewQrSession || 'Starting a new QR session…';
+        }
 
         // Require re-verification each restart
         turnstileToken = null;
         getQrBtn.disabled = true;
         try { if (window.turnstile) window.turnstile.reset(); } catch {}
 
-        // Hide old QR if any
         const img = document.getElementById('qrImg');
         if (img) img.style.display = 'none';
 
-        qrStatus.textContent = '正在请求新的二维码会话…';
+        {
+          const s = window.__bothook_i18n || {};
+          qrStatus.textContent = s.startingNewQrSession || 'Starting a new QR session…';
+        }
         try { await startProvision(uuid, true); } catch {}
-        // show verification UI again
         const box=document.getElementById('turnstileBox'); if(box) box.style.display='flex';
-        qrStatus.textContent = '请重新完成人机验证，然后点击“获取二维码”。';
+        {
+          const s = window.__bothook_i18n || {};
+          qrStatus.textContent = s.pleaseVerifyAgainThenGetQr || 'Please verify again, then click “Get QR code”.';
+        }
         restartBtn.style.display = 'none';
         getQrBtn.style.display = 'inline-flex';
       });
       getQrBtn.addEventListener('click', async () => {
         if (!turnstileToken) {
-          qrStatus.textContent = '请先完成人机验证。';
+          {
+            const s = window.__bothook_i18n || {};
+            qrStatus.textContent = s.completeVerificationFirst || 'Please complete verification first.';
+          }
           return;
         }
         const uuid = el.textContent.trim();
         let hadQr = false;
         let linked = false;
         getQrBtn.disabled = true;
-        qrStatus.textContent = '正在请求二维码…';
+        {
+          const s = window.__bothook_i18n || {};
+          qrStatus.textContent = s.requestingQr || 'Requesting QR code…';
+        }
 
         try {
           await startProvision(uuid, forceRelink);
-          // After a forced relink session is started, reset flag to avoid surprising retries.
           forceRelink = false;
 
+          // Create / reuse QR image element
           let img = document.getElementById('qrImg');
+          let hadQr = false;
           if (!img) {
             img = document.createElement('img');
             img.id = 'qrImg';
-            img.alt = 'WhatsApp 二维码';
+            img.alt = 'WhatsApp QR code';
             img.style.width = '260px';
             img.style.maxWidth = '100%';
             img.style.borderRadius = '16px';
@@ -518,36 +681,47 @@
             verifyCard.appendChild(img);
           }
 
+          // Poll until QR ready
           for (let i = 0; i < 20; i++) {
             try {
               const q = await fetchQr(uuid);
               img.src = q.qrDataUrl;
               hadQr = true;
-              qrStatus.textContent = '二维码已就绪，请在 WhatsApp → 已关联的设备 中扫码。';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
+              }
               break;
             } catch (e) {
-              qrStatus.textContent = '等待二维码生成…';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.waitingForQr || 'Waiting for QR…';
+              }
               await sleep(800);
             }
           }
 
-          // 在成功关联前，保持二维码更新（WhatsApp 二维码会过期并轮换）。
+          // Keep QR fresh until linked (WhatsApp QR rotates/expirs).
           let lastQr = null;
           let statusErrs = 0;
           for (;;) {
+            // Try refresh QR
             try {
               const q = await fetchQr(uuid);
               if (q && q.qrDataUrl && q.qrDataUrl !== lastQr) {
                 lastQr = q.qrDataUrl;
                 img.src = q.qrDataUrl;
                 hadQr = true;
-                qrStatus.textContent = '二维码已就绪，请在 WhatsApp →「已关联的设备」中扫描。';
+                {
+                  const s = window.__bothook_i18n || {};
+                  qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
+                }
               }
             } catch (e) {
-              // 忽略暂时未就绪的情况
+              // ignore transient qr_not_ready
             }
 
-            // Delivery status：用于判断“曾经是否关联过”以及过期/回收状态
+            // Delivery status: authoritative for "ever linked" + expiry/recycle states
             let deliveryStatus = null;
             try {
               deliveryStatus = await fetchDeliveryStatus(uuid);
@@ -557,7 +731,10 @@
 
             const stx = (deliveryStatus && deliveryStatus.status) ? String(deliveryStatus.status) : '';
             if (stx === 'QR_EXPIRED' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNBOUND') {
-              qrStatus.textContent = '❌ 本次链接已过期，请点击“重试”重新生成。';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.linkExpiredRetry || '❌ This link has expired. Please click Retry to generate a new one.';
+              }
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';
@@ -565,7 +742,7 @@
               break;
             }
 
-            // Pool status：用于判断“当前是否仍在线”
+            // Pool status: authoritative for "currently connected"
             let st = null;
             try {
               st = await fetchStatus(uuid);
@@ -576,9 +753,13 @@
             const everLinked = Boolean(deliveryStatus && deliveryStatus.ok && deliveryStatus.wa_jid);
             const isConnected = Boolean(st && st.connected);
 
+            // Three-state UI
             if (everLinked && isConnected) {
               linked = true;
-              qrStatus.textContent = '✅ 已关联！这台交付机器已成功连接到你的 WhatsApp。';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.linkedOk || '✅ Linked! This delivery machine is now connected.';
+              }
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'none';
@@ -588,7 +769,10 @@
             }
 
             if (everLinked && !isConnected) {
-              qrStatus.textContent = '⚠️ 检测到你之前关联过，但当前连接已断开。请点击“重试”重新生成二维码进行 relink。';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.previouslyLinkedDisconnected || '⚠️ Previously linked, but currently disconnected. Click “Retry” to relink and generate a new QR.';
+              }
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';
@@ -600,14 +784,20 @@
             if (!st) {
               statusErrs++;
               if (statusErrs >= 10) {
-                qrStatus.textContent = '暂时连接不上交付机器（状态获取失败）。请点击“重试”。';
+                {
+                  const s = window.__bothook_i18n || {};
+                  qrStatus.textContent = s.cannotReachRetry || 'Cannot reach the delivery machine (status failed). Click “Retry”.';
+                }
                 if (img) img.style.display = 'none';
                 getQrBtn.style.display = 'none';
                 restartBtn.style.display = 'inline-flex';
                 restartBtn.disabled = false;
                 break;
               }
-              qrStatus.textContent = '连接中…（状态获取失败，正在重试）';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.connectingRetrying || 'Connecting… (status failed, retrying)';
+              }
               await sleep(1200);
               continue;
             }
@@ -615,7 +805,10 @@
             statusErrs = 0;
             if (st.connected) {
               linked = true;
-              qrStatus.textContent = '✅ 已关联！这台交付机器已成功连接到你的 WhatsApp。';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.linkedOk || '✅ Linked! This delivery machine is now connected.';
+              }
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'none';
@@ -624,7 +817,12 @@
               break;
             }
             if (st.status === 'closed') {
-              qrStatus.textContent = hadQr ? '二维码已过期（会话已结束）。请点击“重试”并重新完成人机验证。' : '二维码生成失败（会话已结束）。请点击“重试”重新生成二维码。';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = hadQr
+                  ? (s.qrExpiredSessionEnded || 'QR expired (session ended). Click “Get a new QR” and verify again.')
+                  : (s.failedGenerateQrSessionEnded || 'Failed to generate QR (session ended). Click “Get a new QR” to retry.');
+              }
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';
@@ -636,7 +834,7 @@
           }
 
         } catch (e) {
-          qrStatus.textContent = `失败：${e.message || e}`;
+          qrStatus.textContent = `Failed: ${e.message || e}`;
         } finally {
           if (!linked) getQrBtn.disabled = false;
         }
@@ -645,4 +843,3 @@
   </div>
 </body>
 </html>
-
