@@ -37,5 +37,5 @@
   "verifyLoadFail": "No se pudo cargar la verificación. Actualiza y vuelve a intentarlo.",
   "verifyInitFail": "No se pudo iniciar la verificación. Actualiza la página.",
   "verifyRenderFail": "No se pudo mostrar la verificación. Actualiza o prueba otra red.",
-  "retry": "Retry"
+  "retry": "Reintentar"
 }

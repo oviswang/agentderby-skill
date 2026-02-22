@@ -37,5 +37,5 @@
   "verifyLoadFail": "Verifikasi gagal dimuat. Segarkan halaman dan coba lagi.",
   "verifyInitFail": "Verifikasi gagal diinisialisasi. Segarkan halaman.",
   "verifyRenderFail": "Verifikasi gagal ditampilkan. Segarkan halaman atau coba jaringan lain.",
-  "retry": "Retry"
+  "retry": "Coba lagi"
 }
