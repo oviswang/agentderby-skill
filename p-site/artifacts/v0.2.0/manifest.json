@@ -16,11 +16,11 @@
     },
     {
       "path": "provision/provision.tgz",
-      "sha256": "c46b88ab5ee6065fef44ad0dbb732ab327b1dd53baa00bc13782384649494bbc"
+      "sha256": "353a5073729e6458fbf5d0358499c21eb4f6a0e453590764ef107e209f436eb0"
     },
     {
       "path": "provision/server.mjs",
-      "sha256": "b7107e8589d0f7e44176463f53c609176ccc60a03b01e0a2adc94b3cfd630c2c"
+      "sha256": "0d7a0d29dd8afef80c90199cf27749d7d68e7ed2e8710344c73f4dff80afc4ed"
     },
     {
       "path": "scripts/cutover.sh",
@@ -36,7 +36,7 @@
     },
     {
       "path": "systemd/bothook-provision.service",
-      "sha256": "266eefc1a376e76ae6d8d94c700efb2345c8506233b58d9b102bc087185df86b"
+      "sha256": "38aa719711a0a8889fc6ed576dfd2d5dc792335a21138228fb6055d6509fa9bc"
     },
     {
       "path": "systemd/openclaw-gateway.service",

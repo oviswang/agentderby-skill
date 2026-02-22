@@ -5,8 +5,6 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=ubuntu
-Group=ubuntu
 WorkingDirectory=/opt/bothook/provision
 Environment=PROVISION_DATA_DIR=/opt/bothook/provision/data
 Environment=PROVISION_PORT=18999

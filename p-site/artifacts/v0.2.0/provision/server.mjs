@@ -60,13 +60,14 @@ function sh(cmd, { timeoutMs = 20000 } = {}) {
 
 function stopGateway(){
   // Avoid login competition.
-  sh('sudo systemctl stop openclaw-gateway.service || true', { timeoutMs: 15000 });
+  // Note: this service runs as root (to control systemd) but must allow HOME for session persistence.
+  sh('systemctl stop openclaw-gateway.service || true', { timeoutMs: 15000 });
   // Also stop user service if present.
   sh('systemctl --user stop openclaw-gateway.service || true', { timeoutMs: 15000 });
 }
 
 function startGateway(){
-  sh('sudo systemctl start openclaw-gateway.service || true', { timeoutMs: 15000 });
+  sh('systemctl start openclaw-gateway.service || true', { timeoutMs: 15000 });
   sh('systemctl --user start openclaw-gateway.service || true', { timeoutMs: 15000 });
 }
 
