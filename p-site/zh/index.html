@@ -44,7 +44,7 @@
 
           <div class="ctaRow">
             <button class="cta primary wide" id="paidRelinkBtn" type="button">重新关联设备（Relink）</button>
-            <button class="cta ghost" id="paidCancelBtn" type="button">取消订阅</button>
+            <button class="cta primary" id="paidCancelBtn" type="button">取消订阅</button>
             <button class="cta ghost" id="paidUpgradeBtn" type="button" disabled>升级套餐（即将推出）</button>
           </div>
 
@@ -215,6 +215,21 @@
         return `${masked}:${tag}@…`;
       }
 
+      function renderKv(elBox, pairs){
+        if (!elBox) return;
+        elBox.innerHTML = '';
+        for (const [k,v] of pairs) {
+          const kEl = document.createElement('div');
+          kEl.className = 'k';
+          kEl.textContent = String(k);
+          const vEl = document.createElement('div');
+          vEl.className = 'v';
+          vEl.textContent = (v === null || v === undefined || v === '') ? '—' : String(v);
+          elBox.appendChild(kEl);
+          elBox.appendChild(vEl);
+        }
+      }
+
       function setPaidInfo(st){
         try {
           const uuid = el.textContent.trim();
@@ -222,37 +237,30 @@
           const sub = st.subscription || null;
           const del = st.delivery || null;
 
-          // Append a small info block under paidCard (idempotent)
-          let box = document.getElementById('paidInfoBox');
-          if (!box && paidCard) {
-            box = document.createElement('div');
-            box.id = 'paidInfoBox';
-            box.style.marginTop = '12px';
-            box.className = 'hint';
-            paidCard.appendChild(box);
-          }
-          if (!box) return;
+          const serverBox = document.getElementById('paidServerKv');
+          const acctBox = document.getElementById('paidAccountKv');
 
-          const lines = [];
-          lines.push(`UUID：${uuid}`);
-          if (sub) {
-            lines.push(`订阅状态：${sub.status || ''}`);
-            if (sub.plan) lines.push(`套餐：${sub.plan}`);
-          }
-          if (del) {
-            lines.push(`交付状态：${del.status || ''}`);
-            lines.push(`绑定 WhatsApp：${maskJid(del.wa_jid)}`);
-            if (del.bound_at) lines.push(`绑定时间：${del.bound_at}`);
-          }
-          if (inst) {
-            if (inst.instance_id) lines.push(`服务器：${inst.instance_id}`);
-            if (inst.public_ip) lines.push(`公网 IP：${inst.public_ip}`);
-            if (inst.region || inst.zone) lines.push(`区域：${inst.region || ''} ${inst.zone || ''}`);
-            if (inst.health_status) lines.push(`健康：${inst.health_status}`);
-            if (inst.lifecycle_status) lines.push(`生命周期：${inst.lifecycle_status}`);
-          }
-          box.textContent = lines.join('\n');
-          box.style.whiteSpace = 'pre-line';
+          const serverPairs = [];
+          serverPairs.push(['实例 ID', inst && inst.instance_id]);
+          serverPairs.push(['公网 IP', inst && inst.public_ip]);
+          serverPairs.push(['区域/可用区', inst ? `${inst.region || ''} ${inst.zone || ''}`.trim() : '']);
+          serverPairs.push(['健康', inst && inst.health_status]);
+          serverPairs.push(['生命周期', inst && inst.lifecycle_status]);
+          serverPairs.push(['配置(BUNDLE)', inst && inst.bundle_id]);
+          serverPairs.push(['系统(BLUEPRINT)', inst && inst.blueprint_id]);
+          serverPairs.push(['最近 OK', inst && inst.last_ok_at]);
+          serverPairs.push(['最近探测', inst && inst.last_probe_at]);
+
+          const acctPairs = [];
+          acctPairs.push(['UUID', uuid]);
+          acctPairs.push(['订阅状态', sub && sub.status]);
+          acctPairs.push(['套餐', sub && sub.plan]);
+          acctPairs.push(['交付状态', del && del.status]);
+          acctPairs.push(['绑定 WhatsApp', del ? maskJid(del.wa_jid) : '—']);
+          acctPairs.push(['绑定时间', del && del.bound_at]);
+
+          renderKv(serverBox, serverPairs);
+          renderKv(acctBox, acctPairs);
         } catch {}
       }
 
