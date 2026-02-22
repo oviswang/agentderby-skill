@@ -10,7 +10,12 @@
   <link rel="stylesheet" href="https://bothook.me/styles.css" />
   <style>
     /* p-site specific tweaks */
-    /* Keep main-site default width (980px). For paid details, prefer single-column blocks to avoid squeezing. */
+    /* Slightly wider than main-site default, but not the previous extra-wide version */
+    @media (min-width: 980px){
+      .header,.main,.banner,.footer{max-width:1080px;}
+    }
+
+    /* For paid details, prefer single-column blocks to avoid squeezing */
     #paidInfoGrid{grid-template-columns:1fr;}
 
     .kv{display:grid;grid-template-columns:140px minmax(0,1fr);gap:8px 12px;margin-top:10px}
