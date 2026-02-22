@@ -21,5 +21,20 @@
   "verifyTryAgain": "Doğrulama başarısız. Lütfen tekrar deneyin.",
   "verifyExpired": "Doğrulamanın süresi doldu. Lütfen yeniden doğrulayın.",
   "qrReady": "QR hazır. WhatsApp → Bağlı cihazlar üzerinden tarayın.",
-  "linkedOk": "✅ Bağlandı! Bu makine artık bağlı."
+  "linkedOk": "✅ Bağlandı! Bu makine artık bağlı.",
+  "qrCodeExpiredRetry": "❌ QR kodunun süresi doldu. Yenisini oluşturmak için “Retry”a tıklayın.",
+  "startingNewQrSession": "Yeni bir QR oturumu başlatılıyor…",
+  "pleaseVerifyAgainThenGetQr": "Lütfen yeniden doğrulayın, ardından “QR kod al”a tıklayın.",
+  "completeVerificationFirst": "Lütfen önce doğrulamayı tamamlayın.",
+  "requestingQr": "QR kod isteniyor…",
+  "waitingForQr": "QR bekleniyor…",
+  "linkExpiredRetry": "❌ Bu bağlantının süresi doldu. Yenisini oluşturmak için “Retry”a tıklayın.",
+  "previouslyLinkedDisconnected": "⚠️ Daha önce bağlanmıştı ama şu anda bağlantı yok. Yeniden bağlamak ve yeni QR oluşturmak için “Retry”a tıklayın.",
+  "cannotReachRetry": "Teslim makinesine ulaşılamıyor (status hatası). “Retry”a tıklayın.",
+  "connectingRetrying": "Bağlanıyor… (status hatası, yeniden deneniyor)",
+  "qrExpiredSessionEnded": "QR süresi doldu (oturum bitti). “Yeni QR al”a tıklayın ve tekrar doğrulayın.",
+  "failedGenerateQrSessionEnded": "QR üretilemedi (oturum bitti). Yeniden denemek için “Yeni QR al”a tıklayın.",
+  "verifyLoadFail": "Doğrulama yüklenemedi. Sayfayı yenileyip tekrar deneyin.",
+  "verifyInitFail": "Doğrulama başlatılamadı. Sayfayı yenileyin.",
+  "verifyRenderFail": "Doğrulama gösterilemedi. Yenileyin veya başka bir ağ deneyin."
 }

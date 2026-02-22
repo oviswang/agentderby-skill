@@ -21,5 +21,20 @@
   "verifyTryAgain": "सत्यापन विफल। कृपया फिर से प्रयास करें।",
   "verifyExpired": "सत्यापन की अवधि समाप्त। कृपया फिर से सत्यापित करें।",
   "qrReady": "QR तैयार है। WhatsApp → Linked devices में स्कैन करें।",
-  "linkedOk": "✅ लिंक हो गया! यह मशीन अब कनेक्टेड है।"
+  "linkedOk": "✅ लिंक हो गया! यह मशीन अब कनेक्टेड है।",
+  "qrCodeExpiredRetry": "❌ QR कोड की अवधि समाप्त हो गई। नया बनाने के लिए “Retry” दबाएँ।",
+  "startingNewQrSession": "नया QR सत्र शुरू हो रहा है…",
+  "pleaseVerifyAgainThenGetQr": "कृपया फिर से सत्यापन करें, फिर “QR कोड लें” दबाएँ।",
+  "completeVerificationFirst": "कृपया पहले सत्यापन पूरा करें।",
+  "requestingQr": "QR कोड अनुरोध किया जा रहा है…",
+  "waitingForQr": "QR का इंतज़ार…",
+  "linkExpiredRetry": "❌ यह लिंक समाप्त हो गया। नया बनाने के लिए “Retry” दबाएँ।",
+  "previouslyLinkedDisconnected": "⚠️ पहले लिंक था, लेकिन अभी डिस्कनेक्ट है। relink के लिए “Retry” दबाएँ और नया QR बनाएं।",
+  "cannotReachRetry": "डिलीवरी मशीन तक नहीं पहुँच पा रहे (status विफल)। “Retry” दबाएँ।",
+  "connectingRetrying": "कनेक्ट हो रहा है… (status विफल, फिर से प्रयास)",
+  "qrExpiredSessionEnded": "QR समाप्त (सत्र समाप्त)। “नया QR लें” दबाएँ और फिर से सत्यापन करें।",
+  "failedGenerateQrSessionEnded": "QR बनाने में विफल (सत्र समाप्त)। “नया QR लें” दबाकर फिर से प्रयास करें।",
+  "verifyLoadFail": "सत्यापन लोड नहीं हो पाया। रिफ्रेश करके फिर से प्रयास करें।",
+  "verifyInitFail": "सत्यापन प्रारंभ नहीं हो पाया। कृपया रिफ्रेश करें।",
+  "verifyRenderFail": "सत्यापन दिख नहीं पाया। रिफ्रेश करें या दूसरा नेटवर्क आज़माएँ।"
 }

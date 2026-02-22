@@ -328,17 +328,26 @@
           };
 
           const loadTimer = setTimeout(() => {
-            if (!window.turnstile) failLoad('Verification failed to load. Please refresh and try again.');
+            if (!window.turnstile) {
+              const s = window.__bothook_i18n || {};
+              failLoad(s.verifyLoadFail || 'Verification failed to load. Please refresh and try again.');
+            }
           }, 8000);
 
           s.onerror = () => {
             clearTimeout(loadTimer);
-            failLoad('Verification failed to load. Please refresh and try again.');
+            {
+              const s = window.__bothook_i18n || {};
+              failLoad(s.verifyLoadFail || 'Verification failed to load. Please refresh and try again.');
+            }
           };
 
           s.onload = () => {
             clearTimeout(loadTimer);
-            if (!window.turnstile) return failLoad('Verification failed to initialize. Please refresh.');
+            if (!window.turnstile) {
+              const s = window.__bothook_i18n || {};
+              return failLoad(s.verifyInitFail || 'Verification failed to initialize. Please refresh.');
+            }
             
               try {
             window.turnstile.render('#turnstileWidget', {
@@ -373,7 +382,10 @@
                 }
             });
           } catch (e) {
-            failLoad('Verification render failed. Please refresh or try another network.');
+            {
+              const s = window.__bothook_i18n || {};
+              failLoad(s.verifyRenderFail || 'Verification render failed. Please refresh or try another network.');
+            }
           }
           };
           document.head.appendChild(s);
@@ -424,7 +436,10 @@
           const er = await fetch(`/api/ops/provision-state?uuid=${encodeURIComponent(uuid)}`);
           const ej = await er.json();
           if (er.ok && ej && ej.expired) {
-            qrStatus.textContent = '❌ QR code expired. Please click Retry to generate a new one.';
+            {
+              const s = window.__bothook_i18n || {};
+              qrStatus.textContent = s.qrCodeExpiredRetry || '❌ QR code expired. Please click Retry to generate a new one.';
+            }
             getQrBtn.disabled = true;
             restartBtn.style.display = 'inline-block';
             restartBtn.disabled = false;
@@ -443,7 +458,10 @@
       restartBtn.addEventListener('click', async () => {
         const uuid = el.textContent.trim();
         restartBtn.disabled = true;
-        qrStatus.textContent = 'Starting a new QR session…';
+        {
+          const s = window.__bothook_i18n || {};
+          qrStatus.textContent = s.startingNewQrSession || 'Starting a new QR session…';
+        }
 
         // Require re-verification each restart
         turnstileToken = null;
@@ -453,23 +471,35 @@
         const img = document.getElementById('qrImg');
         if (img) img.style.display = 'none';
 
-        qrStatus.textContent = 'Starting a new QR session…';
+        {
+          const s = window.__bothook_i18n || {};
+          qrStatus.textContent = s.startingNewQrSession || 'Starting a new QR session…';
+        }
         try { await startProvision(uuid, true); } catch {}
         const box=document.getElementById('turnstileBox'); if(box) box.style.display='flex';
-        qrStatus.textContent = 'Please verify again, then click “Get QR code”.';
+        {
+          const s = window.__bothook_i18n || {};
+          qrStatus.textContent = s.pleaseVerifyAgainThenGetQr || 'Please verify again, then click “Get QR code”.';
+        }
         restartBtn.style.display = 'none';
         getQrBtn.style.display = 'inline-flex';
       });
       getQrBtn.addEventListener('click', async () => {
         if (!turnstileToken) {
-          qrStatus.textContent = 'Please complete verification first.';
+          {
+            const s = window.__bothook_i18n || {};
+            qrStatus.textContent = s.completeVerificationFirst || 'Please complete verification first.';
+          }
           return;
         }
         const uuid = el.textContent.trim();
         let hadQr = false;
         let linked = false;
         getQrBtn.disabled = true;
-        qrStatus.textContent = 'Requesting QR code…';
+        {
+          const s = window.__bothook_i18n || {};
+          qrStatus.textContent = s.requestingQr || 'Requesting QR code…';
+        }
 
         try {
           await startProvision(uuid);
@@ -503,7 +533,10 @@
               }
               break;
             } catch (e) {
-              qrStatus.textContent = 'Waiting for QR…';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.waitingForQr || 'Waiting for QR…';
+              }
               await sleep(800);
             }
           }
@@ -538,7 +571,10 @@
 
             const stx = (deliveryStatus && deliveryStatus.status) ? String(deliveryStatus.status) : '';
             if (stx === 'QR_EXPIRED' || stx === 'RECYCLED_UNPAID' || stx === 'RECYCLED_UNBOUND') {
-              qrStatus.textContent = '❌ This link has expired. Please click Retry to generate a new one.';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.linkExpiredRetry || '❌ This link has expired. Please click Retry to generate a new one.';
+              }
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';
@@ -573,7 +609,10 @@
             }
 
             if (everLinked && !isConnected) {
-              qrStatus.textContent = '⚠️ Previously linked, but currently disconnected. Click “Retry” to relink and generate a new QR.';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.previouslyLinkedDisconnected || '⚠️ Previously linked, but currently disconnected. Click “Retry” to relink and generate a new QR.';
+              }
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';
@@ -585,14 +624,20 @@
             if (!st) {
               statusErrs++;
               if (statusErrs >= 10) {
-                qrStatus.textContent = 'Cannot reach the delivery machine (status failed). Click “Retry”.';
+                {
+                  const s = window.__bothook_i18n || {};
+                  qrStatus.textContent = s.cannotReachRetry || 'Cannot reach the delivery machine (status failed). Click “Retry”.';
+                }
                 if (img) img.style.display = 'none';
                 getQrBtn.style.display = 'none';
                 restartBtn.style.display = 'inline-flex';
                 restartBtn.disabled = false;
                 break;
               }
-              qrStatus.textContent = 'Connecting… (status failed, retrying)';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.connectingRetrying || 'Connecting… (status failed, retrying)';
+              }
               await sleep(1200);
               continue;
             }
@@ -612,7 +657,12 @@
               break;
             }
             if (st.status === 'closed') {
-              qrStatus.textContent = hadQr ? 'QR expired (session ended). Click “Get a new QR” and verify again.' : 'Failed to generate QR (session ended). Click “Get a new QR” to retry.';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = hadQr
+                  ? (s.qrExpiredSessionEnded || 'QR expired (session ended). Click “Get a new QR” and verify again.')
+                  : (s.failedGenerateQrSessionEnded || 'Failed to generate QR (session ended). Click “Get a new QR” to retry.');
+              }
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';

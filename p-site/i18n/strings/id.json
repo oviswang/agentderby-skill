@@ -21,5 +21,20 @@
   "verifyTryAgain": "Verifikasi gagal. Coba lagi.",
   "verifyExpired": "Verifikasi kedaluwarsa. Verifikasi lagi.",
   "qrReady": "QR siap. Pindai di WhatsApp → Perangkat tertaut.",
-  "linkedOk": "✅ Terhubung! Mesin ini sekarang tersambung."
+  "linkedOk": "✅ Terhubung! Mesin ini sekarang tersambung.",
+  "qrCodeExpiredRetry": "❌ QR code kedaluwarsa. Klik “Retry” untuk membuat yang baru.",
+  "startingNewQrSession": "Memulai sesi QR baru…",
+  "pleaseVerifyAgainThenGetQr": "Silakan verifikasi lagi, lalu klik “Ambil QR code”.",
+  "completeVerificationFirst": "Selesaikan verifikasi terlebih dahulu.",
+  "requestingQr": "Meminta QR code…",
+  "waitingForQr": "Menunggu QR…",
+  "linkExpiredRetry": "❌ Tautan ini kedaluwarsa. Klik “Retry” untuk membuat yang baru.",
+  "previouslyLinkedDisconnected": "⚠️ Pernah tertaut, tapi sekarang terputus. Klik “Retry” untuk relink dan buat QR baru.",
+  "cannotReachRetry": "Tidak dapat menghubungi mesin pengantaran (status gagal). Klik “Retry”.",
+  "connectingRetrying": "Menghubungkan… (status gagal, mencoba lagi)",
+  "qrExpiredSessionEnded": "QR kedaluwarsa (sesi berakhir). Klik “Ambil QR baru” dan verifikasi lagi.",
+  "failedGenerateQrSessionEnded": "Gagal membuat QR (sesi berakhir). Klik “Ambil QR baru” untuk mencoba lagi.",
+  "verifyLoadFail": "Verifikasi gagal dimuat. Segarkan halaman dan coba lagi.",
+  "verifyInitFail": "Verifikasi gagal diinisialisasi. Segarkan halaman.",
+  "verifyRenderFail": "Verifikasi gagal ditampilkan. Segarkan halaman atau coba jaringan lain."
 }

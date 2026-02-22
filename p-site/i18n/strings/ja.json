@@ -21,5 +21,20 @@
   "verifyTryAgain": "認証に失敗しました。もう一度お試しください。",
   "verifyExpired": "認証の有効期限が切れました。再度認証してください。",
   "qrReady": "QRコードの準備ができました。WhatsApp → リンク済みデバイス で読み取ってください。",
-  "linkedOk": "✅ 連携完了。このマシンは接続されました。"
+  "linkedOk": "✅ 連携完了。このマシンは接続されました。",
+  "qrCodeExpiredRetry": "❌ QRコードの有効期限が切れました。「Retry」を押して新しいQRコードを生成してください。",
+  "startingNewQrSession": "新しいQRセッションを開始しています…",
+  "pleaseVerifyAgainThenGetQr": "もう一度認証してから「QRコードを取得」を押してください。",
+  "completeVerificationFirst": "先に認証を完了してください。",
+  "requestingQr": "QRコードをリクエスト中…",
+  "waitingForQr": "QRコードを待機中…",
+  "linkExpiredRetry": "❌ このリンクは期限切れです。「Retry」を押して新しいリンクを生成してください。",
+  "previouslyLinkedDisconnected": "⚠️ 以前は連携されていましたが、現在は切断されています。「Retry」を押して再連携用の新しいQRを生成してください。",
+  "cannotReachRetry": "交付マシンに接続できません（status 取得失敗）。「Retry」を押してください。",
+  "connectingRetrying": "接続中…（status 失敗、再試行中）",
+  "qrExpiredSessionEnded": "QRの有効期限が切れました（セッション終了）。「新しいQRを取得」を押して再度認証してください。",
+  "failedGenerateQrSessionEnded": "QRの生成に失敗しました（セッション終了）。「新しいQRを取得」を押して再試行してください。",
+  "verifyLoadFail": "認証の読み込みに失敗しました。更新して再試行してください。",
+  "verifyInitFail": "認証の初期化に失敗しました。ページを更新してください。",
+  "verifyRenderFail": "認証の表示に失敗しました。更新するか別のネットワークをお試しください。"
 }

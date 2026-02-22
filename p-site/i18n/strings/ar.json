@@ -21,5 +21,20 @@
   "verifyTryAgain": "فشل التحقق. حاول مرة أخرى.",
   "verifyExpired": "انتهت صلاحية التحقق. تحقق مرة أخرى.",
   "qrReady": "رمز QR جاهز. امسحه في واتساب → الأجهزة المرتبطة.",
-  "linkedOk": "✅ تم الربط! هذه الآلة متصلة الآن."
+  "linkedOk": "✅ تم الربط! هذه الآلة متصلة الآن.",
+  "qrCodeExpiredRetry": "❌ انتهت صلاحية رمز QR. اضغط “Retry” لإنشاء رمز جديد.",
+  "startingNewQrSession": "جارٍ بدء جلسة QR جديدة…",
+  "pleaseVerifyAgainThenGetQr": "يرجى إعادة التحقق ثم الضغط على “الحصول على رمز QR”.",
+  "completeVerificationFirst": "يرجى إكمال التحقق أولاً.",
+  "requestingQr": "جارٍ طلب رمز QR…",
+  "waitingForQr": "جارٍ انتظار QR…",
+  "linkExpiredRetry": "❌ انتهت صلاحية هذا الرابط. اضغط “Retry” لإنشاء رابط جديد.",
+  "previouslyLinkedDisconnected": "⚠️ تم الربط سابقاً لكنه غير متصل حالياً. اضغط “Retry” لإعادة الربط وإنشاء QR جديد.",
+  "cannotReachRetry": "لا يمكن الوصول إلى جهاز التسليم (فشل status). اضغط “Retry”.",
+  "connectingRetrying": "جارٍ الاتصال… (فشل status، إعادة المحاولة)",
+  "qrExpiredSessionEnded": "انتهت صلاحية QR (انتهت الجلسة). اضغط “الحصول على QR جديد” وأعد التحقق.",
+  "failedGenerateQrSessionEnded": "فشل إنشاء QR (انتهت الجلسة). اضغط “الحصول على QR جديد” لإعادة المحاولة.",
+  "verifyLoadFail": "فشل تحميل التحقق. يرجى تحديث الصفحة والمحاولة مرة أخرى.",
+  "verifyInitFail": "فشل تهيئة التحقق. يرجى تحديث الصفحة.",
+  "verifyRenderFail": "فشل عرض التحقق. حدّث الصفحة أو جرّب شبكة أخرى."
 }

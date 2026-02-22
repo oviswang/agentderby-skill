@@ -21,5 +21,20 @@
   "verifyTryAgain": "La verificación falló. Inténtalo de nuevo.",
   "verifyExpired": "La verificación expiró. Verifica de nuevo.",
   "qrReady": "QR listo. Escanéalo en WhatsApp → Dispositivos vinculados.",
-  "linkedOk": "✅ Vinculado. Esta máquina ya está conectada."
+  "linkedOk": "✅ Vinculado. Esta máquina ya está conectada.",
+  "qrCodeExpiredRetry": "❌ El código QR caducó. Pulsa “Retry” para generar uno nuevo.",
+  "startingNewQrSession": "Iniciando una nueva sesión de QR…",
+  "pleaseVerifyAgainThenGetQr": "Verifica de nuevo y luego pulsa “Obtener código QR”.",
+  "completeVerificationFirst": "Completa primero la verificación.",
+  "requestingQr": "Solicitando código QR…",
+  "waitingForQr": "Esperando el QR…",
+  "linkExpiredRetry": "❌ Este enlace caducó. Pulsa “Retry” para generar uno nuevo.",
+  "previouslyLinkedDisconnected": "⚠️ Se vinculó antes, pero ahora está desconectado. Pulsa “Retry” para volver a vincular y generar un nuevo QR.",
+  "cannotReachRetry": "No se puede contactar con la máquina de entrega (falló el estado). Pulsa “Retry”.",
+  "connectingRetrying": "Conectando… (estado falló, reintentando)",
+  "qrExpiredSessionEnded": "QR caducado (sesión terminada). Pulsa “Obtener un nuevo QR” y verifica de nuevo.",
+  "failedGenerateQrSessionEnded": "No se pudo generar el QR (sesión terminada). Pulsa “Obtener un nuevo QR” para reintentar.",
+  "verifyLoadFail": "No se pudo cargar la verificación. Actualiza y vuelve a intentarlo.",
+  "verifyInitFail": "No se pudo iniciar la verificación. Actualiza la página.",
+  "verifyRenderFail": "No se pudo mostrar la verificación. Actualiza o prueba otra red."
 }

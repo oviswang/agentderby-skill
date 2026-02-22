@@ -21,5 +21,20 @@
   "verifyTryAgain": "Échec de la vérification. Veuillez réessayer.",
   "verifyExpired": "Vérification expirée. Veuillez vérifier à nouveau.",
   "qrReady": "QR prêt. Scannez‑le dans WhatsApp → Appareils connectés.",
-  "linkedOk": "✅ Lié ! Cette machine est maintenant connectée."
+  "linkedOk": "✅ Lié ! Cette machine est maintenant connectée.",
+  "qrCodeExpiredRetry": "❌ Le QR code a expiré. Cliquez sur « Retry » pour en générer un nouveau.",
+  "startingNewQrSession": "Démarrage d’une nouvelle session QR…",
+  "pleaseVerifyAgainThenGetQr": "Veuillez vérifier à nouveau puis cliquer sur « Obtenir le QR code ».",
+  "completeVerificationFirst": "Veuillez d’abord terminer la vérification.",
+  "requestingQr": "Demande du QR code…",
+  "waitingForQr": "En attente du QR…",
+  "linkExpiredRetry": "❌ Ce lien a expiré. Cliquez sur « Retry » pour en générer un nouveau.",
+  "previouslyLinkedDisconnected": "⚠️ Déjà lié auparavant, mais actuellement déconnecté. Cliquez sur « Retry » pour relier à nouveau et générer un nouveau QR.",
+  "cannotReachRetry": "Impossible de joindre la machine de livraison (échec du status). Cliquez sur « Retry ».",
+  "connectingRetrying": "Connexion… (status en échec, nouvelle tentative)",
+  "qrExpiredSessionEnded": "QR expiré (session terminée). Cliquez sur « Nouveau QR » et vérifiez à nouveau.",
+  "failedGenerateQrSessionEnded": "Échec de génération du QR (session terminée). Cliquez sur « Nouveau QR » pour réessayer.",
+  "verifyLoadFail": "Échec du chargement de la vérification. Actualisez et réessayez.",
+  "verifyInitFail": "Échec d’initialisation de la vérification. Actualisez la page.",
+  "verifyRenderFail": "Échec d’affichage de la vérification. Actualisez ou essayez un autre réseau."
 }

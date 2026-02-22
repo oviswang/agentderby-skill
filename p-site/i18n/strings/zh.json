@@ -21,5 +21,20 @@
   "verifyTryAgain": "验证失败，请重试。",
   "verifyExpired": "验证已过期，请重新验证。",
   "qrReady": "二维码已就绪。在 WhatsApp → 已连接的设备 中扫码。",
-  "linkedOk": "✅ 已连接！此交付机器已连接。"
+  "linkedOk": "✅ 已连接！此交付机器已连接。",
+  "qrCodeExpiredRetry": "❌ 二维码已过期。请点击“重试”生成新的二维码。",
+  "startingNewQrSession": "正在开始新的二维码会话…",
+  "pleaseVerifyAgainThenGetQr": "请重新完成验证，然后点击“获取二维码”。",
+  "completeVerificationFirst": "请先完成验证。",
+  "requestingQr": "正在请求二维码…",
+  "waitingForQr": "正在等待二维码…",
+  "linkExpiredRetry": "❌ 该链接已过期。请点击“重试”生成新的链接。",
+  "previouslyLinkedDisconnected": "⚠️ 曾经连接过，但当前已断开。点击“重试”重新生成二维码进行 relink。",
+  "cannotReachRetry": "无法连接交付机器（状态获取失败）。请点击“重试”。",
+  "connectingRetrying": "正在连接…（状态失败，重试中）",
+  "qrExpiredSessionEnded": "二维码已过期（会话已结束）。点击“获取新二维码”并重新验证。",
+  "failedGenerateQrSessionEnded": "生成二维码失败（会话已结束）。点击“获取新二维码”重试。",
+  "verifyLoadFail": "验证组件加载失败。请刷新后重试。",
+  "verifyInitFail": "验证初始化失败。请刷新页面。",
+  "verifyRenderFail": "验证渲染失败。请刷新或更换网络后重试。"
 }

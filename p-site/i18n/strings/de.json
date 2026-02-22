@@ -21,5 +21,20 @@
   "verifyTryAgain": "Verifizierung fehlgeschlagen. Bitte erneut versuchen.",
   "verifyExpired": "Verifizierung abgelaufen. Bitte erneut verifizieren.",
   "qrReady": "QR bereit. Scanne ihn in WhatsApp → Verknüpfte Geräte.",
-  "linkedOk": "✅ Verbunden! Diese Maschine ist jetzt verbunden."
+  "linkedOk": "✅ Verbunden! Diese Maschine ist jetzt verbunden.",
+  "qrCodeExpiredRetry": "❌ QR‑Code abgelaufen. Klicke „Retry“, um einen neuen zu erzeugen.",
+  "startingNewQrSession": "Neue QR‑Sitzung wird gestartet…",
+  "pleaseVerifyAgainThenGetQr": "Bitte erneut verifizieren und dann „QR‑Code abrufen“ klicken.",
+  "completeVerificationFirst": "Bitte zuerst die Verifizierung abschließen.",
+  "requestingQr": "QR‑Code wird angefordert…",
+  "waitingForQr": "Warte auf QR…",
+  "linkExpiredRetry": "❌ Dieser Link ist abgelaufen. Klicke „Retry“, um einen neuen zu erzeugen.",
+  "previouslyLinkedDisconnected": "⚠️ Früher verbunden, aktuell aber getrennt. Klicke „Retry“, um neu zu verknüpfen und einen neuen QR zu erzeugen.",
+  "cannotReachRetry": "Die Liefer‑Maschine ist nicht erreichbar (Status fehlgeschlagen). Klicke „Retry“.",
+  "connectingRetrying": "Verbinde… (Status fehlgeschlagen, erneuter Versuch)",
+  "qrExpiredSessionEnded": "QR abgelaufen (Sitzung beendet). Klicke „Neuen QR holen“ und verifiziere erneut.",
+  "failedGenerateQrSessionEnded": "QR konnte nicht erzeugt werden (Sitzung beendet). Klicke „Neuen QR holen“ zum erneuten Versuch.",
+  "verifyLoadFail": "Verifizierung konnte nicht geladen werden. Bitte aktualisieren und erneut versuchen.",
+  "verifyInitFail": "Verifizierung konnte nicht initialisiert werden. Bitte aktualisieren.",
+  "verifyRenderFail": "Verifizierung konnte nicht angezeigt werden. Bitte aktualisieren oder anderes Netzwerk versuchen."
 }

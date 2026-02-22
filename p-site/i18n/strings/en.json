@@ -21,5 +21,20 @@
   "verifyTryAgain": "Verification failed. Please try again.",
   "verifyExpired": "Verification expired. Please verify again.",
   "qrReady": "QR ready. Scan it in WhatsApp → Linked devices.",
-  "linkedOk": "✅ Linked! This delivery machine is now connected."
+  "linkedOk": "✅ Linked! This delivery machine is now connected.",
+  "qrCodeExpiredRetry": "❌ QR code expired. Please click Retry to generate a new one.",
+  "startingNewQrSession": "Starting a new QR session…",
+  "pleaseVerifyAgainThenGetQr": "Please verify again, then click “Get QR code”.",
+  "completeVerificationFirst": "Please complete verification first.",
+  "requestingQr": "Requesting QR code…",
+  "waitingForQr": "Waiting for QR…",
+  "linkExpiredRetry": "❌ This link has expired. Please click Retry to generate a new one.",
+  "previouslyLinkedDisconnected": "⚠️ Previously linked, but currently disconnected. Click “Retry” to relink and generate a new QR.",
+  "cannotReachRetry": "Cannot reach the delivery machine (status failed). Click “Retry”.",
+  "connectingRetrying": "Connecting… (status failed, retrying)",
+  "qrExpiredSessionEnded": "QR expired (session ended). Click “Get a new QR” and verify again.",
+  "failedGenerateQrSessionEnded": "Failed to generate QR (session ended). Click “Get a new QR” to retry.",
+  "verifyLoadFail": "Verification failed to load. Please refresh and try again.",
+  "verifyInitFail": "Verification failed to initialize. Please refresh.",
+  "verifyRenderFail": "Verification render failed. Please refresh or try another network."
 }

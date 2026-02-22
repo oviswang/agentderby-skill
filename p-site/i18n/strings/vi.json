@@ -21,5 +21,20 @@
   "verifyTryAgain": "Xác minh thất bại. Vui lòng thử lại.",
   "verifyExpired": "Xác minh đã hết hạn. Vui lòng xác minh lại.",
   "qrReady": "QR đã sẵn sàng. Quét trong WhatsApp → Thiết bị đã liên kết.",
-  "linkedOk": "✅ Đã liên kết! Máy này đã được kết nối."
+  "linkedOk": "✅ Đã liên kết! Máy này đã được kết nối.",
+  "qrCodeExpiredRetry": "❌ Mã QR đã hết hạn. Bấm “Retry” để tạo mã mới.",
+  "startingNewQrSession": "Đang bắt đầu phiên QR mới…",
+  "pleaseVerifyAgainThenGetQr": "Vui lòng xác minh lại rồi bấm “Lấy mã QR”.",
+  "completeVerificationFirst": "Vui lòng hoàn tất xác minh trước.",
+  "requestingQr": "Đang yêu cầu mã QR…",
+  "waitingForQr": "Đang chờ mã QR…",
+  "linkExpiredRetry": "❌ Liên kết đã hết hạn. Bấm “Retry” để tạo liên kết mới.",
+  "previouslyLinkedDisconnected": "⚠️ Đã từng liên kết nhưng hiện đang mất kết nối. Bấm “Retry” để relink và tạo QR mới.",
+  "cannotReachRetry": "Không thể kết nối máy giao (lỗi status). Bấm “Retry”.",
+  "connectingRetrying": "Đang kết nối… (status lỗi, đang thử lại)",
+  "qrExpiredSessionEnded": "QR đã hết hạn (phiên kết thúc). Bấm “Lấy QR mới” và xác minh lại.",
+  "failedGenerateQrSessionEnded": "Không tạo được QR (phiên kết thúc). Bấm “Lấy QR mới” để thử lại.",
+  "verifyLoadFail": "Không tải được xác minh. Tải lại trang và thử lại.",
+  "verifyInitFail": "Không khởi tạo được xác minh. Vui lòng tải lại trang.",
+  "verifyRenderFail": "Không hiển thị được xác minh. Tải lại hoặc thử mạng khác."
 }
