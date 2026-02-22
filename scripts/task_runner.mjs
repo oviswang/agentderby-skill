@@ -555,7 +555,7 @@ console.log('generated ' + locales.length + ' prompt files into ' + outDir);
               progress_bump: 5
             },{
               kind: 'local_exec',
-              command: 'bash -lc "set -euo pipefail; node scripts/generate_whatsapp_prompts.mjs; git add control-plane/i18n/whatsapp_prompts/*.json; git commit -m \"T16.1: generate WhatsApp prompts for all locales\" -- control-plane/i18n/whatsapp_prompts/*.json"',
+              command: 'bash -lc "set -euo pipefail; node scripts/generate_whatsapp_prompts.mjs; git add control-plane/i18n/whatsapp_prompts/*.json; git commit -m \'T16.1: generate WhatsApp prompts for all locales\' -- control-plane/i18n/whatsapp_prompts/*.json"',
               progress_bump: 5
             },{
               kind: 'local_exec',
