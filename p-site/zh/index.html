@@ -10,9 +10,9 @@
   <link rel="stylesheet" href="https://bothook.me/styles.css" />
   <style>
     /* p-site specific tweaks */
-    .kv{display:grid;grid-template-columns:160px 1fr;gap:8px 12px;margin-top:10px}
+    .kv{display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px 12px;margin-top:10px}
     .kv .k{color:rgba(169,182,214,.85);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
-    .kv .v{color:rgba(232,238,252,.95);font-size:13px;word-break:break-all}
+    .kv .v{color:rgba(232,238,252,.95);font-size:13px;overflow-wrap:anywhere;word-break:normal}
     .uuid{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:14px;background:rgba(255,255,255,.06);padding:10px 12px;border-radius:14px;word-break:break-all;color:rgba(232,238,252,.95)}
     button{font:inherit}
     button.cta{border:0;cursor:pointer}
@@ -48,18 +48,20 @@
             <button class="cta ghost" id="paidUpgradeBtn" type="button" disabled>升级套餐（即将推出）</button>
           </div>
 
-          <div class="grid2" style="margin-top:16px;">
-            <div class="card" style="padding:16px 16px;">
-              <div class="label">你的服务器</div>
-              <div class="kv" id="paidServerKv"></div>
-            </div>
-            <div class="card" style="padding:16px 16px;">
-              <div class="label">账号与交付</div>
-              <div class="kv" id="paidAccountKv"></div>
-            </div>
-          </div>
-
+          <!-- paid info grid moved outside this card to avoid nested cards -->
           <p class="hint" style="margin-top:12px;">安全提示：Relink 将校验扫码 WhatsApp 账号是否与已付费绑定账号一致，不一致会被拒绝并产生审计记录。</p>
+        </div>
+
+        <!-- Paid details (flat, same level; avoid nested cards) -->
+        <div class="grid2" id="paidInfoGrid" style="margin-top:14px; display:none;">
+          <div class="card">
+            <div class="kicker">你的服务器</div>
+            <div class="kv" id="paidServerKv"></div>
+          </div>
+          <div class="card">
+            <div class="kicker">账号与交付</div>
+            <div class="kv" id="paidAccountKv"></div>
+          </div>
         </div>
 
         <!-- Unpaid/linking card -->
@@ -269,6 +271,8 @@
         if (st.state === 'PAID_ACTIVE') {
           if (modeHint) modeHint.style.display = 'block';
           if (paidCard) paidCard.style.display = 'block';
+          const paidInfoGrid = document.getElementById('paidInfoGrid');
+          if (paidInfoGrid) paidInfoGrid.style.display = 'grid';
           // Hide unpaid/linking guidance (paid users already passed payment)
           if (linkingCard) linkingCard.style.display = 'none';
           if (linkingRow) linkingRow.style.display = 'none';
