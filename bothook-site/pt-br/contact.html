@@ -35,9 +35,15 @@
           <input id="email" name="email" type="email" required placeholder="you@company.com" class="input" />
 
           <div style="height:12px"></div>
+          <label class="label" for="wa">WhatsApp phone (for verification)</label>
+          <input id="wa" name="wa" type="tel" placeholder="Required for account actions. Example: +65 8123 4567" class="input" />
 
-          <label class="label" for="uuid">Provisioning UUID (opcional)</label>
-          <input id="uuid" name="uuid" type="text" placeholder="Do p.bothook.me" class="input" />
+          <div style="height:12px"></div>
+
+
+
+          <label class="label" for="uuid">UUID / Delivery link (for lookup)</label>
+          <input id="uuid" name="uuid" type="text" placeholder="Required for account actions. UUID or https://p.bothook.me/..." class="input" />
 
           <div style="height:12px"></div>
 
@@ -83,6 +89,7 @@
       e.preventDefault();
       const payload = {
         email: form.email.value,
+        wa: form.wa.value,
         uuid: form.uuid.value,
         message: form.message.value,
         pageLang: document.documentElement.lang || 'pt-BR',
