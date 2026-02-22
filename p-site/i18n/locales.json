@@ -1,0 +1,21 @@
+{
+  "note": "Source of truth for p-site supported locales (T9). Keep aligned with bothook-site locales list.",
+  "locales": [
+    {"code": "en", "native": "English", "en": "English", "dir": "ltr"},
+    {"code": "zh", "native": "简体中文", "en": "Chinese (Simplified)", "dir": "ltr"},
+    {"code": "zh-tw", "native": "繁體中文", "en": "Chinese (Traditional)", "dir": "ltr"},
+    {"code": "ja", "native": "日本語", "en": "Japanese", "dir": "ltr"},
+    {"code": "ko", "native": "한국어", "en": "Korean", "dir": "ltr"},
+    {"code": "fr", "native": "Français", "en": "French", "dir": "ltr"},
+    {"code": "de", "native": "Deutsch", "en": "German", "dir": "ltr"},
+    {"code": "es", "native": "Español", "en": "Spanish", "dir": "ltr"},
+    {"code": "pt-br", "native": "Português (Brasil)", "en": "Portuguese (Brazil)", "dir": "ltr"},
+    {"code": "id", "native": "Bahasa Indonesia", "en": "Indonesian", "dir": "ltr"},
+    {"code": "vi", "native": "Tiếng Việt", "en": "Vietnamese", "dir": "ltr"},
+    {"code": "th", "native": "ภาษาไทย", "en": "Thai", "dir": "ltr"},
+    {"code": "hi", "native": "हिन्दी", "en": "Hindi", "dir": "ltr"},
+    {"code": "ar", "native": "العربية", "en": "Arabic", "dir": "rtl"},
+    {"code": "ru", "native": "Русский", "en": "Russian", "dir": "ltr"},
+    {"code": "tr", "native": "Türkçe", "en": "Turkish", "dir": "ltr"}
+  ]
+}

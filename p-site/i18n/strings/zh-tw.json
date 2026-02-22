@@ -1,0 +1,65 @@
+{
+  "langName": "繁體中文",
+  "dir": "ltr",
+
+  "backLink": "返回 bothook.me",
+  "pageTitle": "設備連接",
+  "pageIntro": "此頁面會建立一個唯一的連接工作階段。下一步你將用它來連接 WhatsApp。",
+
+  "importantTitle": "重要",
+  "openOtherDevice": "請在另一台裝置上開啟此頁面（另一支手機或電腦）。",
+  "cantScanSamePhone": "你無法在同一台正在掃碼的手機上掃描螢幕上的 QR 碼。",
+
+  "haveDevice": "我有另一台裝置可以掃碼。",
+  "continue": "繼續",
+
+  "busyQueueTitle": "忙碌 / 排隊",
+  "busyAllBusy": "目前所有機器都在忙。",
+  "busyTitle": "取得 QR 碼",
+  "busyHint": "請等待幾分鐘並重新整理頁面。你的 UUID 連結仍然有效。",
+
+  "getQr": "取得 QR 碼",
+  "retry": "重試",
+
+  "linkedTitle": "✅ 已連接",
+  "linkedStrong": "此交付機器已連接到你的 WhatsApp。",
+  "closePageHint": "你可以關閉此頁面。之後需要 relink 時，打開你保存的交付連結即可。",
+  "linkedHint": "如果 WhatsApp 在「已連接的裝置」裡顯示，即表示完成。",
+
+  "nextStepTitle": "下一步",
+  "scanHint": "當 WhatsApp QR 碼準備好後，在 WhatsApp → 已連接的裝置 中掃碼。",
+  "afterScanningHint": "掃碼後，本頁會確認裝置是否已連接。",
+
+  "deliveryLinkTitle": "你的交付連結（請保存）",
+  "generating": "產生中…",
+  "copy": "複製連結",
+  "copied": "已複製",
+  "saveHint": "此連結包含你的 UUID。請保存，用於後續 relink/查看狀態/管理訂閱。",
+  "helpHintPrefix": "需要協助可前往 ",
+  "helpLinkText": "bothook.me/contact.html",
+  "helpHintSuffix": " 並附上此連結（或其中的 UUID）。",
+
+  "verifyFirst": "請先完成驗證，通過後點擊「取得 QR 碼」。",
+  "verifyPassed": "✅ 驗證通過。點擊「取得 QR 碼」。",
+  "verifyTryAgain": "驗證失敗，請重試。",
+  "verifyExpired": "驗證已過期，請重新驗證。",
+  "qrReady": "QR 碼已就緒。在 WhatsApp → 已連接的裝置 中掃碼。",
+  "linkedOk": "✅ 已連接！此交付機器已連接。",
+
+  "qrCodeExpiredRetry": "❌ QR 碼已過期。請點擊「重試」產生新的 QR 碼。",
+  "startingNewQrSession": "正在開始新的 QR 碼工作階段…",
+  "pleaseVerifyAgainThenGetQr": "請重新完成驗證，然後點擊「取得 QR 碼」。",
+  "completeVerificationFirst": "請先完成驗證。",
+  "requestingQr": "正在請求 QR 碼…",
+  "waitingForQr": "正在等待 QR 碼…",
+  "linkExpiredRetry": "❌ 此連結已過期。請點擊「重試」產生新的連結。",
+  "previouslyLinkedDisconnected": "⚠️ 曾經連接過，但目前已斷開。點擊「重試」重新產生 QR 碼以 relink。",
+  "cannotReachRetry": "無法連線交付機器（狀態取得失敗）。請點擊「重試」。",
+  "connectingRetrying": "正在連線…（狀態失敗，重試中）",
+  "qrExpiredSessionEnded": "QR 碼已過期（工作階段已結束）。點擊「取得新 QR 碼」並重新驗證。",
+  "failedGenerateQrSessionEnded": "產生 QR 碼失敗（工作階段已結束）。點擊「取得新 QR 碼」重試。",
+
+  "verifyLoadFail": "驗證元件載入失敗。請重新整理後重試。",
+  "verifyInitFail": "驗證初始化失敗。請重新整理頁面。",
+  "verifyRenderFail": "驗證顯示失敗。請重新整理或更換網路後重試。"
+}
