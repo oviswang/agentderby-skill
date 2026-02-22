@@ -36,5 +36,6 @@
   "failedGenerateQrSessionEnded": "Falha ao gerar QR (sessão encerrada). Clique em “Obter um novo QR” para tentar de novo.",
   "verifyLoadFail": "Falha ao carregar a verificação. Atualize e tente novamente.",
   "verifyInitFail": "Falha ao iniciar a verificação. Atualize a página.",
-  "verifyRenderFail": "Falha ao renderizar a verificação. Atualize ou tente outra rede."
+  "verifyRenderFail": "Falha ao renderizar a verificação. Atualize ou tente outra rede.",
+  "retry": "Retry"
 }

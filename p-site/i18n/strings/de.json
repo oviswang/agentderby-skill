@@ -36,5 +36,6 @@
   "failedGenerateQrSessionEnded": "QR konnte nicht erzeugt werden (Sitzung beendet). Klicke „Neuen QR holen“ zum erneuten Versuch.",
   "verifyLoadFail": "Verifizierung konnte nicht geladen werden. Bitte aktualisieren und erneut versuchen.",
   "verifyInitFail": "Verifizierung konnte nicht initialisiert werden. Bitte aktualisieren.",
-  "verifyRenderFail": "Verifizierung konnte nicht angezeigt werden. Bitte aktualisieren oder anderes Netzwerk versuchen."
+  "verifyRenderFail": "Verifizierung konnte nicht angezeigt werden. Bitte aktualisieren oder anderes Netzwerk versuchen.",
+  "retry": "Retry"
 }

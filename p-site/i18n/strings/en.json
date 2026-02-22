@@ -36,5 +36,6 @@
   "failedGenerateQrSessionEnded": "Failed to generate QR (session ended). Click “Get a new QR” to retry.",
   "verifyLoadFail": "Verification failed to load. Please refresh and try again.",
   "verifyInitFail": "Verification failed to initialize. Please refresh.",
-  "verifyRenderFail": "Verification render failed. Please refresh or try another network."
+  "verifyRenderFail": "Verification render failed. Please refresh or try another network.",
+  "retry": "Retry"
 }

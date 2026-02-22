@@ -36,5 +36,6 @@
   "failedGenerateQrSessionEnded": "No se pudo generar el QR (sesión terminada). Pulsa “Obtener un nuevo QR” para reintentar.",
   "verifyLoadFail": "No se pudo cargar la verificación. Actualiza y vuelve a intentarlo.",
   "verifyInitFail": "No se pudo iniciar la verificación. Actualiza la página.",
-  "verifyRenderFail": "No se pudo mostrar la verificación. Actualiza o prueba otra red."
+  "verifyRenderFail": "No se pudo mostrar la verificación. Actualiza o prueba otra red.",
+  "retry": "Retry"
 }

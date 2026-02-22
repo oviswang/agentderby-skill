@@ -36,5 +36,6 @@
   "failedGenerateQrSessionEnded": "QR üretilemedi (oturum bitti). Yeniden denemek için “Yeni QR al”a tıklayın.",
   "verifyLoadFail": "Doğrulama yüklenemedi. Sayfayı yenileyip tekrar deneyin.",
   "verifyInitFail": "Doğrulama başlatılamadı. Sayfayı yenileyin.",
-  "verifyRenderFail": "Doğrulama gösterilemedi. Yenileyin veya başka bir ağ deneyin."
+  "verifyRenderFail": "Doğrulama gösterilemedi. Yenileyin veya başka bir ağ deneyin.",
+  "retry": "Retry"
 }

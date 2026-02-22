@@ -36,5 +36,6 @@
   "failedGenerateQrSessionEnded": "Échec de génération du QR (session terminée). Cliquez sur « Nouveau QR » pour réessayer.",
   "verifyLoadFail": "Échec du chargement de la vérification. Actualisez et réessayez.",
   "verifyInitFail": "Échec d’initialisation de la vérification. Actualisez la page.",
-  "verifyRenderFail": "Échec d’affichage de la vérification. Actualisez ou essayez un autre réseau."
+  "verifyRenderFail": "Échec d’affichage de la vérification. Actualisez ou essayez un autre réseau.",
+  "retry": "Retry"
 }

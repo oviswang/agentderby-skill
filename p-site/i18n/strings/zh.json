@@ -36,5 +36,6 @@
   "failedGenerateQrSessionEnded": "生成二维码失败（会话已结束）。点击“获取新二维码”重试。",
   "verifyLoadFail": "验证组件加载失败。请刷新后重试。",
   "verifyInitFail": "验证初始化失败。请刷新页面。",
-  "verifyRenderFail": "验证渲染失败。请刷新或更换网络后重试。"
+  "verifyRenderFail": "验证渲染失败。请刷新或更换网络后重试。",
+  "retry": "重试"
 }

@@ -36,5 +36,6 @@
   "failedGenerateQrSessionEnded": "QRの生成に失敗しました（セッション終了）。「新しいQRを取得」を押して再試行してください。",
   "verifyLoadFail": "認証の読み込みに失敗しました。更新して再試行してください。",
   "verifyInitFail": "認証の初期化に失敗しました。ページを更新してください。",
-  "verifyRenderFail": "認証の表示に失敗しました。更新するか別のネットワークをお試しください。"
+  "verifyRenderFail": "認証の表示に失敗しました。更新するか別のネットワークをお試しください。",
+  "retry": "重试"
 }

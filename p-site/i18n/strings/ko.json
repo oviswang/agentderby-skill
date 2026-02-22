@@ -36,5 +36,6 @@
   "failedGenerateQrSessionEnded": "QR 생성에 실패했습니다(세션 종료). “새 QR 받기”로 다시 시도하세요.",
   "verifyLoadFail": "인증을 불러오지 못했습니다. 새로고침 후 다시 시도하세요.",
   "verifyInitFail": "인증 초기화에 실패했습니다. 새로고침하세요.",
-  "verifyRenderFail": "인증 렌더링에 실패했습니다. 새로고침하거나 다른 네트워크를 사용해 보세요."
+  "verifyRenderFail": "인증 렌더링에 실패했습니다. 새로고침하거나 다른 네트워크를 사용해 보세요.",
+  "retry": "重试"
 }
