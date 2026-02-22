@@ -3,10 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openDb, nowIso } from './lib/db.mjs';
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 function readSchemaSql() {
-  const p = path.join(process.cwd(), 'schema.sql');
+  // Resolve schema.sql relative to this file (works regardless of process.cwd()).
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const p = path.join(here, 'schema.sql');
   return fs.readFileSync(p, 'utf8');
 }
 
@@ -21,6 +23,28 @@ function main() {
     try { db.exec("ALTER TABLE deliveries ADD COLUMN wa_jid TEXT"); } catch {}
     try { db.exec("ALTER TABLE deliveries ADD COLUMN wa_e164 TEXT"); } catch {}
     try { db.exec("ALTER TABLE deliveries ADD COLUMN bound_at TEXT"); } catch {}
+  }
+
+  if (v < 5) {
+    // Stripe timestamps
+    try { db.exec("ALTER TABLE subscriptions ADD COLUMN cancel_at TEXT"); } catch {}
+    try { db.exec("ALTER TABLE subscriptions ADD COLUMN canceled_at TEXT"); } catch {}
+    try { db.exec("ALTER TABLE subscriptions ADD COLUMN ended_at TEXT"); } catch {}
+
+    // Backfill: we previously stored Stripe cancel_at into current_period_end (schema lacked cancel_at).
+    // Only apply for rows updated in a narrow window to avoid corrupting real current_period_end semantics.
+    try {
+      const cutoff = '2026-02-22T07:55:00.000Z';
+      db.prepare(
+        `UPDATE subscriptions
+            SET cancel_at = current_period_end
+          WHERE cancel_at IS NULL
+            AND cancel_at_period_end = 0
+            AND LOWER(status) = 'active'
+            AND current_period_end IS NOT NULL
+            AND updated_at >= ?`
+      ).run(cutoff);
+    } catch {}
   }
 
   // Mark migration version (idempotent)

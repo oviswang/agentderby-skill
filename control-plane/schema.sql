@@ -74,7 +74,13 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   user_id TEXT NOT NULL,
   plan TEXT NOT NULL,
   status TEXT NOT NULL,
+
+  -- Stripe timestamps (ISO strings)
   current_period_end TEXT,
+  cancel_at TEXT,
+  canceled_at TEXT,
+  ended_at TEXT,
+
   cancel_at_period_end INTEGER DEFAULT 0,
   updated_at TEXT NOT NULL
 );

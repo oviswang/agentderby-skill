@@ -281,7 +281,7 @@ app.get('/api/p/state', (req, res) => {
       state = 'LINKING';
       try {
         subscription = db.prepare(
-          "SELECT provider_sub_id, provider, user_id, plan, status, current_period_end, cancel_at_period_end, updated_at FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1"
+          "SELECT provider_sub_id, provider, user_id, plan, status, current_period_end, cancel_at, canceled_at, ended_at, cancel_at_period_end, updated_at FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1"
         ).get(delivery.user_id) || null;
       } catch {
         subscription = null;
@@ -304,6 +304,9 @@ app.get('/api/p/state', (req, res) => {
         plan: subscription.plan,
         status: subscription.status,
         current_period_end: subscription.current_period_end || null,
+        cancel_at: subscription.cancel_at || null,
+        canceled_at: subscription.canceled_at || null,
+        ended_at: subscription.ended_at || null,
         cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
         updated_at: subscription.updated_at
       } : null,
