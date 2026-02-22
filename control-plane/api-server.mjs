@@ -421,6 +421,13 @@ app.post('/api/wa/start', async (req, res) => {
 
     const force = Boolean(req.body?.force);
 
+    // SECURITY (A-style relink: same instance): if the UUID is already in use,
+    // only allow force relink after Stripe payment is confirmed.
+    // Rationale: without this gate, a leaked UUID can be used to trigger relink/QR spam or takeover attempts.
+    if (force && String(delivery.status || '') !== 'PAID') {
+      return send(res, 403, { ok: false, error: 'relink_requires_paid' });
+    }
+
     const r = await poolFetch(instance, '/api/wa/start', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -522,8 +529,15 @@ app.get('/api/wa/status', async (req, res) => {
             return send(res, 403, { ok: false, error: 'uuid_bound_to_another_account' });
           }
         } else {
-          // Either already bound to same jid, or jid missing; just mark active.
-          db.prepare('UPDATE deliveries SET status=?, updated_at=? WHERE delivery_id=?').run('ACTIVE', ts, delivery.delivery_id);
+          // Either already bound to same jid, or jid missing.
+          // Do NOT downgrade paid state: keep PAID as the highest-precedence state.
+          const row = db.prepare('SELECT status FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+          const st = row?.status || '';
+          if (st !== 'PAID') {
+            db.prepare('UPDATE deliveries SET status=?, updated_at=? WHERE delivery_id=?').run('ACTIVE', ts, delivery.delivery_id);
+          } else {
+            db.prepare('UPDATE deliveries SET updated_at=? WHERE delivery_id=?').run(ts, delivery.delivery_id);
+          }
         }
 
         db.exec('COMMIT');
@@ -677,7 +691,10 @@ app.post('/api/stripe/webhook', async (req, res) => {
     if (type === 'checkout.session.completed') {
       // Mark delivery paid (MVP)
       if (delivery_id) {
-        db.prepare('UPDATE deliveries SET status=?, updated_at=? WHERE delivery_id=?').run('PAID', ts, delivery_id);
+        // Preserve existing meta and record paid timestamp for audit.
+        const row = db.prepare('SELECT meta_json FROM deliveries WHERE delivery_id=?').get(delivery_id);
+        const meta2 = mergeMeta(row?.meta_json || null, { paid_at: ts, stripe_event_id: eventId });
+        db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?').run('PAID', ts, meta2, delivery_id);
         db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
           crypto.randomUUID(), ts, 'delivery', delivery_id, 'PAYMENT_CONFIRMED', JSON.stringify({ uuid, stripe_event_id: eventId })
         );
