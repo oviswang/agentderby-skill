@@ -187,6 +187,59 @@
         }
       }
 
+      function maskJid(jid){
+        const s = String(jid||'');
+        if (!s) return '（未绑定）';
+        // 6581xxxxxx:47@s.whatsapp.net
+        const m = s.match(/^(\d+):(\d+)@/);
+        if (!m) return '（已绑定）';
+        const num=m[1];
+        const tag=m[2];
+        const masked = (num.length<=4) ? ('****'+num) : (num.slice(0,2)+'****'+num.slice(-2));
+        return `${masked}:${tag}@…`;
+      }
+
+      function setPaidInfo(st){
+        try {
+          const uuid = el.textContent.trim();
+          const inst = st.instance || null;
+          const sub = st.subscription || null;
+          const del = st.delivery || null;
+
+          // Append a small info block under paidCard (idempotent)
+          let box = document.getElementById('paidInfoBox');
+          if (!box && paidCard) {
+            box = document.createElement('div');
+            box.id = 'paidInfoBox';
+            box.style.marginTop = '12px';
+            box.className = 'hint';
+            paidCard.appendChild(box);
+          }
+          if (!box) return;
+
+          const lines = [];
+          lines.push(`UUID：${uuid}`);
+          if (sub) {
+            lines.push(`订阅状态：${sub.status || ''}`);
+            if (sub.plan) lines.push(`套餐：${sub.plan}`);
+          }
+          if (del) {
+            lines.push(`交付状态：${del.status || ''}`);
+            lines.push(`绑定 WhatsApp：${maskJid(del.wa_jid)}`);
+            if (del.bound_at) lines.push(`绑定时间：${del.bound_at}`);
+          }
+          if (inst) {
+            if (inst.instance_id) lines.push(`服务器：${inst.instance_id}`);
+            if (inst.public_ip) lines.push(`公网 IP：${inst.public_ip}`);
+            if (inst.region || inst.zone) lines.push(`区域：${inst.region || ''} ${inst.zone || ''}`);
+            if (inst.health_status) lines.push(`健康：${inst.health_status}`);
+            if (inst.lifecycle_status) lines.push(`生命周期：${inst.lifecycle_status}`);
+          }
+          box.textContent = lines.join('\n');
+          box.style.whiteSpace = 'pre-line';
+        } catch {}
+      }
+
       fetchPState().then((st)=>{
         if (!st || !st.ok) return;
         if (st.state === 'PAID_ACTIVE') {
@@ -195,6 +248,7 @@
           // Hide unpaid/linking guidance (paid users already passed payment)
           if (linkingCard) linkingCard.style.display = 'none';
           if (linkingRow) linkingRow.style.display = 'none';
+          setPaidInfo(st);
         }
       });
 
@@ -235,9 +289,19 @@
         });
       }
       if (paidCancelBtn) {
-        paidCancelBtn.addEventListener('click', () => {
-          // Temporary: show instructions until Stripe wiring is done.
-          alert('取消订阅：即将接入自助取消。当前请联系 support@bothook.me，并附上你的 UUID。');
+        paidCancelBtn.addEventListener('click', async () => {
+          const uuid = el.textContent.trim();
+          if (!uuid) return;
+          paidCancelBtn.disabled = true;
+          try {
+            const r = await fetch(`/api/billing/portal?uuid=${encodeURIComponent(uuid)}&lang=zh`);
+            const j = await r.json().catch(()=>null);
+            if (!r.ok || !j || !j.ok || !j.url) throw new Error((j && j.error) ? j.error : 'portal_failed');
+            location.href = j.url;
+          } catch (e) {
+            alert('打开 Stripe 取消订阅页面失败，请稍后重试或联系 support@bothook.me。');
+            paidCancelBtn.disabled = false;
+          }
         });
       }
 

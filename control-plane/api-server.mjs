@@ -121,7 +121,13 @@ function mergeMeta(oldJson, patch){
 }
 
 function getInstanceById(db, instance_id) {
-  return db.prepare('SELECT instance_id, public_ip, meta_json FROM instances WHERE instance_id = ?').get(instance_id);
+  return db.prepare(
+    `SELECT instance_id, provider, region, zone, public_ip, private_ip, bundle_id, blueprint_id,
+            created_at, terminated_at, expired_at, lifecycle_status, health_status,
+            last_probe_at, last_ok_at, assigned_user_id, assigned_order_id, assigned_at,
+            meta_json
+     FROM instances WHERE instance_id = ?`
+  ).get(instance_id);
 }
 
 async function poolFetch(instance, path, opts = {}) {
@@ -285,6 +291,8 @@ app.get('/api/p/state', (req, res) => {
       }
     }
 
+    const instance = delivery ? getInstanceById(db, delivery.instance_id) : null;
+
     return send(res, 200, {
       ok: true,
       uuid,
@@ -292,13 +300,27 @@ app.get('/api/p/state', (req, res) => {
       busy,
       readyCapacity: ready,
       state,
-      state,
       subscription: subscription ? {
         plan: subscription.plan,
         status: subscription.status,
         current_period_end: subscription.current_period_end || null,
         cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
         updated_at: subscription.updated_at
+      } : null,
+      instance: instance ? {
+        instance_id: instance.instance_id,
+        provider: instance.provider,
+        region: instance.region,
+        zone: instance.zone,
+        public_ip: instance.public_ip,
+        bundle_id: instance.bundle_id,
+        blueprint_id: instance.blueprint_id,
+        lifecycle_status: instance.lifecycle_status,
+        health_status: instance.health_status,
+        created_at: instance.created_at,
+        expired_at: instance.expired_at,
+        last_ok_at: instance.last_ok_at,
+        last_probe_at: instance.last_probe_at
       } : null,
       delivery: delivery ? {
         delivery_id: delivery.delivery_id,
@@ -311,6 +333,65 @@ app.get('/api/p/state', (req, res) => {
     });
   } catch (e) {
     return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
+// Billing portal (Stripe): allow paid users to self-manage subscription (cancel, update payment method).
+// This endpoint returns a redirect URL. Caller should navigate to it.
+app.get('/api/billing/portal', async (req, res) => {
+  try {
+    const uuid = String(req.query?.uuid || '').trim();
+    const lang = String(req.query?.lang || '').trim() || 'en';
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+
+    const secret = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '';
+    if (!secret) return send(res, 500, { ok:false, error:'stripe_not_configured' });
+
+    const { db } = openDb();
+    const delivery = getDeliveryByUuid(db, uuid);
+    if (!delivery) return send(res, 404, { ok:false, error:'unknown_uuid' });
+
+    const sub = db.prepare(
+      "SELECT provider_sub_id, provider, user_id, plan, status, current_period_end, cancel_at_period_end, updated_at FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1"
+    ).get(delivery.user_id) || null;
+
+    if (!sub || String(sub.provider || '') !== 'stripe' || !sub.provider_sub_id) {
+      return send(res, 404, { ok:false, error:'subscription_not_found' });
+    }
+
+    // Retrieve subscription to get customer id
+    const auth = Buffer.from(`${secret}:`).toString('base64');
+    const subResp = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(sub.provider_sub_id)}`, {
+      headers: { 'authorization': `Basic ${auth}` }
+    });
+    const subJson = await subResp.json().catch(()=>null);
+    if (!subResp.ok) return send(res, 502, { ok:false, error:'stripe_subscription_fetch_failed', detail: subJson });
+
+    const customer = subJson && subJson.customer;
+    if (!customer) return send(res, 502, { ok:false, error:'stripe_customer_missing' });
+
+    const return_url = (lang === 'zh')
+      ? `https://p.bothook.me/zh/?lang=zh&uuid=${encodeURIComponent(uuid)}`
+      : `https://p.bothook.me/?lang=${encodeURIComponent(lang)}&uuid=${encodeURIComponent(uuid)}`;
+
+    const body = new URLSearchParams();
+    body.set('customer', String(customer));
+    body.set('return_url', return_url);
+
+    const portalResp = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+      method: 'POST',
+      headers: {
+        'authorization': `Basic ${auth}`,
+        'content-type': 'application/x-www-form-urlencoded'
+      },
+      body
+    });
+    const portalJson = await portalResp.json().catch(()=>null);
+    if (!portalResp.ok) return send(res, 502, { ok:false, error:'stripe_portal_create_failed', detail: portalJson });
+
+    return send(res, 200, { ok:true, url: portalJson.url });
+  } catch (e) {
+    return send(res, 500, { ok:false, error: e.message || 'server_error' });
   }
 });
 
