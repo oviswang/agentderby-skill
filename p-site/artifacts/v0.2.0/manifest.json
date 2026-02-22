@@ -36,7 +36,7 @@
     },
     {
       "path": "systemd/bothook-provision.service",
-      "sha256": "4194120b0bf5f2903bee9747b6cc8ee13b4f53014445c2e65fb587a77e50a8c3"
+      "sha256": "266eefc1a376e76ae6d8d94c700efb2345c8506233b58d9b102bc087185df86b"
     },
     {
       "path": "systemd/openclaw-gateway.service",
