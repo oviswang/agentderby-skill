@@ -49,7 +49,7 @@ function safeUuid(s) {
 
 function ensureDir(p){ fs.mkdirSync(p, { recursive: true }); }
 
-function sh(cmd, { timeoutMs = 20000 } = {}) {
+function sh(cmd, { timeoutMs = 8000 } = {}) {
   const res = spawnSync('bash', ['-lc', cmd], {
     encoding: 'utf8',
     maxBuffer: 5 * 1024 * 1024,
@@ -60,16 +60,15 @@ function sh(cmd, { timeoutMs = 20000 } = {}) {
 }
 
 function stopGateway(){
-  // Avoid login competition.
-  // Note: this service runs as root (to control systemd) but must allow HOME for session persistence.
-  sh('systemctl stop openclaw-gateway.service || true', { timeoutMs: 15000 });
-  // Also stop user service if present.
-  sh('systemctl --user stop openclaw-gateway.service || true', { timeoutMs: 15000 });
+  // Avoid login competition. Must be fast/non-blocking.
+  // systemctl can hang on some systems; bound it hard.
+  sh('timeout 2 systemctl stop openclaw-gateway.service || true', { timeoutMs: 4000 });
+  sh('timeout 2 systemctl --user stop openclaw-gateway.service || true', { timeoutMs: 4000 });
 }
 
 function startGateway(){
-  sh('systemctl start openclaw-gateway.service || true', { timeoutMs: 15000 });
-  sh('systemctl --user start openclaw-gateway.service || true', { timeoutMs: 15000 });
+  sh('timeout 2 systemctl start openclaw-gateway.service || true', { timeoutMs: 4000 });
+  sh('timeout 2 systemctl --user start openclaw-gateway.service || true', { timeoutMs: 4000 });
 }
 
 function stripAnsi(s){
@@ -242,7 +241,7 @@ function startLogin(uuid, { force=false } = {}){
 
 function pollStatus(uuid){
   const s = ensureSession(uuid);
-  const r = sh('openclaw channels status', { timeoutMs: 12000 });
+  const r = sh('openclaw channels status', { timeoutMs: 5000 });
   const out = (r.stdout || r.stderr || '').trim();
   const st = parseWhatsappStatus(out);
   s.status = Boolean(st.connected);

@@ -16,11 +16,11 @@
     },
     {
       "path": "provision/provision.tgz",
-      "sha256": "3d61d6b23b714ffc55d683bc1ac5951a1e7f7b9bf90f301f75ca4c0b09e7cc23"
+      "sha256": "2190fc9cb8ef376d2b6fa8c425ef6a687ba29e63bcd1a5414c3c99d94816a0d3"
     },
     {
       "path": "provision/server.mjs",
-      "sha256": "1bcac2e6cbb12c38d30164440be926d04bd9a704713215db587b1497019bf345"
+      "sha256": "6bd8942b3000f22a62d7b3582e07f19acfb1255f79ab3b935d54e1bceae099fa"
     },
     {
       "path": "scripts/cutover.sh",
