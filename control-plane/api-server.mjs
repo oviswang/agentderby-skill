@@ -160,8 +160,14 @@ async function poolFetch(instance, path, opts = {}) {
       .map(([k, v]) => `-H '${String(k).replace(/'/g, "'\\''")}: ${String(v).replace(/'/g, "'\\''")}'`)
       .join(' ');
 
-    const dataFlag = body ? `--data '${body.replace(/'/g, "'\\''")}'` : '';
-    const curl = `curl -sS -m ${Math.ceil(timeoutMs / 1000)} -X ${method} ${headerFlags} ${dataFlag} '${remoteUrl}'`;
+    // Use base64 to avoid shell/JSON quoting issues (prevents invalid JSON on the remote side).
+    let curl;
+    if (body) {
+      const b64 = Buffer.from(body, 'utf8').toString('base64');
+      curl = `echo '${b64}' | base64 -d | curl -sS -m ${Math.ceil(timeoutMs / 1000)} -X ${method} ${headerFlags} --data-binary @- '${remoteUrl}'`;
+    } else {
+      curl = `curl -sS -m ${Math.ceil(timeoutMs / 1000)} -X ${method} ${headerFlags} '${remoteUrl}'`;
+    }
 
     const cmd = `ssh -i '${POOL_SSH_KEY}' -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ubuntu@${ip} '${curl.replace(/'/g, "'\\''")}'`;
     const r = sh(cmd, { timeoutMs: timeoutMs + 3000 });
