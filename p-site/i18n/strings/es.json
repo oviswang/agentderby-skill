@@ -37,5 +37,18 @@
   "verifyLoadFail": "No se pudo cargar la verificación. Actualiza y vuelve a intentarlo.",
   "verifyInitFail": "No se pudo iniciar la verificación. Actualiza la página.",
   "verifyRenderFail": "No se pudo mostrar la verificación. Actualiza o prueba otra red.",
-  "retry": "Reintentar"
+  "retry": "Reintentar",
+  "backLink": "Volver a bothook.me",
+  "pageTitle": "Provisioning",
+  "pageIntro": "Esta página crea una sesión de aprovisionamiento única. La usarás en el siguiente paso para vincular WhatsApp.",
+  "importantTitle": "Importante",
+  "openOtherDevice": "Abre esta página en otro dispositivo (otro teléfono o un ordenador).",
+  "cantScanSamePhone": "No puedes escanear un QR que se muestra en el mismo teléfono que está escaneando.",
+  "busyQueueTitle": "Ocupado / Cola",
+  "busyAllBusy": "Todas las máquinas están ocupadas actualmente.",
+  "linkedStrong": "Esta máquina de entrega ya está conectada a tu WhatsApp.",
+  "closePageHint": "Puedes cerrar esta página. Para relink más tarde, abre tu enlace de entrega guardado.",
+  "nextStepTitle": "Siguiente paso",
+  "afterScanningHint": "Después de escanear, esta página confirmará cuando el dispositivo esté vinculado.",
+  "deliveryLinkTitle": "Tu enlace de entrega (guárdalo)"
 }

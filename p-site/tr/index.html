@@ -35,15 +35,15 @@
         <img src="https://bothook.me/assets/logo.jpg" alt="BOTHook" />
         <strong>BOTHook</strong>
       </a>
-      <a href="https://bothook.me/" class="hint">Back to bothook.me</a>
+      <a href="https://bothook.me/" class="hint" id="backLink">Back to bothook.me</a>
     </div>
-    <h1>Provisioning</h1>
-    <p>This page creates a unique provisioning session. You’ll use it to link WhatsApp on the next step.</p>
+    <h1 id="pageTitle">Provisioning</h1>
+    <p id="pageIntro">This page creates a unique provisioning session. You’ll use it to link WhatsApp on the next step.</p>
 
     <div class="card" style="margin-top:12px;">
-      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Important</div>
-      <p><strong>Open this page on a different device</strong> (another phone or a computer).</p>
-      <p class="hint">You can’t scan a QR code displayed on the same phone that’s doing the scanning.</p>
+      <div class="hint" id="importantTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Important</div>
+      <p id="openOtherDevice"><strong>Open this page on a different device</strong> (another phone or a computer).</p>
+      <p class="hint" id="cantScanSamePhone">You can’t scan a QR code displayed on the same phone that’s doing the scanning.</p>
       <label class="hint" style="display:flex; gap:10px; align-items:center; margin-top:10px;">
         <input id="hasOtherDevice" type="checkbox" style="transform:scale(1.1);" />
         <span id="haveDeviceText">I have another device to scan the QR code.</span>
@@ -54,8 +54,8 @@
     </div>
 
     <div class="card" id="busyCard" style="margin-top:12px; display:none;">
-      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Busy / Queue</div>
-      <p><strong>All machines are currently busy.</strong></p>
+      <div class="hint" id="busyQueueTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Busy / Queue</div>
+      <p id="busyAllBusy"><strong>All machines are currently busy.</strong></p>
       <p class="hint" id="busyHint">Please wait a few minutes and refresh this page. Your UUID link is still valid.</p>
       <p class="hint" id="busyMeta"></p>
     </div>
@@ -76,16 +76,16 @@
 
     <div class="card" id="linkedCard" style="margin-top:12px; display:none;">
       <div class="hint" id="linkedTitle" style="color:rgba(232,238,252,.92); font-weight:700;">✅ Linked</div>
-      <p><strong>This delivery machine is now connected to your WhatsApp.</strong></p>
-      <p class="hint">You can close this page. To relink later, open your saved delivery link.</p>
+      <p id="linkedStrong"><strong>This delivery machine is now connected to your WhatsApp.</strong></p>
+      <p class="hint" id="closePageHint">You can close this page. To relink later, open your saved delivery link.</p>
       <p class="hint" id="linkedHint">If WhatsApp shows it under Linked devices, you’re done.</p>
     </div>
 
     <div class="row">
       <div class="card">
-        <div class="hint">Next step</div>
+        <div class="hint" id="nextStepTitle">Next step</div>
         <p id="scanHint">When the WhatsApp QR is ready, you’ll scan it from WhatsApp → Linked devices.</p>
-        <p class="hint">After scanning, this page will confirm when the device is linked.</p>
+        <p class="hint" id="afterScanningHint">After scanning, this page will confirm when the device is linked.</p>
       </div>
 
 
@@ -93,7 +93,7 @@
 
 
     <div class="card" id="uuidCard" style="margin-top:12px;">
-      <div class="hint">Your delivery link (save it)</div>
+      <div class="hint" id="deliveryLinkTitle">Your delivery link (save it)</div>
       <div class="uuid" id="provisionLink">Generating…</div>
       <span id="uuid" style="display:none"></span>
       <div class="btns">
@@ -240,15 +240,35 @@
           if (el && typeof v === 'string') el.textContent = v;
         };
 
+        setText('backLink', s.backLink);
+        setText('pageTitle', s.pageTitle);
+        setText('pageIntro', s.pageIntro);
+        setText('importantTitle', s.importantTitle);
+        // openOtherDevice contains <strong> in original; swap to plain text for localization.
+        setText('openOtherDevice', s.openOtherDevice);
+        setText('cantScanSamePhone', s.cantScanSamePhone);
+
         setText('haveDeviceText', s.haveDevice);
         setText('continueBtn', s.continue);
+
+        setText('busyQueueTitle', s.busyQueueTitle);
+        setText('busyAllBusy', s.busyAllBusy);
         setText('busyTitle', s.busyTitle);
         setText('busyHint', s.busyHint);
+
         setText('getQrBtn', s.getQr);
         setText('restartBtn', s.retry);
+
         setText('linkedTitle', s.linkedTitle);
+        setText('linkedStrong', s.linkedStrong);
+        setText('closePageHint', s.closePageHint);
         setText('linkedHint', s.linkedHint);
+
+        setText('nextStepTitle', s.nextStepTitle);
         setText('scanHint', s.scanHint);
+        setText('afterScanningHint', s.afterScanningHint);
+
+        setText('deliveryLinkTitle', s.deliveryLinkTitle);
         setText('copyBtn', s.copy);
         setText('saveHint', s.saveHint);
 

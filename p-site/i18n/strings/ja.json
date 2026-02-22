@@ -37,5 +37,18 @@
   "verifyLoadFail": "認証の読み込みに失敗しました。更新して再試行してください。",
   "verifyInitFail": "認証の初期化に失敗しました。ページを更新してください。",
   "verifyRenderFail": "認証の表示に失敗しました。更新するか別のネットワークをお試しください。",
-  "retry": "重试"
+  "retry": "重试",
+  "backLink": "bothook.me に戻る",
+  "pageTitle": "プロビジョニング",
+  "pageIntro": "このページは一意のプロビジョニングセッションを作成します。次の手順で WhatsApp をリンクするために使用します。",
+  "importantTitle": "重要",
+  "openOtherDevice": "このページは別の端末（別のスマホまたはPC）で開いてください。",
+  "cantScanSamePhone": "スキャンに使用している同じ端末に表示されたQRコードは読み取れません。",
+  "busyQueueTitle": "混雑 / キュー",
+  "busyAllBusy": "現在すべてのマシンが使用中です。",
+  "linkedStrong": "この交付マシンはあなたの WhatsApp に接続されました。",
+  "closePageHint": "このページは閉じてOKです。後で再リンクするには、保存した交付リンクを開いてください。",
+  "nextStepTitle": "次の手順",
+  "afterScanningHint": "スキャン後、このページでデバイスがリンクされたことを確認します。",
+  "deliveryLinkTitle": "あなたの交付リンク（保存してください）"
 }

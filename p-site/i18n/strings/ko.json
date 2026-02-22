@@ -37,5 +37,18 @@
   "verifyLoadFail": "인증을 불러오지 못했습니다. 새로고침 후 다시 시도하세요.",
   "verifyInitFail": "인증 초기화에 실패했습니다. 새로고침하세요.",
   "verifyRenderFail": "인증 렌더링에 실패했습니다. 새로고침하거나 다른 네트워크를 사용해 보세요.",
-  "retry": "重试"
+  "retry": "重试",
+  "backLink": "bothook.me로 돌아가기",
+  "pageTitle": "프로비저닝",
+  "pageIntro": "이 페이지는 고유한 프로비저닝 세션을 생성합니다. 다음 단계에서 WhatsApp을 연결하는 데 사용됩니다.",
+  "importantTitle": "중요",
+  "openOtherDevice": "이 페이지를 다른 기기(다른 휴대폰 또는 컴퓨터)에서 여세요.",
+  "cantScanSamePhone": "스캔에 사용하는 동일한 휴대폰에 표시된 QR 코드는 스캔할 수 없습니다.",
+  "busyQueueTitle": "혼잡 / 대기열",
+  "busyAllBusy": "현재 모든 머신이 사용 중입니다.",
+  "linkedStrong": "이 교부 머신이 WhatsApp에 연결되었습니다.",
+  "closePageHint": "이 페이지를 닫아도 됩니다. 나중에 relink하려면 저장한 교부 링크를 여세요.",
+  "nextStepTitle": "다음 단계",
+  "afterScanningHint": "스캔 후 이 페이지에서 기기 연결 여부를 확인합니다.",
+  "deliveryLinkTitle": "교부 링크(저장하세요)"
 }

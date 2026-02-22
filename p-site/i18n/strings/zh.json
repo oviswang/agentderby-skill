@@ -37,5 +37,18 @@
   "verifyLoadFail": "验证组件加载失败。请刷新后重试。",
   "verifyInitFail": "验证初始化失败。请刷新页面。",
   "verifyRenderFail": "验证渲染失败。请刷新或更换网络后重试。",
-  "retry": "重试"
+  "retry": "重试",
+  "backLink": "返回 bothook.me",
+  "pageTitle": "设备连接",
+  "pageIntro": "此页面会创建一个唯一的连接会话。下一步你将用它来连接 WhatsApp。",
+  "importantTitle": "重要",
+  "openOtherDevice": "请在另一台设备上打开此页面（另一部手机或电脑）。",
+  "cantScanSamePhone": "你无法在同一台正在扫码的手机上扫描屏幕上的二维码。",
+  "busyQueueTitle": "忙碌 / 排队",
+  "busyAllBusy": "当前所有机器都在忙。",
+  "linkedStrong": "该交付机器已连接到你的 WhatsApp。",
+  "closePageHint": "你可以关闭此页面。以后需要 relink 时，打开你保存的交付链接即可。",
+  "nextStepTitle": "下一步",
+  "afterScanningHint": "扫码后，本页会确认设备是否已连接。",
+  "deliveryLinkTitle": "你的交付链接（请保存）"
 }

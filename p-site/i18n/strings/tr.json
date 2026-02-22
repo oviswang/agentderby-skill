@@ -37,5 +37,18 @@
   "verifyLoadFail": "Doğrulama yüklenemedi. Sayfayı yenileyip tekrar deneyin.",
   "verifyInitFail": "Doğrulama başlatılamadı. Sayfayı yenileyin.",
   "verifyRenderFail": "Doğrulama gösterilemedi. Yenileyin veya başka bir ağ deneyin.",
-  "retry": "Tekrar dene"
+  "retry": "Tekrar dene",
+  "backLink": "bothook.me’ye dön",
+  "pageTitle": "Provisioning",
+  "pageIntro": "Bu sayfa benzersiz bir provisioning oturumu oluşturur. Sonraki adımda WhatsApp’ı bağlamak için kullanacaksınız.",
+  "importantTitle": "Önemli",
+  "openOtherDevice": "Bu sayfayı başka bir cihazda açın (başka bir telefon veya bilgisayar).",
+  "cantScanSamePhone": "Tarama yapan aynı telefonda görüntülenen QR kodunu tarayamazsınız.",
+  "busyQueueTitle": "Meşgul / Kuyruk",
+  "busyAllBusy": "Şu anda tüm makineler meşgul.",
+  "linkedStrong": "Bu teslimat makinesi artık WhatsApp’ınıza bağlı.",
+  "closePageHint": "Bu sayfayı kapatabilirsiniz. Daha sonra relink için kaydettiğiniz teslimat bağlantısını açın.",
+  "nextStepTitle": "Sonraki adım",
+  "afterScanningHint": "Taramadan sonra bu sayfa cihazın bağlandığını doğrular.",
+  "deliveryLinkTitle": "Teslimat bağlantınız (kaydedin)"
 }

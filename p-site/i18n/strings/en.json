@@ -37,5 +37,18 @@
   "verifyLoadFail": "Verification failed to load. Please refresh and try again.",
   "verifyInitFail": "Verification failed to initialize. Please refresh.",
   "verifyRenderFail": "Verification render failed. Please refresh or try another network.",
-  "retry": "Retry"
+  "retry": "Retry",
+  "backLink": "Back to bothook.me",
+  "pageTitle": "Provisioning",
+  "pageIntro": "This page creates a unique provisioning session. You’ll use it to link WhatsApp on the next step.",
+  "importantTitle": "Important",
+  "openOtherDevice": "Open this page on a different device (another phone or a computer).",
+  "cantScanSamePhone": "You can’t scan a QR code displayed on the same phone that’s doing the scanning.",
+  "busyQueueTitle": "Busy / Queue",
+  "busyAllBusy": "All machines are currently busy.",
+  "linkedStrong": "This delivery machine is now connected to your WhatsApp.",
+  "closePageHint": "You can close this page. To relink later, open your saved delivery link.",
+  "nextStepTitle": "Next step",
+  "afterScanningHint": "After scanning, this page will confirm when the device is linked.",
+  "deliveryLinkTitle": "Your delivery link (save it)"
 }

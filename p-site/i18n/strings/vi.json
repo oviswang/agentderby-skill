@@ -37,5 +37,18 @@
   "verifyLoadFail": "Không tải được xác minh. Tải lại trang và thử lại.",
   "verifyInitFail": "Không khởi tạo được xác minh. Vui lòng tải lại trang.",
   "verifyRenderFail": "Không hiển thị được xác minh. Tải lại hoặc thử mạng khác.",
-  "retry": "Thử lại"
+  "retry": "Thử lại",
+  "backLink": "Quay lại bothook.me",
+  "pageTitle": "Provisioning",
+  "pageIntro": "Trang này tạo một phiên provisioning duy nhất. Bạn sẽ dùng nó để liên kết WhatsApp ở bước tiếp theo.",
+  "importantTitle": "Quan trọng",
+  "openOtherDevice": "Hãy mở trang này trên thiết bị khác (điện thoại khác hoặc máy tính).",
+  "cantScanSamePhone": "Bạn không thể quét mã QR hiển thị trên chính thiết bị đang dùng để quét.",
+  "busyQueueTitle": "Bận / Hàng đợi",
+  "busyAllBusy": "Hiện tất cả máy đều đang bận.",
+  "linkedStrong": "Máy giao này đã kết nối với WhatsApp của bạn.",
+  "closePageHint": "Bạn có thể đóng trang này. Để relink sau này, mở liên kết giao mà bạn đã lưu.",
+  "nextStepTitle": "Bước tiếp theo",
+  "afterScanningHint": "Sau khi quét, trang này sẽ xác nhận khi thiết bị đã được liên kết.",
+  "deliveryLinkTitle": "Liên kết giao của bạn (hãy lưu)"
 }
