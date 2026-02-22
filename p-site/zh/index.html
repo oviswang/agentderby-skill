@@ -6,109 +6,125 @@
   <title>BOTHook 交付</title>
   <meta name="description" content="用于 WhatsApp 关联设备的交付页面。" />
   <link rel="icon" href="https://bothook.me/assets/logo.jpg" />
+  <!-- Reuse main-site styles for consistent look & feel -->
+  <link rel="stylesheet" href="https://bothook.me/styles.css" />
   <style>
-    :root{--bg:#0b1220;--card:#111a2e;--text:#e8eefc;--muted:#a9b6d6;--accent:#57a6ff;--shadow:0 10px 30px rgba(0,0,0,.35)}
-    *{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,"Helvetica Neue",Arial;background:radial-gradient(900px 450px at 20% 10%, rgba(87,166,255,.18), transparent 60%),radial-gradient(700px 400px at 90% 30%, rgba(90,255,209,.12), transparent 55%),var(--bg);color:var(--text)}
-    a{color:inherit}
-    .wrap{max-width:920px;margin:0 auto;padding:26px 18px 60px}
-    .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
-    .brand{display:flex;align-items:center;gap:10px;text-decoration:none}
-    .brand img{width:36px;height:36px;border-radius:10px;box-shadow:var(--shadow);object-fit:cover;background:#fff}
-    .card{background:rgba(255,255,255,.04);border-radius:18px;padding:18px 18px;box-shadow:var(--shadow)}
-    h1{margin:16px 0 10px;font-size:28px;line-height:1.15}
-    p{margin:10px 0;color:var(--muted);line-height:1.6}
+    /* p-site specific tweaks */
+    .kv{display:grid;grid-template-columns:160px 1fr;gap:8px 12px;margin-top:10px}
+    .kv .k{color:rgba(169,182,214,.85);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
+    .kv .v{color:rgba(232,238,252,.95);font-size:13px;word-break:break-all}
     .uuid{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:14px;background:rgba(255,255,255,.06);padding:10px 12px;border-radius:14px;word-break:break-all;color:rgba(232,238,252,.95)}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
-    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-    button{border:0;border-radius:14px;padding:10px 12px;background:rgba(255,255,255,.06);color:var(--text);cursor:pointer}
-    button.primary{background:linear-gradient(135deg, rgba(87,166,255,.95), rgba(90,255,209,.9));color:#071221;font-weight:700}
-    button:disabled{opacity:.45; cursor:not-allowed; filter:saturate(.3);}
-    button.primary:disabled{background:rgba(255,255,255,.08); color:rgba(232,238,252,.75);}
-    .hint{font-size:12px;color:rgba(169,182,214,.85)}
-    @media (max-width:860px){.row{grid-template-columns:1fr}}
+    button{font:inherit}
+    button.cta{border:0;cursor:pointer}
+    button.cta:disabled{opacity:.55; cursor:not-allowed; filter:saturate(.3);}
+    input[type="checkbox"]{transform:scale(1.1)}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
-      <a class="brand" href="https://bothook.me/zh/" aria-label="BOTHook 首页">
-        <img src="https://bothook.me/assets/logo.jpg" alt="BOTHook" />
-        <strong>BOTHook</strong>
-      </a>
-      <a href="https://bothook.me/zh/" class="hint">返回 bothook.me</a>
-    </div>
-    <h1>交付</h1>
-    <p>本页面会生成一个唯一的交付会话（UUID）。下一步你将用它完成 WhatsApp 设备关联。</p>
+  <div class="header">
+    <a class="brand" href="https://bothook.me/zh/" aria-label="BOTHook 首页" id="brandHome">
+      <img src="https://bothook.me/assets/logo.jpg" alt="BOTHook" />
+      <strong>BOTHook</strong>
+    </a>
+    <a href="https://bothook.me/zh/" class="langbtn" id="backLink">返回 bothook.me</a>
+  </div>
 
-    <div class="card" id="linkingCard" style="margin-top:12px;">
-      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">重要提醒</div>
-      <p><strong>请用另一台设备打开本页面</strong>（另一部手机或电脑）。</p>
-      <p class="hint">你无法用同一部手机去扫描自己屏幕上的二维码。</p>
-      <label class="hint" style="display:flex; gap:10px; align-items:center; margin-top:10px;">
-        <input id="hasOtherDevice" type="checkbox" style="transform:scale(1.1);" />
-        我有另一台设备可以用来扫码。
-      </label>
-      <div class="btns" style="margin-top:10px;">
-        <button class="primary" id="continueBtn" type="button" disabled>继续</button>
-      </div>
-    </div>
-
-    <div class="card" id="paidCard" style="margin-top:12px; display:none;">
-      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">✅ 订阅已激活</div>
-      <p class="hint" style="margin-top:8px;">你可以在这里进行设备重新关联（Relink）或取消订阅。升级套餐暂未开放。</p>
-      <div class="btns" style="margin-top:12px;">
-        <button class="primary" id="paidRelinkBtn" type="button">重新关联设备（Relink）</button>
-        <button class="primary" id="paidCancelBtn" type="button">取消订阅</button>
-        <button id="paidUpgradeBtn" type="button" disabled>升级套餐（即将推出）</button>
-      </div>
-      <p class="hint" style="margin-top:12px;">安全提示：Relink 将校验扫码 WhatsApp 账号是否与已付费绑定账号一致，不一致会被拒绝并产生审计记录。</p>
-    </div>
-
-    <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
-      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">获取二维码</div>
-      <div id="turnstileBox" style="margin-top:10px; min-height:72px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);">
-        <div id="turnstileWidget"></div>
-      </div>
-
-      <p class="hint" id="qrStatus" style="margin-top:10px;"></p>
-
-      <div class="btns" style="margin-top:12px;">
-        <button class="primary" id="getQrBtn" type="button" disabled>获取二维码</button>
-        <button class="primary" id="restartBtn" type="button" disabled style="display:none;">重试</button>
-      </div>
-    </div>
-
-    <div class="card" id="linkedCard" style="margin-top:12px; display:none;">
-      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">✅ 已关联</div>
-      <p><strong>这台交付机器已成功连接到你的 WhatsApp。</strong></p>
-      <p class="hint">你可以关闭本页。未来如需重新关联（relink），直接打开你保存的交付链接即可。</p>
-      <p class="hint">如果你在 WhatsApp 里看到“已关联的设备”，就说明已经成功。</p>
-    </div>
-
-    <div class="row" id="linkingRow">
+  <main class="main">
+    <div class="hero">
       <div class="card">
-        <div class="hint">下一步</div>
-        <p>当 WhatsApp 二维码就绪后，你会在 WhatsApp →「已关联的设备」中扫描二维码完成连接。</p>
-        <p class="hint">扫码完成后，本页面会自动显示“已关联✅”。</p>
+        <span class="kicker" id="modeHint" style="display:none;">已付费用户模式</span>
+        <div class="h1" id="pageTitle">交付</div>
+        <p class="p" id="pageIntro">本页面会生成一个唯一的交付会话（UUID）。下一步你将用它完成 WhatsApp 设备关联。</p>
+
+        <!-- Paid card -->
+        <div class="card" id="paidCard" style="display:none; margin-top:14px;">
+          <div class="kicker">订阅状态</div>
+          <div class="h2">✅ 订阅已激活</div>
+          <p class="p" style="font-size:14px;">你可以在这里进行设备重新关联（Relink）或取消订阅。升级套餐暂未开放。</p>
+
+          <div class="ctaRow">
+            <button class="cta primary wide" id="paidRelinkBtn" type="button">重新关联设备（Relink）</button>
+            <button class="cta ghost" id="paidCancelBtn" type="button">取消订阅</button>
+            <button class="cta ghost" id="paidUpgradeBtn" type="button" disabled>升级套餐（即将推出）</button>
+          </div>
+
+          <div class="grid2" style="margin-top:16px;">
+            <div class="card" style="padding:16px 16px;">
+              <div class="label">你的服务器</div>
+              <div class="kv" id="paidServerKv"></div>
+            </div>
+            <div class="card" style="padding:16px 16px;">
+              <div class="label">账号与交付</div>
+              <div class="kv" id="paidAccountKv"></div>
+            </div>
+          </div>
+
+          <p class="hint" style="margin-top:12px;">安全提示：Relink 将校验扫码 WhatsApp 账号是否与已付费绑定账号一致，不一致会被拒绝并产生审计记录。</p>
+        </div>
+
+        <!-- Unpaid/linking card -->
+        <div class="card" id="linkingCard" style="margin-top:14px;">
+          <div class="kicker">重要提醒</div>
+          <div class="h2">请用另一台设备打开本页面</div>
+          <p class="p" style="font-size:14px;">你无法用同一部手机去扫描自己屏幕上的二维码。</p>
+
+          <label class="p" style="font-size:14px; display:flex; gap:10px; align-items:center; margin:10px 0 0;">
+            <input id="hasOtherDevice" type="checkbox" />
+            <span id="haveDeviceText">我有另一台设备可以用来扫码。</span>
+          </label>
+
+          <div class="ctaRow" style="margin-top:12px;">
+            <button class="cta primary wide" id="continueBtn" type="button" disabled>继续</button>
+          </div>
+        </div>
+
+        <!-- Verify / QR card (shared) -->
+        <div class="card" id="verifyCard" style="margin-top:14px; display:none;">
+          <div class="kicker">设备关联</div>
+          <div class="h2" id="busyTitle">获取二维码</div>
+          <div id="turnstileBox" style="margin-top:10px; min-height:72px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);">
+            <div id="turnstileWidget"></div>
+          </div>
+          <p class="p" id="qrStatus" style="font-size:14px; margin-top:10px;"></p>
+
+          <div class="ctaRow" style="margin-top:12px;">
+            <button class="cta primary wide" id="getQrBtn" type="button" disabled>获取二维码</button>
+            <button class="cta ghost" id="restartBtn" type="button" disabled style="display:none;">重试</button>
+          </div>
+        </div>
+
+        <!-- Linked -->
+        <div class="card" id="linkedCard" style="margin-top:14px; display:none;">
+          <div class="kicker">状态</div>
+          <div class="h2">✅ 已关联</div>
+          <p class="p" style="font-size:14px;">这台交付机器已成功连接到你的 WhatsApp。你可以关闭本页。未来如需重新关联（relink），直接打开你保存的交付链接即可。</p>
+          <p class="hint">如果你在 WhatsApp 里看到“已关联的设备”，就说明已经成功。</p>
+        </div>
+
+        <!-- UUID link -->
+        <div class="card" id="uuidCard" style="margin-top:14px;">
+          <div class="kicker">你的交付链接（请保存）</div>
+          <div class="uuid" id="provisionLink">生成中…</div>
+          <span id="uuid" style="display:none"></span>
+          <div class="ctaRow" style="margin-top:12px;">
+            <button class="cta primary wide" id="copyBtn" type="button">复制链接</button>
+          </div>
+          <p class="hint" id="saveHint" style="margin-top:10px;">这个链接包含你的 UUID。请复制保存，未来需要重新关联（relink）、查询、升级/取消订阅时，都可以直接打开。</p>
+          <p class="hint" id="helpHint">如需客服协助，请到 <a href="https://bothook.me/zh/contact.html" id="helpLink">bothook.me/zh/contact.html</a> 提交表单，并附上此链接（或其中的 UUID）。</p>
+        </div>
       </div>
 
-
-
-
-
-    <div class="card" id="uuidCard" style="margin-top:12px;">
-      <div class="hint" id="modeHint" style="display:none; color:rgba(232,238,252,.92); font-weight:700;">已付费用户模式</div>
-      <div class="hint">你的交付链接（请保存）</div>
-      <div class="uuid" id="provisionLink">生成中…</div>
-      <span id="uuid" style="display:none"></span>
-      <div class="btns">
-        <button class="primary" id="copyBtn" type="button">复制链接</button>
+      <div class="card" id="linkingRow">
+        <div class="kicker">下一步</div>
+        <div class="h2" id="nextStepTitle">在 WhatsApp 中扫码</div>
+        <p class="p" id="scanHint" style="font-size:14px;">当 WhatsApp 二维码就绪后，你会在 WhatsApp →「已关联的设备」中扫描二维码完成连接。</p>
+        <p class="hint" id="afterScanningHint">扫码完成后，本页面会自动显示“已关联✅”。</p>
       </div>
-      <p class="hint">这个链接包含你的 UUID。请复制保存，未来需要重新关联（relink）、查询、升级/取消订阅时，都可以直接打开。</p>
-      <p class="hint">如需客服协助，请到 <a href="https://bothook.me/zh/contact.html">bothook.me/zh/contact.html</a> 提交表单，并附上此链接（或其中的 UUID）。</p>
     </div>
 
-    <script>
+
+  </main>
+<script>
       function uuidv4(){
         const b = crypto.getRandomValues(new Uint8Array(16));
         b[6] = (b[6] & 0x0f) | 0x40;
@@ -586,3 +602,4 @@
   </div>
 </body>
 </html>
+
