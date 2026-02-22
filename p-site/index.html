@@ -139,9 +139,11 @@
       }
 
       function getUuidFromPath(){
-        // Supports shareable URLs like /p/<id>
-        const m = location.pathname.match(/^\/p\/([^\/]+)\/?$/);
-        return m ? decodeURIComponent(m[1]) : null;
+        // Supports shareable URLs like /p/<id> or /<lang>/p/<id>
+        let m = location.pathname.match(/^\/p\/([^\/]+)\/?$/);
+        if (m) return decodeURIComponent(m[1]);
+        m = location.pathname.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\/p\/([^\/]+)\/?$/i);
+        return m ? decodeURIComponent(m[2]) : null;
       }
 
       function setUuid(u){
@@ -155,9 +157,17 @@
         q.set('uuid', u);
         const qs = q.toString();
 
-        // Prefer shareable path /p/<id> if user landed there, else use query param.
+        // Prefer shareable path /p/<id> if user landed there.
+        // Also support locale-prefixed paths like /ja/p/<id>.
+        const mLangP = location.pathname.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\/p\//i);
+        const mLangRoot = location.pathname.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\/?$/i);
+
         if (location.pathname.startsWith('/p/')) {
           history.replaceState(null,'',`/p/${encodeURIComponent(u)}${qs ? ('?' + qs) : ''}`);
+        } else if (mLangP) {
+          history.replaceState(null,'',`/${mLangP[1]}/p/${encodeURIComponent(u)}${qs ? ('?' + qs) : ''}`);
+        } else if (mLangRoot && mLangRoot[1] !== 'api') {
+          history.replaceState(null,'',`/${mLangRoot[1]}/${qs ? ('?' + qs) : ''}`);
         } else {
           history.replaceState(null,'',`/${qs ? ('?' + qs) : ''}`);
         }
@@ -195,9 +205,11 @@
       const pref = localStorage.getItem('bothook_lang_pref');
       const urlLangRaw = (new URLSearchParams(location.search)).get('lang');
       const urlLang = (urlLangRaw || '').toLowerCase();
+      const pathLangRaw = (location.pathname.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\//i) || [null, null])[1];
+      const pathLang = (pathLangRaw || '').toLowerCase();
       const navLang = (navigator.language || '').toLowerCase();
 
-      const best = urlLang ? urlLang : (pref ? pref : (navLang.startsWith('zh') ? 'zh' : 'en'));
+      const best = urlLang ? urlLang : (pathLang ? pathLang : (pref ? pref : (navLang.startsWith('zh') ? 'zh' : 'en')));
       try { localStorage.setItem('bothook_lang_pref', best); } catch {}
 
       // Only redirect into /zh/ when zh is selected. Other locales stay on /.
