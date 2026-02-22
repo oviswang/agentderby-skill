@@ -182,11 +182,20 @@
         }
       });
 
-      // Locale auto-follow: zh -> /zh/, else default en.
-      // Respect explicit user preference if present.
+      // Locale auto-follow:
+      // - Respect explicit ?lang=xx from the main-site CTA.
+      // - Else respect localStorage preference.
+      // - Else follow browser language (zh -> /zh/; default en).
       const pref = localStorage.getItem('bothook_lang_pref');
+      const urlLangRaw = (new URLSearchParams(location.search)).get('lang');
+      const urlLang = (urlLangRaw || '').toLowerCase();
       const navLang = (navigator.language || '').toLowerCase();
-      const best = pref ? pref : (navLang.startsWith('zh') ? 'zh' : 'en');
+
+      const best = urlLang ? urlLang : (pref ? pref : (navLang.startsWith('zh') ? 'zh' : 'en'));
+      try { localStorage.setItem('bothook_lang_pref', best); } catch {}
+
+      // Only redirect into /zh/ when zh is selected. Other locales stay on / for now
+      // (until their locale pages exist), but API calls will still carry lang=best.
       if (best === 'zh' && location.pathname === '/') {
         location.replace('/zh/' + location.search);
       }
