@@ -546,7 +546,7 @@ for (const loc of locales) {
     guide: c.guide,
     promo: c.promo
   };
-  fs.writeFileSync(path.join(outDir, code + '.json'), JSON.stringify(out, null, 2) + '\n', 'utf8');
+  fs.writeFileSync(path.join(outDir, code + '.json'), JSON.stringify(out, null, 2) + '\\n', 'utf8');
 }
 
 console.log('generated ' + locales.length + ' prompt files into ' + outDir);
