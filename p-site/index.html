@@ -46,7 +46,7 @@
       <p class="hint">You can’t scan a QR code displayed on the same phone that’s doing the scanning.</p>
       <label class="hint" style="display:flex; gap:10px; align-items:center; margin-top:10px;">
         <input id="hasOtherDevice" type="checkbox" style="transform:scale(1.1);" />
-        I have another device to scan the QR code.
+        <span id="haveDeviceText">I have another device to scan the QR code.</span>
       </label>
       <div class="btns" style="margin-top:10px;">
         <button class="primary" id="continueBtn" type="button" disabled>Continue</button>
@@ -56,12 +56,12 @@
     <div class="card" id="busyCard" style="margin-top:12px; display:none;">
       <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Busy / Queue</div>
       <p><strong>All machines are currently busy.</strong></p>
-      <p class="hint">Please wait a few minutes and refresh this page. Your UUID link is still valid.</p>
+      <p class="hint" id="busyHint">Please wait a few minutes and refresh this page. Your UUID link is still valid.</p>
       <p class="hint" id="busyMeta"></p>
     </div>
 
     <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
-      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Get QR code</div>
+      <div class="hint" id="busyTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Get QR code</div>
       <div id="turnstileBox" style="margin-top:10px; min-height:72px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);">
         <div id="turnstileWidget"></div>
       </div>
@@ -75,16 +75,16 @@
     </div>
 
     <div class="card" id="linkedCard" style="margin-top:12px; display:none;">
-      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">✅ Linked</div>
+      <div class="hint" id="linkedTitle" style="color:rgba(232,238,252,.92); font-weight:700;">✅ Linked</div>
       <p><strong>This delivery machine is now connected to your WhatsApp.</strong></p>
       <p class="hint">You can close this page. To relink later, open your saved delivery link.</p>
-      <p class="hint">If WhatsApp shows it under Linked devices, you’re done.</p>
+      <p class="hint" id="linkedHint">If WhatsApp shows it under Linked devices, you’re done.</p>
     </div>
 
     <div class="row">
       <div class="card">
         <div class="hint">Next step</div>
-        <p>When the WhatsApp QR is ready, you’ll scan it from WhatsApp → Linked devices.</p>
+        <p id="scanHint">When the WhatsApp QR is ready, you’ll scan it from WhatsApp → Linked devices.</p>
         <p class="hint">After scanning, this page will confirm when the device is linked.</p>
       </div>
 
@@ -99,8 +99,8 @@
       <div class="btns">
         <button class="primary" id="copyBtn" type="button">Copy link</button>
       </div>
-      <p class="hint">This link contains your UUID. Save it — you can use it later to relink, check status, or manage your subscription.</p>
-      <p class="hint">If you need help, submit the form at <a href="https://bothook.me/contact.html">bothook.me/contact.html</a> and include this link (or the UUID in it).</p>
+      <p class="hint" id="saveHint">This link contains your UUID. Save it — you can use it later to relink, check status, or manage your subscription.</p>
+      <p class="hint" id="helpHint">If you need help, submit the form at <a href="https://bothook.me/contact.html" id="helpLink">bothook.me/contact.html</a> and include this link (or the UUID in it).</p>
     </div>
 
     <script>
@@ -200,24 +200,86 @@
       const best = urlLang ? urlLang : (pref ? pref : (navLang.startsWith('zh') ? 'zh' : 'en'));
       try { localStorage.setItem('bothook_lang_pref', best); } catch {}
 
-      // Only redirect into /zh/ when zh is selected. Other locales stay on / for now
-      // (until their locale pages exist), but API calls will still carry lang=best.
+      // Only redirect into /zh/ when zh is selected. Other locales stay on /.
+      // API calls will still carry lang=best.
       if (best === 'zh' && location.pathname === '/') {
         location.replace('/zh/' + location.search);
       }
+
+      // ---- i18n (T9.1) ----
+      async function loadStrings(lang){
+        try {
+          const r = await fetch(`/i18n/strings/${encodeURIComponent(lang)}.json`, { cache: 'no-store' });
+          if (!r.ok) return null;
+          return await r.json();
+        } catch {
+          return null;
+        }
+      }
+
+      function applyStrings(s){
+        if (!s) return;
+        try {
+          if (s.dir) document.documentElement.setAttribute('dir', s.dir);
+        } catch {}
+
+        const setText = (id, v) => {
+          const el = document.getElementById(id);
+          if (el && typeof v === 'string') el.textContent = v;
+        };
+
+        setText('haveDeviceText', s.haveDevice);
+        setText('continueBtn', s.continue);
+        setText('busyTitle', s.busyTitle);
+        setText('busyHint', s.busyHint);
+        setText('getQrBtn', s.getQr);
+        setText('linkedTitle', s.linkedTitle);
+        setText('linkedHint', s.linkedHint);
+        setText('scanHint', s.scanHint);
+        setText('copyBtn', s.copy);
+        setText('saveHint', s.saveHint);
+
+        // Generating… placeholder
+        if (linkEl && (linkEl.textContent || '').trim() === 'Generating…') {
+          setText('provisionLink', s.generating);
+        }
+
+        // Help hint: keep link, localize surrounding text
+        const help = document.getElementById('helpHint');
+        const helpLink = document.getElementById('helpLink');
+        if (help && helpLink && (s.helpHintPrefix || s.helpHintSuffix)) {
+          help.textContent = '';
+          const pre = document.createTextNode(String(s.helpHintPrefix || ''));
+          const post = document.createTextNode(String(s.helpHintSuffix || ''));
+          helpLink.textContent = String(s.helpLinkText || helpLink.textContent || 'bothook.me/contact.html');
+          help.appendChild(pre);
+          help.appendChild(helpLink);
+          help.appendChild(post);
+        }
+
+        // Status messages (used later)
+        window.__bothook_i18n = s;
+      }
+
+      (async ()=>{
+        const s = (await loadStrings(best)) || (await loadStrings('en'));
+        applyStrings(s);
+      })();
 
       copyBtn.addEventListener('click', async () => {
         const link = linkEl ? linkEl.textContent : `${location.origin}/p/${encodeURIComponent(el.textContent)}`;
         try {
           await navigator.clipboard.writeText(link);
-          copyBtn.textContent = 'Copied';
-          setTimeout(()=>copyBtn.textContent='Copy link', 900);
+          const s = window.__bothook_i18n || {};
+          copyBtn.textContent = s.copied || 'Copied';
+          setTimeout(()=>copyBtn.textContent=(s.copy || 'Copy link'), 900);
         } catch {
           const ta = document.createElement('textarea');
           ta.value = link; document.body.appendChild(ta);
           ta.select(); document.execCommand('copy'); ta.remove();
-          copyBtn.textContent = 'Copied';
-          setTimeout(()=>copyBtn.textContent='Copy link', 900);
+          const s = window.__bothook_i18n || {};
+          copyBtn.textContent = s.copied || 'Copied';
+          setTimeout(()=>copyBtn.textContent=(s.copy || 'Copy link'), 900);
         }
       });
 
@@ -235,7 +297,10 @@
 
         // Turnstile must pass before enabling QR
         getQrBtn.disabled = true;
-        qrStatus.textContent = 'Complete verification first. After it passes, click “Get QR code”.';
+        {
+          const s = window.__bothook_i18n || {};
+          qrStatus.textContent = s.verifyFirst || 'Complete verification first. After it passes, click “Get QR code”.';
+        }
 
         // Load Turnstile lazily (optional signal for later enforcement)
         if (!document.getElementById('ts-script')) {
@@ -270,7 +335,10 @@
                 callback: (token) => {
                   turnstileToken = token;
                   getQrBtn.disabled = false;
-                  qrStatus.textContent = '✅ Verification passed. Click “Get QR code”.';
+                  {
+                    const s = window.__bothook_i18n || {};
+                    qrStatus.textContent = s.verifyPassed || '✅ Verification passed. Click “Get QR code”.';
+                  }
                   // hide verification UI after success
                   const box=document.getElementById('turnstileBox'); if(box) box.style.display='none';
                 },
@@ -278,12 +346,18 @@
                 'error-callback': () => {
                   turnstileToken = null;
                   getQrBtn.disabled = true;
-                  qrStatus.textContent = 'Verification failed. Please try again.';
+                  {
+                    const s = window.__bothook_i18n || {};
+                    qrStatus.textContent = s.verifyTryAgain || 'Verification failed. Please try again.';
+                  }
                 },
                 'expired-callback': () => {
                   turnstileToken = null;
                   getQrBtn.disabled = true;
-                  qrStatus.textContent = 'Verification expired. Please verify again.';
+                  {
+                    const s = window.__bothook_i18n || {};
+                    qrStatus.textContent = s.verifyExpired || 'Verification expired. Please verify again.';
+                  }
                 }
             });
           } catch (e) {
@@ -411,7 +485,10 @@
               const q = await fetchQr(uuid);
               img.src = q.qrDataUrl;
               hadQr = true;
-              qrStatus.textContent = 'QR ready. Scan it in WhatsApp → Linked devices.';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
+              }
               break;
             } catch (e) {
               qrStatus.textContent = 'Waiting for QR…';
@@ -430,7 +507,10 @@
                 lastQr = q.qrDataUrl;
                 img.src = q.qrDataUrl;
                 hadQr = true;
-                qrStatus.textContent = 'QR ready. Scan it in WhatsApp → Linked devices.';
+                {
+                  const s = window.__bothook_i18n || {};
+                  qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
+                }
               }
             } catch (e) {
               // ignore transient qr_not_ready
@@ -468,7 +548,10 @@
             // Three-state UI
             if (everLinked && isConnected) {
               linked = true;
-              qrStatus.textContent = '✅ Linked! This delivery machine is now connected.';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.linkedOk || '✅ Linked! This delivery machine is now connected.';
+              }
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'none';
@@ -505,7 +588,10 @@
             statusErrs = 0;
             if (st.connected) {
               linked = true;
-              qrStatus.textContent = '✅ Linked! This delivery machine is now connected.';
+              {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.linkedOk || '✅ Linked! This delivery machine is now connected.';
+              }
               if (img) img.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'none';
