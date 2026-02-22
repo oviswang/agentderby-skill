@@ -50,5 +50,10 @@
   "closePageHint": "Bu sayfayı kapatabilirsiniz. Daha sonra relink için kaydettiğiniz teslimat bağlantısını açın.",
   "nextStepTitle": "Sonraki adım",
   "afterScanningHint": "Taramadan sonra bu sayfa cihazın bağlandığını doğrular.",
-  "deliveryLinkTitle": "Teslimat bağlantınız (kaydedin)"
+  "deliveryLinkTitle": "Teslimat bağlantınız (kaydedin)",
+  "paidTitle": "Abonelik",
+  "paidActiveLine": "✅ Abonelik aktif.",
+  "paidHint": "Buradan WhatsApp’ı yeniden bağlayabilirsiniz (Relink). Faturalandırma işlemleri (iptal/ödeme yöntemi) için destek formunu kullanın (e‑posta + WhatsApp + UUID/bağlantı).",
+  "paidRelink": "Yeniden bağla (Relink)",
+  "paidUpgradeComing": "Yükselt (yakında)"
 }

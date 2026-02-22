@@ -50,5 +50,10 @@
   "closePageHint": "You can close this page. To relink later, open your saved delivery link.",
   "nextStepTitle": "Next step",
   "afterScanningHint": "After scanning, this page will confirm when the device is linked.",
-  "deliveryLinkTitle": "Your delivery link (save it)"
+  "deliveryLinkTitle": "Your delivery link (save it)",
+  "paidTitle": "Subscription",
+  "paidActiveLine": "✅ Subscription active.",
+  "paidHint": "You can relink WhatsApp here. For billing actions (cancel / payment method), please contact support.",
+  "paidRelink": "Relink device",
+  "paidUpgradeComing": "Upgrade (coming soon)"
 }

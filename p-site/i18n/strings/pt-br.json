@@ -50,5 +50,10 @@
   "closePageHint": "Você pode fechar esta página. Para relink depois, abra o link de entrega salvo.",
   "nextStepTitle": "Próximo passo",
   "afterScanningHint": "Após escanear, esta página confirmará quando o dispositivo estiver vinculado.",
-  "deliveryLinkTitle": "Seu link de entrega (salve)"
+  "deliveryLinkTitle": "Seu link de entrega (salve)",
+  "paidTitle": "Assinatura",
+  "paidActiveLine": "✅ Assinatura ativa.",
+  "paidHint": "Você pode reconectar o WhatsApp aqui (Relink). Para cobrança (cancelar / forma de pagamento), use o formulário de suporte (e-mail + WhatsApp + UUID/link).",
+  "paidRelink": "Reconectar (Relink)",
+  "paidUpgradeComing": "Upgrade (em breve)"
 }

@@ -44,9 +44,9 @@
     <p id="pageIntro">This page creates a unique provisioning session. You’ll use it to link WhatsApp on the next step.</p>
 
     <div class="card" id="paidCard" style="margin-top:12px; display:none;">
-      <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Subscription</div>
-      <p><strong>✅ Subscription active.</strong></p>
-      <p class="hint">You can relink WhatsApp here. For billing actions (cancel / payment method), please contact support.</p>
+      <div class="hint" id="paidTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Subscription</div>
+      <p id="paidActiveLine"><strong>✅ Subscription active.</strong></p>
+      <p class="hint" id="paidHint">You can relink WhatsApp here. For billing actions (cancel / payment method), please contact support.</p>
       <div class="btns" style="margin-top:10px;">
         <button class="primary" id="paidRelinkBtn" type="button">Relink device</button>
         <button id="paidUpgradeBtn" type="button" disabled>Upgrade (coming soon)</button>
@@ -402,6 +402,13 @@
         setText('deliveryLinkTitle', s.deliveryLinkTitle);
         setText('copyBtn', s.copy);
         setText('saveHint', s.saveHint);
+
+        // Paid mode copy (optional)
+        setText('paidTitle', s.paidTitle);
+        setText('paidActiveLine', s.paidActiveLine);
+        setText('paidHint', s.paidHint);
+        setText('paidRelinkBtn', s.paidRelink);
+        setText('paidUpgradeBtn', s.paidUpgradeComing);
 
         // Generating… placeholder
         if (linkEl && (linkEl.textContent || '').trim() === 'Generating…') {

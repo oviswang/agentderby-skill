@@ -50,5 +50,10 @@
   "closePageHint": "يمكنك إغلاق هذه الصفحة. لإعادة الربط لاحقاً افتح رابط التسليم الذي حفظته.",
   "nextStepTitle": "الخطوة التالية",
   "afterScanningHint": "بعد المسح، ستؤكد هذه الصفحة عند ربط الجهاز.",
-  "deliveryLinkTitle": "رابط التسليم الخاص بك (احفظه)"
+  "deliveryLinkTitle": "رابط التسليم الخاص بك (احفظه)",
+  "paidTitle": "الاشتراك",
+  "paidActiveLine": "✅ الاشتراك نشط.",
+  "paidHint": "يمكنك إعادة ربط WhatsApp هنا (Relink). لإجراءات الفوترة (الإلغاء/طريقة الدفع)، تواصل عبر نموذج الدعم (البريد + WhatsApp + UUID/الرابط).",
+  "paidRelink": "إعادة الربط (Relink)",
+  "paidUpgradeComing": "ترقية (قريبًا)"
 }

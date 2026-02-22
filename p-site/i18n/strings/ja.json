@@ -50,5 +50,10 @@
   "closePageHint": "このページは閉じてOKです。後で再リンクするには、保存した交付リンクを開いてください。",
   "nextStepTitle": "次の手順",
   "afterScanningHint": "スキャン後、このページでデバイスがリンクされたことを確認します。",
-  "deliveryLinkTitle": "あなたの交付リンク（保存してください）"
+  "deliveryLinkTitle": "あなたの交付リンク（保存してください）",
+  "paidTitle": "サブスクリプション",
+  "paidActiveLine": "✅ サブスクリプションは有効です。",
+  "paidHint": "ここで WhatsApp の再リンク（Relink）ができます。解約や支払い方法の変更などは、サポートフォーム（メール + WhatsApp番号 + UUID/リンク）からご連絡ください。",
+  "paidRelink": "再リンク（Relink）",
+  "paidUpgradeComing": "アップグレード（近日公開）"
 }

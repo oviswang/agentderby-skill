@@ -50,5 +50,10 @@
   "closePageHint": "Bạn có thể đóng trang này. Để relink sau này, mở liên kết giao mà bạn đã lưu.",
   "nextStepTitle": "Bước tiếp theo",
   "afterScanningHint": "Sau khi quét, trang này sẽ xác nhận khi thiết bị đã được liên kết.",
-  "deliveryLinkTitle": "Liên kết giao của bạn (hãy lưu)"
+  "deliveryLinkTitle": "Liên kết giao của bạn (hãy lưu)",
+  "paidTitle": "Gói thuê bao",
+  "paidActiveLine": "✅ Gói thuê bao đang hoạt động.",
+  "paidHint": "Bạn có thể liên kết lại WhatsApp tại đây (Relink). Với vấn đề thanh toán (hủy/đổi phương thức), hãy gửi form hỗ trợ (email + WhatsApp + UUID/link).",
+  "paidRelink": "Liên kết lại (Relink)",
+  "paidUpgradeComing": "Nâng cấp (sắp ra mắt)"
 }

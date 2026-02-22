@@ -50,5 +50,10 @@
   "closePageHint": "Kamu bisa menutup halaman ini. Untuk relink nanti, buka tautan pengantaran yang kamu simpan.",
   "nextStepTitle": "Langkah berikutnya",
   "afterScanningHint": "Setelah memindai, halaman ini akan mengonfirmasi saat perangkat tertaut.",
-  "deliveryLinkTitle": "Tautan pengantaranmu (simpan)"
+  "deliveryLinkTitle": "Tautan pengantaranmu (simpan)",
+  "paidTitle": "Langganan",
+  "paidActiveLine": "✅ Langganan aktif.",
+  "paidHint": "Anda bisa menghubungkan ulang WhatsApp di sini (Relink). Untuk penagihan (batalkan / metode pembayaran), kirim formulir dukungan (email + WhatsApp + UUID/tautan).",
+  "paidRelink": "Hubungkan ulang (Relink)",
+  "paidUpgradeComing": "Upgrade (segera hadir)"
 }

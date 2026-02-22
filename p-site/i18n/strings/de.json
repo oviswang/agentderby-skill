@@ -50,5 +50,10 @@
   "closePageHint": "Du kannst diese Seite schließen. Zum späteren Relink öffne deinen gespeicherten Liefer‑Link.",
   "nextStepTitle": "Nächster Schritt",
   "afterScanningHint": "Nach dem Scannen bestätigt diese Seite, wenn das Gerät verknüpft ist.",
-  "deliveryLinkTitle": "Dein Liefer‑Link (speichern)"
+  "deliveryLinkTitle": "Dein Liefer‑Link (speichern)",
+  "paidTitle": "Abo",
+  "paidActiveLine": "✅ Abo aktiv.",
+  "paidHint": "Hier kannst du WhatsApp neu verbinden (Relink). Für Abrechnungsaktionen (Kündigung/Zahlungsmethode) nutze bitte das Support-Formular (E-Mail + WhatsApp-Nummer + UUID/Link).",
+  "paidRelink": "Neu verbinden (Relink)",
+  "paidUpgradeComing": "Upgrade (bald verfügbar)"
 }
