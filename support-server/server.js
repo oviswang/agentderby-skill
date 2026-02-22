@@ -165,6 +165,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await readJsonBody(req);
       const email = sanitizeText(body.email, 200);
+      const wa = sanitizeText(body.wa || body.phone || '', 80);
       const uuid = sanitizeText(body.uuid || '', 200);
       const message = sanitizeText(body.message, 8000);
       const pageLang = sanitizeText(body.pageLang || '', 20);
@@ -192,6 +193,7 @@ const server = http.createServer(async (req, res) => {
         ticket_id: ticketIdFromClient || makeTicketId(),
         created_at: nowIso(),
         email,
+        wa,
         uuid,
         message,
         page_lang: pageLang,

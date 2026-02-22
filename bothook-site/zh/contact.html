@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>联系 — BOTHook</title>
+  <meta name="description" content="联系 BOTHook 客服。" />
+  <link rel="icon" href="/assets/logo.jpg" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="canonical" href="https://bothook.me/zh/contact.html" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/contact.html" />
+  <link rel="alternate" hreflang="zh" href="https://bothook.me/zh/contact.html" />
+</head>
+<body>
+  <header class="header">
+    <a class="brand" href="/zh/" aria-label="BOTHook 首页">
+      <img src="/assets/logo.jpg" alt="BOTHook logo" />
+      <strong>BOTHook</strong>
+    </a>
+  </header>
+
+  <main class="main">
+    <div class="content-wrap" id="contentWrap">
+      <section class="card" style="max-width:760px; margin:0 auto;">
+        <h1 class="h1" style="font-size:32px; margin-bottom:8px;">联系</h1>
+        <p class="p">提交后我们会通过邮件回复你。若你需要取消订阅、修改配置等“操作型请求”，请务必填写 WhatsApp 手机号 + UUID/交付链接，用于校验。</p>
+
+        <div id="sent" class="card" style="display:none; background:rgba(90,255,209,.10);">
+          <strong>已收到。</strong>
+          <div class="p" style="margin-top:8px;">我们会尽快通过邮件回复你。</div>
+        </div>
+
+        <form id="form" class="card" style="margin-top:14px;" autocomplete="on">
+          <label class="label" for="email">邮箱</label>
+          <input id="email" name="email" type="email" required placeholder="you@company.com" class="input" />
+
+          <div style="height:12px"></div>
+
+          <label class="label" for="wa">WhatsApp 手机号码（用于校验）</label>
+          <input id="wa" name="wa" type="tel" placeholder="必填：你的 WhatsApp 手机号（例如 +65 8123 4567）" class="input" />
+
+          <div style="height:12px"></div>
+
+          <label class="label" for="uuid">UUID / 交付链接（用于定位）</label>
+          <input id="uuid" name="uuid" type="text" placeholder="必填：UUID（例如 a6bec8ff-...）或 https://p.bothook.me/..." class="input" />
+
+          <div style="height:12px"></div>
+
+          <label class="label" for="message">内容</label>
+          <textarea id="message" name="message" rows="6" required placeholder="我们可以怎么帮你？" class="input"></textarea>
+
+          <div class="btns">
+            <button class="cta primary" type="submit">发送</button>
+            <a class="cta ghost" href="/zh/">返回</a>
+          </div>
+          <p class="hint" style="margin-top:10px;">提示：如果你正在进行 WhatsApp 关联交付，请附上 UUID，便于我们定位你的会话。</p>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/zh/contact.html">联系</a>
+        <span class="dot">·</span>
+        <a href="/zh/terms.html">条款</a>
+        <span class="dot">·</span>
+        <a href="/zh/privacy.html">隐私</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.style.opacity = '1'));
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    const params = new URLSearchParams(location.search);
+    const uuid = params.get('uuid');
+    if (uuid) document.getElementById('uuid').value = uuid;
+
+    const form = document.getElementById('form');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        email: form.email.value,
+        wa: form.wa.value,
+        uuid: form.uuid.value,
+        message: form.message.value,
+        pageLang: document.documentElement.lang || 'zh-CN',
+      };
+
+      try {
+        const r = await fetch('/api/support/ticket', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const j = await r.json().catch(() => null);
+        if (!r.ok || !j || !j.ok) throw new Error(j?.error || '提交失败');
+
+        const sent = document.getElementById('sent');
+        sent.style.display = 'block';
+        sent.innerHTML = `<strong>已收到。</strong><div class="p" style="margin-top:8px;">工单号：<strong>${j.ticket_id}</strong>。我们会尽快通过邮件回复你。</div>`;
+        form.style.display = 'none';
+        sent.scrollIntoView({behavior:'smooth', block:'start'});
+      } catch (err) {
+        alert('提交失败，请稍后重试。');
+      }
+    });
+  </script>
+
+  <style>
+    .input{width:100%;border:0;border-radius:14px;padding:12px 12px;background:rgba(255,255,255,.06);color:var(--text);outline:none}
+    .input::placeholder{color:rgba(169,182,214,.7)}
+    textarea.input{resize:vertical;min-height:120px}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  </style>
+</body>
+</html>
