@@ -8,7 +8,7 @@
     },
     {
       "path": "bootstrap.sh",
-      "sha256": "ca63920b9a755e6384c7d129db1b6b9032a02e38271dde5c605c728bc8a62891"
+      "sha256": "e43e7e9904893acdf0f56bb8039a818c37fae50bdc068354b6c29150136dab86"
     },
     {
       "path": "provision/package.json",

@@ -57,7 +57,8 @@ main(){
 
   apt-get update -y
   apt-get install -y --no-install-recommends \
-    ca-certificates curl jq openssl coreutils
+    ca-certificates curl jq openssl coreutils \
+    build-essential python3 make g++
 
   mkdir -p "$INSTALL_DIR" "$INSTALL_DIR/artifacts" "$INSTALL_DIR/bin"
 
