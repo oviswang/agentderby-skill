@@ -31,7 +31,7 @@
 <body>
   <div class="wrap">
     <div class="top">
-      <a class="brand" href="https://bothook.me/" aria-label="BOTHook home">
+      <a class="brand" href="https://bothook.me/" aria-label="BOTHook home" id="brandHome">
         <img src="https://bothook.me/assets/logo.jpg" alt="BOTHook" />
         <strong>BOTHook</strong>
       </a>
@@ -217,6 +217,16 @@
       if (best === 'zh' && location.pathname === '/') {
         location.replace('/zh/' + location.search);
       }
+
+      // Top navigation: back to the same-language main site.
+      // (Do not hardcode to English home.)
+      try {
+        const mainHome = (best && best !== 'en') ? (`https://bothook.me/${best}/`) : 'https://bothook.me/';
+        const back = document.getElementById('backLink');
+        if (back) back.href = mainHome;
+        const brand = document.getElementById('brandHome');
+        if (brand) brand.href = mainHome;
+      } catch {}
 
       // ---- i18n (T9.1) ----
       async function loadStrings(lang){
