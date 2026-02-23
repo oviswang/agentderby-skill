@@ -556,7 +556,8 @@
       async function startProvision(uuid, force=false){
         // Notify control-plane: QR generated (starts 5-min A-stage window)
         try {
-          const lang = (location.pathname.startsWith('/zh') ? 'zh-CN' : 'en');
+          const lang = (new URLSearchParams(location.search).get('lang') || '').trim() || (location.pathname.startsWith('/zh-tw') ? 'zh-tw' : (location.pathname.startsWith('/zh') ? 'zh' : 'en'));
+
           await fetch('/api/ops/qr-generated', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
