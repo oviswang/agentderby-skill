@@ -18,9 +18,13 @@
 import express from 'express';
 import cors from 'cors';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { openDb, nowIso } from './lib/db.mjs';
+import { encryptAesGcm } from './lib/crypto.mjs';
+import { verifyOpenAiKey } from './lib/openai_verify.mjs';
 
 const PORT = parseInt(process.env.BOTHOOK_API_PORT || '18998', 10);
 const POOL_HTTP_PORT = parseInt(process.env.BOTHOOK_POOL_HTTP_PORT || '80', 10);
@@ -162,6 +166,14 @@ function getOrCreateDeliveryForUuid(db, uuid) {
 
     db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=?, assigned_at=? WHERE instance_id=?')
       .run('ALLOCATED', uuid, ts, chosen.instance_id);
+
+    // Persist UUID recovery link on the user machine for later relink/support.
+    try {
+      const lang = 'en';
+      const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang)}`;
+      const remote = `set -euo pipefail; sudo mkdir -p /opt/bothook; sudo sh -lc 'cat > /opt/bothook/UUID.txt <<EOF\nuuid=${uuid}\np_link=${pLink}\nEOF'; sudo chmod 644 /opt/bothook/UUID.txt; echo ok`;
+      poolSsh(chosen, remote, { timeoutMs: 12000, tty: false, retries: 1 });
+    } catch {}
 
     db.prepare(`
       INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json)
@@ -1002,7 +1014,96 @@ app.post('/api/stripe/webhook', async (req, res) => {
   }
 });
 
+// i18n: WhatsApp prompts (platform-owned copy)
+app.get('/api/i18n/whatsapp-prompts', (req, res) => {
+  try {
+    const langRaw = String(req.query?.lang || '').trim().toLowerCase();
+    const lang = langRaw || 'en';
+    const allow = new Set(['en','zh','zh-tw','ar','de','es','fr','hi','id','ja','ko','pt-br','ru','th','tr','vi']);
+    const pick = allow.has(lang) ? lang : 'en';
+
+    const here = path.dirname(new URL(import.meta.url).pathname);
+    const p = path.join(here, 'i18n', 'whatsapp_prompts', `${pick}.json`);
+    let prompts;
+    try { prompts = JSON.parse(fs.readFileSync(p, 'utf8')); } catch { prompts = null; }
+    if (!prompts) return send(res, 500, { ok:false, error:'prompts_load_failed' });
+    return send(res, 200, { ok:true, lang: pick, prompts });
+  } catch {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 // Delivery status (for user machine to decide next stage)
+// Key status (OpenAI) — used by onboarding responder
+app.get('/api/key/status', (req, res) => {
+  try {
+    const uuid = String(req.query?.uuid || '').trim();
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+    const { db } = openDb();
+    const row = db.prepare('SELECT meta_json FROM delivery_secrets WHERE provision_uuid=? AND kind=? LIMIT 1').get(uuid, 'openai_api_key');
+    if (!row) return send(res, 200, { ok:true, uuid, hasKey:false, verified:false });
+    let meta = {};
+    try { meta = row.meta_json ? JSON.parse(row.meta_json) : {}; } catch { meta = {}; }
+    const verifiedAt = meta.verified_at || null;
+    return send(res, 200, { ok:true, uuid, hasKey:true, verified: Boolean(verifiedAt), verifiedAt });
+  } catch {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
+// Verify + store OpenAI key (encrypted) — returns verified=true on success
+app.post('/api/key/verify', async (req, res) => {
+  try {
+    const uuid = String(req.body?.uuid || '').trim();
+    const provider = String(req.body?.provider || 'openai').trim().toLowerCase();
+    const key = String(req.body?.key || '').trim();
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+    if (provider !== 'openai') return send(res, 400, { ok:false, error:'provider_not_supported' });
+    if (!key) return send(res, 400, { ok:false, error:'key_required' });
+
+    const vr = await verifyOpenAiKey(key, { timeoutMs: 10000 });
+    if (!vr.ok) {
+      return send(res, 200, { ok:true, verified:false, error:'key_invalid', detail: vr.error || null });
+    }
+
+    const { ciphertext, iv, tag, alg } = encryptAesGcm(Buffer.from(key, 'utf8'));
+    const ts = nowIso();
+    const secretId = `${uuid}:openai_api_key`;
+
+    const { db } = openDb();
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.prepare(
+        `INSERT INTO delivery_secrets(secret_id, provision_uuid, kind, ciphertext, iv, tag, alg, created_at, updated_at, meta_json)
+         VALUES (?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(secret_id) DO UPDATE SET ciphertext=excluded.ciphertext, iv=excluded.iv, tag=excluded.tag, alg=excluded.alg, updated_at=excluded.updated_at, meta_json=excluded.meta_json`
+      ).run(
+        secretId,
+        uuid,
+        'openai_api_key',
+        ciphertext,
+        iv,
+        tag,
+        alg,
+        ts,
+        ts,
+        JSON.stringify({ verified_at: ts })
+      );
+      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+        crypto.randomUUID(), ts, 'delivery', uuid, 'OPENAI_KEY_VERIFIED', JSON.stringify({ uuid })
+      );
+      db.exec('COMMIT');
+    } catch (e) {
+      try { db.exec('ROLLBACK'); } catch {}
+      throw e;
+    }
+
+    return send(res, 200, { ok:true, verified:true, message:'[bothook] OpenAI Key 验证成功 ✅ 现在你可以直接在 WhatsApp 里对它说“帮我做什么”。' });
+  } catch (e) {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 app.get('/api/delivery/status', (req, res) => {
   try {
     const uuid = String(req.query?.uuid || '').trim();
