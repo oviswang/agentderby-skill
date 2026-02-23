@@ -96,6 +96,7 @@ const plugin = {
       try {
         if (ctx.channelId !== "whatsapp") return;
         const body = String(event.content || "");
+        api.logger.info?.(`bothook-onboarding-plugin: message_sending to=${event.to} len=${body.length} preview=${body.slice(0, 60).replace(/\n/g,' ')}`);
 
         // Only intercept the known default warning.
         if (!body.includes("No API key found for provider") && !body.includes("Embedded agent failed before reply")) {
