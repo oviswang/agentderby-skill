@@ -6,6 +6,9 @@ import path from 'node:path';
 const handler = async (event: any) => {
   try {
     if (!event || event.type !== 'message' || event.action !== 'received') return;
+    try {
+      console.log(`[bothook-onboarding] received channel=${event?.context?.channelId} from=${event?.context?.from} contentLen=${String(event?.context?.content||'').length}`);
+    } catch {}
     const ctx = event.context || {};
     if (ctx.channelId !== 'whatsapp') return;
 
@@ -45,6 +48,7 @@ const handler = async (event: any) => {
       if (!st.promoSentTo[key]) {
         const msg = render(p.promo_external, await buildVars(apiBase, UUID));
         event.messages.push(msg);
+        try { console.log('[bothook-onboarding] sent promo_external'); } catch {}
         st.promoSentTo[key] = Date.now();
         saveState(UUID, st);
       }
@@ -62,6 +66,7 @@ const handler = async (event: any) => {
       // Always reply with welcome_unpaid (countdown may change).
       const msg = render(p.welcome_unpaid, vars);
       event.messages.push(msg);
+      try { console.log('[bothook-onboarding] sent welcome_unpaid'); } catch {}
       return;
     }
 
@@ -88,6 +93,7 @@ const handler = async (event: any) => {
 
       const msg = render(p.guide_key_paid, vars);
       event.messages.push(msg);
+      try { console.log('[bothook-onboarding] sent guide_key_paid'); } catch {}
       return;
     }
 
