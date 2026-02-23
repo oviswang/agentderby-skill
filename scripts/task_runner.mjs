@@ -756,6 +756,51 @@ console.log('generated ' + locales.length + ' prompt files into ' + outDir);
           return { ok:true, kind, instance_id: instanceId, blueprint_id: blueprintId, region };
         }
 
+        if (kind === 'ssh_put_tar') {
+          if (RUNNER_MODE !== 'execute_l2') throw new Error('ssh_put_tar_requires_execute_l2');
+          const instanceId = act.instance_id;
+          if (!instanceId) throw new Error('bad_action_missing_instance_id');
+          if (instanceId === 'lhins-npsqfxvn') throw new Error('forbidden_master_host');
+
+          const localDirRel = String(act.local_dir || '').trim();
+          const remoteDir = String(act.remote_dir || '').trim();
+          if (!localDirRel) throw new Error('bad_action_missing_local_dir');
+          if (!remoteDir) throw new Error('bad_action_missing_remote_dir');
+
+          const localDirFull = path.join(WORKSPACE, localDirRel);
+          if (!fs.existsSync(localDirFull)) throw new Error('ssh_put_tar_local_dir_missing');
+
+          // lookup ip
+          const ipq = sh(`python3 - <<'PY'\nimport sqlite3\ncon=sqlite3.connect('${WORKSPACE}/control-plane/data/bothook.sqlite')\ncur=con.cursor()\nrow=cur.execute('select public_ip,lifecycle_status from instances where instance_id=?', ('${instanceId}',)).fetchone()\nprint((row[0] if row else '')+'|'+(row[1] if row else ''))\nPY`);
+          const out = (ipq.stdout||'').trim();
+          const parts = out.split('|');
+          const ip = parts[0] || '';
+          const lifecycle = parts[1] || '';
+          if (!ip) throw new Error('instance_ip_not_found');
+          if (ip === '127.0.0.1') throw new Error('forbidden_localhost');
+          if (lifecycle === 'DELIVERING') throw new Error('forbidden_delivering_machine');
+
+          const user = act.user || 'ubuntu';
+          const tarName = (act.tar_name || `${tid}-${tsFolder}`).replace(/[^a-zA-Z0-9_.-]/g,'_');
+          const tarRel = `checkpoints/${tsFolder}/${tid}/${tarName}.tgz`;
+          const tarFull = path.join(WORKSPACE, tarRel);
+
+          // create tarball for evidence + transfer
+          run(`mkdir -p '${path.dirname(tarFull)}'`);
+          run(`tar -czf '${tarFull}' -C '${localDirFull}' .`);
+
+          const remoteTmp = `/tmp/${tarName}.tgz`;
+          const scpCmd = `scp -i ${SSH_IDENTITY_FILE} -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 '${tarFull}' ${user}@${ip}:'${remoteTmp}'`;
+          const scp = run(scpCmd);
+          if (scp.code !== 0) throw new Error('ssh_put_tar_scp_failed');
+
+          const remoteCmd = `ssh -i ${SSH_IDENTITY_FILE} -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${user}@${ip} 'set -euo pipefail; mkdir -p "${remoteDir.replace(/"/g,'\\"')}"; tar -xzf "${remoteTmp}" -C "${remoteDir.replace(/"/g,'\\"')}"; echo ok'`;
+          const r2 = run(remoteCmd);
+          if (r2.code !== 0) throw new Error('ssh_put_tar_unpack_failed');
+
+          return { ok:true, kind, ip, local_dir: localDirRel, remote_dir: remoteDir, tar: tarRel };
+        }
+
         if (kind === 'ssh_exec') {
           if (RUNNER_MODE !== 'execute_l2') throw new Error('ssh_exec_requires_execute_l2');
           const instanceId = act.instance_id;
