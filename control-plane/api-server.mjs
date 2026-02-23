@@ -1157,7 +1157,9 @@ app.post('/api/ops/qr-generated', (req, res) => {
       // Only move to LINKING when not yet bound.
       const cur = db.prepare('SELECT status, wa_jid FROM deliveries WHERE delivery_id=?').get(d.delivery_id);
       const nextStatus = (cur?.wa_jid ? String(cur.status || 'LINKING') : 'LINKING');
-      db.prepare('UPDATE deliveries SET status=?, user_lang=COALESCE(user_lang, ?), updated_at=?, meta_json=? WHERE delivery_id=?')
+      // Language must follow p-site selection end-to-end. Use current `lang` as the source of truth.
+      // If `lang` is missing/null, preserve existing user_lang.
+      db.prepare('UPDATE deliveries SET status=?, user_lang=COALESCE(?, user_lang), updated_at=?, meta_json=? WHERE delivery_id=?')
         .run(nextStatus, lang || null, ts, meta, d.delivery_id);
 
       db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
