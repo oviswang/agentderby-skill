@@ -10,6 +10,8 @@ Group=ubuntu
 Environment=OPENCLAW_HOME=/home/ubuntu
 Environment=OPENCLAW_CONFIG_PATH=/home/ubuntu/.openclaw/openclaw.json
 Environment=OPENCLAW_GATEWAY_PORT=18789
+# Ensure ubuntu user's npm-global bin is on PATH (used for chat-driven self-updates, too)
+Environment=PATH=/home/ubuntu/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 WorkingDirectory=/home/ubuntu
 ExecStart=/opt/bothook/bin/openclaw-gateway-start.sh
 Restart=always

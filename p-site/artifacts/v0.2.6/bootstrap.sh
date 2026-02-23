@@ -5,7 +5,7 @@ set -euo pipefail
 # Goal: bring a fresh Ubuntu machine to a verifiable "provision-ready" state.
 # This version also installs Node.js + OpenClaw and provisions a system-level gateway unit.
 
-ARTIFACT_BASE_URL="${ARTIFACT_BASE_URL:-https://p.bothook.me/artifacts/v0.2.4}"
+ARTIFACT_BASE_URL="${ARTIFACT_BASE_URL:-https://p.bothook.me/artifacts/v0.2.6}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/bothook}"
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 
@@ -41,13 +41,35 @@ ensure_node(){
 }
 
 ensure_openclaw(){
+  # Install OpenClaw under the ubuntu user's npm prefix (NOT system-global).
+  # Rationale:
+  # - systemd service runs as User=ubuntu
+  # - service hardening may mount /usr read-only (ProtectSystem=full)
+  # - chat-driven updates must work without sudo and without writing to /usr
+  local uhome="/home/ubuntu"
+  local prefix="$uhome/.npm-global"
+
   if command -v openclaw >/dev/null 2>&1; then
     log "openclaw already installed: $(openclaw --version 2>/dev/null || true)"
     return 0
   fi
-  log "Installing OpenClaw via npm: $OPENCLAW_NPM_VERSION"
-  npm install -g "$OPENCLAW_NPM_VERSION"
-  log "openclaw installed: $(command -v openclaw)"
+
+  log "Configuring npm prefix for ubuntu: $prefix"
+  mkdir -p "$prefix"
+  chown -R ubuntu:ubuntu "$prefix"
+
+  # Ensure future `npm i -g` by ubuntu installs into ~/.npm-global.
+  sudo -u ubuntu npm config set prefix "$prefix" >/dev/null
+
+  log "Installing OpenClaw via npm (as ubuntu): $OPENCLAW_NPM_VERSION"
+  sudo -u ubuntu npm install -g "$OPENCLAW_NPM_VERSION"
+
+  # Ensure the binary is reachable.
+  if [[ -x "$prefix/bin/openclaw" ]]; then
+    ln -sf "$prefix/bin/openclaw" /usr/local/bin/openclaw || true
+  fi
+
+  log "openclaw installed: $prefix/bin/openclaw"
 }
 
 main(){
