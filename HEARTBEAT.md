@@ -23,7 +23,7 @@ TASK 模式（降噪版）
      - 若 changed=true：只发“增量（delta）”，不要复读 DONE 看板。
 
 增量（delta）发送规则（changed=true）：
-A) 向 Telegram 发送本轮 picked/touched 任务的摘要（每个任务只引用任务文件字段）：
+A) 向 Telegram **只发送本轮 picked/touched 的自治任务**的摘要（每个任务只引用任务文件字段）：
    - task_id
    - status
    - progress_percent
@@ -31,8 +31,8 @@ A) 向 Telegram 发送本轮 picked/touched 任务的摘要（每个任务只引
    - last_updated
    - evidence_path（若任务文件有）
 
-B) 只有当 T1/T2/T3 本轮被 touched（runner 输出 touched 包含 T1.json/T2.json/T3.json）时，才额外发送一次 T1/T2/T3 的 task board（字段同上）。
-   - 若 T1/T2/T3 未 touched：不要发送它们的 board（避免刷屏）。
+B) **禁止**在汇报里包含与本轮无关的已完成任务（例如 T1/T2/T3）。
+   - 即便历史上有“固定列 T1/T2/T3”的模板，也必须视为已废弃。
 
 C) Telegram 去重：
    - 将将要发送的消息文本计算一个 hash（例如 sha256）并写入 memory/task-runner-state.json 的 lastSentHash。

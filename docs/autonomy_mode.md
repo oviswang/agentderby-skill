@@ -44,9 +44,10 @@ When the owner triggers TASK mode:
 
 2) Parse JSON:
    - If `ok=false` OR `status` is not ok* → send a Telegram alert summary.
-   - Else if `changed=true` → send Telegram delta summary.
+   - Else if `changed=true` → send Telegram **delta summary for only picked/touched tasks**.
    - Else (changed=false, no alert) → reply `HEARTBEAT_OK` in WhatsApp.
 
+**Important:** Never include unrelated DONE tasks (e.g. T1/T2/T3) in the report template.
 ## 5) Deltas must go to Telegram
 
 Owner policy:
