@@ -38,6 +38,9 @@ const handler = async (event: any) => {
     // Load local state (promo once per external sender)
     const st = loadState(UUID);
 
+    // Determine controller (who owns this delivery after verification)
+    const controllerE164 = normalizeE164(String(st.controllerE164 || ''));
+
     // Fetch delivery status + lang
     const d = await fetchJson(`${apiBase}/api/delivery/status?uuid=${encodeURIComponent(UUID)}`);
     if (!d?.ok) return;
@@ -50,8 +53,9 @@ const handler = async (event: any) => {
     const p = prompts && prompts.ok ? prompts.prompts : null;
     if (!p) return;
 
-    // External contact: reply promo once, then ignore.
+    // External contact: during onboarding, reply promo once. After controller is set (delivery complete), ignore all external DMs.
     if (!isSelfChat) {
+      if (controllerE164) return;
       const key = fromE164 || fromRaw;
       st.promoSentTo = st.promoSentTo || {};
       if (!st.promoSentTo[key]) {
@@ -89,6 +93,11 @@ const handler = async (event: any) => {
         });
 
         if (vr?.ok && vr?.verified) {
+          // Persist controller on first successful verification
+          if (!controllerE164 && fromE164) {
+            st.controllerE164 = fromE164;
+            saveState(UUID, st);
+          }
           await sendViaLoopback(fromE164 || fromRaw, vr.message || '[bothook] OpenAI Key 验证成功 ✅');
           return;
         }
