@@ -176,10 +176,21 @@ function render(tpl: string, vars: Record<string, string>) {
 }
 
 function extractOpenAiKey(s: string): string | null {
-  const t = String(s || '').trim();
+  // Users may paste keys with line wraps or extra whitespace. Normalize first.
+  // New-format keys like `sk-proj-...` can contain hyphens/underscores.
+  const raw = String(s || '');
+  const t = raw.replace(/\s+/g, ' ').trim();
   if (!t) return null;
-  const m = t.match(/(sk-[A-Za-z0-9]{20,}|sk_[A-Za-z0-9]{20,})/);
-  return m ? m[1] : null;
+
+  // 1) Prefer a token that starts with sk- (incl. sk-proj-) and allows [-_A-Za-z0-9]
+  //    We also accept the legacy sk_ prefix.
+  const m = t.match(/\b(sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk_[A-Za-z0-9_-]{20,})\b/);
+  if (m) return m[1];
+
+  // 2) Fallback: remove all whitespace and try again (handles hard line breaks).
+  const compact = raw.replace(/\s+/g, '');
+  const m2 = compact.match(/(sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk_[A-Za-z0-9_-]{20,})/);
+  return m2 ? m2[1] : null;
 }
 
 async function buildVars(apiBase: string, uuid: string) {
