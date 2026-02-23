@@ -729,7 +729,8 @@ console.log('generated ' + locales.length + ' prompt files into ' + outDir);
             file: `docs/_autofill_${tid}.md`,
             content: `# Autofill scaffold for ${tid}\n\n- updated: ${ts}\n\nThis task had no actions[]. Runner injected this scaffold to avoid stalling.\n\nTODO (fill in actions spec):\n- define desired outcomes\n- list concrete steps (repo_write_file / ssh_put_tar / ssh_exec / http_check)\n- add evidence requirements\n`,
             commitMessage: `runner: autofill scaffold for ${tid}`,
-            progress_bump: 2,
+            progress_bump: 0,
+            autofill_scaffold: true,
             fix_once: `RUNNER_MODE=${RUNNER_MODE} node ${WORKSPACE}/scripts/task_runner.mjs --json --only=${tid} --force`
           }];
         }
@@ -996,7 +997,9 @@ console.log('generated ' + locales.length + ' prompt files into ' + outDir);
       // Success: bump progress + record evidence path
       const prev = Number(e.task.progress_percent || 0);
       const bump = Number(act.progress_bump || 5);
-      e.task.progress_percent = Math.min(100, Math.max(prev, prev + bump));
+      // Never let placeholder/autofill scaffolds advance progress; they are bookkeeping only.
+      const isScaffold = Boolean(act.autofill_scaffold) || (typeof act.file === 'string' && String(act.file).startsWith('docs/_autofill_'));
+      e.task.progress_percent = isScaffold ? prev : Math.min(100, Math.max(prev, prev + bump));
       e.task.last_action = `runner_execute_${RUNNER_MODE}@${nowIso()} (${act.kind})`;
       e.task.last_updated = nowIso();
       e.task.evidence_path = cpDir;
@@ -1009,7 +1012,10 @@ console.log('generated ' + locales.length + ' prompt files into ' + outDir);
       e.task.recent_evidence = e.task.recent_evidence.slice(0, 10);
 
       if ((e.task.actions || []).length === 0 && e.task.progress_percent >= 100) {
-        e.task.status = 'DONE';
+        // Guardrail: don't allow scaffold-only tasks to be marked DONE.
+        if (!Boolean(act.autofill_scaffold)) {
+          e.task.status = 'DONE';
+        }
       }
 
       writeJsonAtomic(e.file, e.task);
