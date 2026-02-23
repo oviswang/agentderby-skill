@@ -3,7 +3,7 @@
 BOTHook helps you use OpenClaw directly inside WhatsApp.
 
 Key facts:
-- Price: $9.8/month
+- Price: $19.8/month
 - Where to use: WhatsApp (Message yourself / self-chat)
 - OpenAI API key: bring your own
 - Cancel: anytime inside WhatsApp (no charge next month)
