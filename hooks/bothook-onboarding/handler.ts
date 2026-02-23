@@ -47,7 +47,7 @@ const handler = async (event: any) => {
       st.promoSentTo = st.promoSentTo || {};
       if (!st.promoSentTo[key]) {
         const msg = render(p.promo_external, await buildVars(apiBase, UUID));
-        event.messages.push(msg);
+        await sendWhatsAppText(fromE164 || from, msg);
         try { console.log('[bothook-onboarding] sent promo_external'); } catch {}
         st.promoSentTo[key] = Date.now();
         saveState(UUID, st);
@@ -65,7 +65,7 @@ const handler = async (event: any) => {
     if (!paid) {
       // Always reply with welcome_unpaid (countdown may change).
       const msg = render(p.welcome_unpaid, vars);
-      event.messages.push(msg);
+      await sendWhatsAppText(fromE164 || from, msg);
       try { console.log('[bothook-onboarding] sent welcome_unpaid'); } catch {}
       return;
     }
@@ -84,7 +84,7 @@ const handler = async (event: any) => {
           // Install key locally so OpenClaw can respond.
           try { await installOpenAiKeyLocal(maybeKey); } catch {}
           // Tell user success
-          event.messages.push(vr.message || '[bothook] OpenAI Key 验证成功 ✅ 现在你可以直接在这里对我说“帮我做什么”。');
+          await sendWhatsAppText(fromE164 || from, vr.message || '[bothook] OpenAI Key 验证成功 ✅ 现在你可以直接在这里对我说“帮我做什么”。');
           return;
         }
 
@@ -92,7 +92,7 @@ const handler = async (event: any) => {
       }
 
       const msg = render(p.guide_key_paid, vars);
-      event.messages.push(msg);
+      await sendWhatsAppText(fromE164 || from, msg);
       try { console.log('[bothook-onboarding] sent guide_key_paid'); } catch {}
       return;
     }
@@ -206,6 +206,22 @@ async function buildVars(apiBase: string, uuid: string) {
   } catch {}
 
   return vars;
+}
+
+async function sendWhatsAppText(target: string, message: string) {
+  const t = String(target || '').trim();
+  const m = String(message || '').trim();
+  if (!t || !m) return;
+  const { spawnSync } = await import('node:child_process');
+  // Use CLI message send (does not require model API keys)
+  const r = spawnSync('bash', ['-lc', `openclaw message send --channel whatsapp --target '${t.replace(/'/g,"'\\''")}' --message '${m.replace(/'/g,"'\\''")}' --json`], {
+    encoding: 'utf8',
+    timeout: 15000,
+    maxBuffer: 2 * 1024 * 1024,
+  });
+  if ((r.status ?? 0) !== 0) {
+    try { console.log('[bothook-onboarding] sendWhatsAppText failed', (r.stderr || r.stdout || '').slice(0, 200)); } catch {}
+  }
 }
 
 async function installOpenAiKeyLocal(key: string) {
