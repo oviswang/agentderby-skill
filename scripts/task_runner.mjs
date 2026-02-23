@@ -83,13 +83,13 @@ function unlock() {
   try { fs.unlinkSync(LOCK_PATH); } catch {}
 }
 
-function taskSkipReason(task) {
+function taskSkipReason(task, { force = false } = {}) {
   const st = task?.status;
   if (!st) return 'parse_error';
   if (st === 'DONE') return 'DONE';
-  if (st === 'PAUSED') return 'PAUSED';
   if (st === 'BLOCKED') return 'BLOCKED';
   if (st === 'IDLE') return 'IDLE';
+  if (st === 'PAUSED' && !force) return 'PAUSED';
   return null; // runnable
 }
 
@@ -213,7 +213,7 @@ function main() {
         scan.push({ file: e.name, runnable: false, skip: 'parse_error' });
         continue;
       }
-      const skip = taskSkipReason(e.task);
+      const skip = taskSkipReason(e.task, { force });
       if (skip) {
         scan.push({ file: e.name, runnable: false, skip });
       } else {
