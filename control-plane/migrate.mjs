@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openDb, nowIso } from './lib/db.mjs';
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 function readSchemaSql() {
   // Resolve schema.sql relative to this file (works regardless of process.cwd()).
@@ -44,6 +44,28 @@ function main() {
             AND current_period_end IS NOT NULL
             AND updated_at >= ?`
       ).run(cutoff);
+    } catch {}
+  }
+
+  if (v < 6) {
+    // i18n: persist user's preferred language on the delivery row
+    try { db.exec("ALTER TABLE deliveries ADD COLUMN user_lang TEXT"); } catch {}
+
+    // Secrets (encrypted with control-plane master key)
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS delivery_secrets (
+        secret_id TEXT PRIMARY KEY,
+        provision_uuid TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        ciphertext BLOB NOT NULL,
+        iv BLOB NOT NULL,
+        tag BLOB NOT NULL,
+        alg TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        meta_json TEXT
+      );`);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_delivery_secrets_uuid ON delivery_secrets(provision_uuid, kind);");
     } catch {}
   }
 

@@ -51,15 +51,73 @@ function pickProvisionReady(instances) {
   return instances[0] || null;
 }
 
+function parseChannelsStatusJson(text) {
+  try {
+    const j = JSON.parse(String(text || ''));
+    const w = j?.channels?.whatsapp || j?.whatsapp || null;
+    const selfJid = w?.self?.jid ? String(w.self.jid) : null;
+    const linked = Boolean(w?.linked);
+    const connected = Boolean(w?.connected);
+    return { ok: true, linked, connected, selfJid, raw: j };
+  } catch {
+    return { ok: false, linked: false, connected: false, selfJid: null, raw: null };
+  }
+}
+
+// (normalizeWaBase already defined above)
+
+function probeInstanceWhatsappClean(db, instance) {
+  // A-mode strict gate: pool instances must be WhatsApp-unlinked before allocation.
+  // Returns { ok, clean, linked, connected, selfJid, detail }
+  const cmd = `set -euo pipefail; `
+    + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
+    + `systemctl --user start openclaw-gateway.service 2>/dev/null || true; `
+    + `sleep 1; `
+    + `openclaw channels status --json 2>/dev/null || openclaw channels status`;
+
+  const r = poolSsh(instance, cmd, { timeoutMs: 12000, tty: false, retries: 1 });
+  const text = (r.stdout || r.stderr || '').trim();
+  const parsed = parseChannelsStatusJson(text);
+
+  let linked = false;
+  let connected = false;
+  let selfJid = null;
+  if (parsed.ok) {
+    linked = parsed.linked;
+    connected = parsed.connected;
+    selfJid = parsed.selfJid;
+  } else {
+    // best-effort text fallback
+    const lower = text.toLowerCase();
+    linked = lower.includes('whatsapp') && lower.includes('linked') && !lower.includes('not linked');
+    connected = lower.includes('whatsapp') && lower.includes('connected');
+    selfJid = null;
+  }
+
+  const clean = !linked; // strict
+  const ts = nowIso();
+  try {
+    db.prepare('UPDATE instances SET last_probe_at=? WHERE instance_id=?').run(ts, instance.instance_id);
+    if (clean) {
+      db.prepare('UPDATE instances SET health_status=?, last_ok_at=? WHERE instance_id=?').run('READY', ts, instance.instance_id);
+    } else {
+      db.prepare('UPDATE instances SET health_status=? WHERE instance_id=?').run('DIRTY', instance.instance_id);
+    }
+  } catch {}
+
+  return { ok: r.code === 0, clean, linked, connected, selfJid, detail: text.slice(0, 400) };
+}
+
 function getOrCreateDeliveryForUuid(db, uuid) {
   const existing = db.prepare('SELECT * FROM deliveries WHERE provision_uuid = ? LIMIT 1').get(uuid);
   if (existing) return existing;
 
-  // find provision-ready instances first (MVP: only instances that have the provision service running)
+  // A-mode strict allocation: choose only pool instances and reserve exclusively.
   const candidates = db.prepare(`
-    SELECT instance_id, public_ip, lifecycle_status, meta_json
+    SELECT instance_id, public_ip, lifecycle_status, health_status, meta_json, created_at
     FROM instances
     WHERE public_ip IS NOT NULL AND public_ip != ''
+      AND lifecycle_status='IN_POOL'
     ORDER BY created_at ASC
     LIMIT 50
   `).all();
@@ -69,13 +127,22 @@ function getOrCreateDeliveryForUuid(db, uuid) {
     throw Object.assign(new Error('No provision-ready instances available'), { statusCode: 503 });
   }
 
-  // For now, allow multiple UUID sessions to map to the same provision-ready instance (demo & early ops).
-  const chosen = provisionReady[0];
+  // Pick the first instance that is WhatsApp-clean (NOT linked).
+  // NOTE: we run a live probe here to prevent "connected != this UUID" false positives.
+  let chosen = null;
+  for (const c of provisionReady) {
+    const inst = getInstanceById(db, c.instance_id);
+    const probe = probeInstanceWhatsappClean(db, inst);
+    if (probe.clean) { chosen = inst; break; }
+  }
+  if (!chosen) {
+    throw Object.assign(new Error('No clean instances available (all linked). Please retry in a few minutes.'), { statusCode: 503 });
+  }
 
   const delivery_id = crypto.randomUUID();
   const ts = nowIso();
 
-  // Create delivery mapping (reservation logic will be tightened later when we have per-user orders).
+  // Reserve + create delivery mapping.
   db.exec('BEGIN IMMEDIATE');
   try {
     db.prepare(`
@@ -90,8 +157,11 @@ function getOrCreateDeliveryForUuid(db, uuid) {
       uuid,
       ts,
       ts,
-      JSON.stringify({ allocated_from: 'pool', note: 'MVP uuid->instance mapping (provision_ready only)' })
+      JSON.stringify({ allocated_from: 'pool', note: 'A-mode strict: reserved clean instance only' })
     );
+
+    db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=?, assigned_at=? WHERE instance_id=?')
+      .run('ALLOCATED', uuid, ts, chosen.instance_id);
 
     db.prepare(`
       INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json)
@@ -330,8 +400,19 @@ app.get('/api/p/state', (req, res) => {
 
     const { db } = openDb();
 
-    // Busy signal: no READY capacity
-    const ready = db.prepare("SELECT COUNT(*) as c FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='READY'").get()?.c ?? 0;
+    // Busy signal (A-mode strict): only count pool instances that are READY AND WhatsApp-unlinked.
+    const poolRows = db.prepare(
+      "SELECT instance_id, public_ip, lifecycle_status, health_status, meta_json FROM instances WHERE lifecycle_status='IN_POOL' AND public_ip IS NOT NULL AND public_ip != '' ORDER BY created_at ASC LIMIT 50"
+    ).all();
+    const provisionReady = poolRows.filter((i) => (jsonMeta(i.meta_json) || {}).provision_ready === true);
+
+    let ready = 0;
+    for (const r of provisionReady) {
+      const inst = getInstanceById(db, r.instance_id);
+      const p = probeInstanceWhatsappClean(db, inst);
+      if (p.clean) ready++;
+    }
+
     const busy = ready <= 0;
 
     const delivery = getDeliveryByUuid(db, uuid);
@@ -347,14 +428,21 @@ app.get('/api/p/state', (req, res) => {
 
     if (delivery) {
       state = 'LINKING';
-      try {
-        subscription = db.prepare(
-          "SELECT provider_sub_id, provider, user_id, plan, status, current_period_end, cancel_at, canceled_at, ended_at, cancel_at_period_end, updated_at FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1"
-        ).get(delivery.user_id) || null;
-      } catch {
-        subscription = null;
+      // Paid-mode must be strongly scoped to the delivery user.
+      // IMPORTANT: 'anon' UUID sessions are temporary and MUST NOT inherit global subscriptions.
+      if (String(delivery.user_id || '') && String(delivery.user_id) !== 'anon') {
+        try {
+          subscription = db.prepare(
+            "SELECT provider_sub_id, provider, user_id, plan, status, current_period_end, cancel_at, canceled_at, ended_at, cancel_at_period_end, updated_at FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1"
+          ).get(delivery.user_id) || null;
+        } catch {
+          subscription = null;
+        }
       }
-      if (subscription && String(subscription.status || '').toLowerCase() === 'active') {
+
+      if (String(status || '') === 'PAID') {
+        state = 'PAID_ACTIVE';
+      } else if (subscription && String(subscription.status || '').toLowerCase() === 'active') {
         state = 'PAID_ACTIVE';
       }
     }
@@ -681,7 +769,8 @@ app.get('/api/wa/status', async (req, res) => {
       const w = j?.channels?.whatsapp || j?.whatsapp || null;
       const state = String(w?.state || w?.status || '').toLowerCase();
       connected = Boolean(w?.connected) || ['ok', 'ready', 'connected', 'linked'].includes(state);
-      waJid = w?.jid || w?.wa_jid || w?.id || null;
+      // Authoritative identity is the WhatsApp self JID
+      waJid = w?.self?.jid || w?.jid || w?.wa_jid || w?.id || null;
       if (waJid) waJid = String(waJid);
     } catch {
       const lower = text.toLowerCase();
@@ -699,7 +788,8 @@ app.get('/api/wa/status', async (req, res) => {
     }
 
     // If connected: bind UUID to WhatsApp identity (prevents relink takeover)
-    if (connected) {
+    // IMPORTANT: Only bind when we can read the self JID from status.
+    if (connected && waJid) {
       const ts = nowIso();
 
       db.exec('BEGIN IMMEDIATE');
@@ -749,7 +839,16 @@ app.get('/api/wa/status', async (req, res) => {
       }
     }
 
-    const out = { ok: true, uuid, instance_id: instance.instance_id, status: connected ? 'connected' : 'linking', connected: Boolean(connected), wa_jid: waJid, lastUpdateAt: nowIso() };
+    // A-mode strict: do NOT claim "connected" unless this UUID is actually bound.
+    // Otherwise a previously-linked (dirty) pool machine would appear as linked without scanning.
+    let boundJid = null;
+    try {
+      const row = db.prepare('SELECT wa_jid, status FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+      boundJid = row?.wa_jid || null;
+    } catch {}
+
+    const claimConnected = Boolean(connected && boundJid && normalizeWaBase(boundJid) === normalizeWaBase(waJid));
+    const out = { ok: true, uuid, instance_id: instance.instance_id, status: claimConnected ? 'connected' : 'linking', connected: claimConnected, wa_jid: boundJid || null, lastUpdateAt: nowIso() };
     if (isDebug(req)) out.debug = { raw: text.slice(0, 800) };
     return send(res, 200, out);
   } catch (e) {
@@ -918,9 +1017,9 @@ app.get('/api/delivery/status', (req, res) => {
     const uuid = String(req.query?.uuid || '').trim();
     if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
     const { db } = openDb();
-    const d = db.prepare('SELECT delivery_id, status, wa_jid, bound_at, updated_at FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
+    const d = db.prepare('SELECT delivery_id, status, wa_jid, bound_at, updated_at, user_lang FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
     if (!d) return send(res, 404, { ok:false, error:'unknown_uuid' });
-    return send(res, 200, { ok:true, uuid, delivery_id: d.delivery_id, status: d.status, paid: d.status === 'PAID', wa_jid: d.wa_jid, bound_at: d.bound_at, updated_at: d.updated_at });
+    return send(res, 200, { ok:true, uuid, delivery_id: d.delivery_id, status: d.status, paid: d.status === 'PAID', wa_jid: d.wa_jid, bound_at: d.bound_at, user_lang: d.user_lang || null, updated_at: d.updated_at });
   } catch (e) {
     return send(res, 500, { ok:false, error:'server_error' });
   }
@@ -1040,25 +1139,29 @@ function startOpsWorker(){
       const exp = meta.bound_unpaid_expires_at ? Date.parse(meta.bound_unpaid_expires_at) : NaN;
       if (!isNaN(exp) && exp <= now){
         const ts = nowIso();
-        // Attempt unbind+cleanup on pool instance
+        // Attempt unbind+cleanup on pool instance (A-mode strict): remove WhatsApp auth so the machine becomes clean.
         try {
           if (r.instance_id) {
             const inst = db.prepare('SELECT instance_id, public_ip, meta_json FROM instances WHERE instance_id=?').get(r.instance_id);
             if (inst && inst.public_ip) {
-              await poolFetch(inst, '/api/wa/reset', {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ uuid: r.provision_uuid }),
-                timeoutMs: 15000,
-              });
+              const session = `wa-login-${r.provision_uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
+              const remoteCmd = `set -euo pipefail; `
+                + `tmux kill-session -t '${session}' 2>/dev/null || true; `
+                + `sudo systemctl stop openclaw-gateway.service 2>/dev/null || true; `
+                + `systemctl --user stop openclaw-gateway.service 2>/dev/null || true; `
+                + `openclaw channels logout --channel whatsapp 2>/dev/null || true; `
+                + `rm -rf /home/ubuntu/.openclaw/channels/whatsapp 2>/dev/null || true; `
+                + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
+                + `echo cleaned`;
+              poolSsh(inst, remoteCmd, { timeoutMs: 25000, tty: false, retries: 2 });
             }
           }
         } catch {}
 
         db.exec('BEGIN IMMEDIATE');
         try {
-          db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
-            .run('RECYCLED_UNPAID', ts, mergeMeta(r.meta_json, { recycled_at: ts, recycle_reason: 'UNPAID' }), r.delivery_id);
+          db.prepare('UPDATE deliveries SET status=?, wa_jid=NULL, bound_at=NULL, updated_at=?, meta_json=? WHERE delivery_id=?')
+            .run('RECYCLED_UNPAID', ts, ts, mergeMeta(r.meta_json, { recycled_at: ts, recycle_reason: 'UNPAID' }), r.delivery_id);
           db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
             crypto.randomUUID(), ts, 'delivery', r.delivery_id, 'RECYCLE_UNPAID', JSON.stringify({ uuid: r.provision_uuid, instance_id: r.instance_id })
           );
@@ -1094,13 +1197,21 @@ app.post('/api/wa/reset', async (req, res) => {
     const instance = getInstanceById(db, delivery.instance_id);
     if (!instance?.public_ip) return send(res, 500, { ok:false, error:'instance_missing_ip' });
 
-    const r = await poolFetch(instance, '/api/wa/reset', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ uuid }),
-      timeoutMs: 15000,
-    });
-    if (!r.ok) return send(res, 502, { ok:false, error:'pool_reset_failed', detail: r.json || r.text });
+    const session = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
+    const remoteCmd = `set -euo pipefail; `
+      + `tmux kill-session -t '${session}' 2>/dev/null || true; `
+      + `sudo systemctl stop openclaw-gateway.service 2>/dev/null || true; `
+      + `systemctl --user stop openclaw-gateway.service 2>/dev/null || true; `
+      + `openclaw channels logout --channel whatsapp 2>/dev/null || true; `
+      + `rm -rf /home/ubuntu/.openclaw/channels/whatsapp 2>/dev/null || true; `
+      + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
+      + `echo cleaned`;
+
+    const rr = poolSsh(instance, remoteCmd, { timeoutMs: 25000, tty: false, retries: 2 });
+    if (rr.code !== 0) {
+      const detail = ((rr.stdout || '') + '\n' + (rr.stderr || '')).trim();
+      return send(res, 502, { ok:false, error:'pool_reset_failed', detail: detail || `ssh_failed_exit_${rr.code}` });
+    }
 
     const ts = nowIso();
     db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(

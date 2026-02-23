@@ -103,6 +103,9 @@ CREATE TABLE IF NOT EXISTS deliveries (
   wa_e164 TEXT,
   bound_at TEXT,
 
+  -- user preferred language (from p-site)
+  user_lang TEXT,
+
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   meta_json TEXT,
@@ -163,3 +166,19 @@ CREATE TABLE IF NOT EXISTS shortlink_locks (
   created_at TEXT NOT NULL,
   code TEXT
 );
+
+-- Encrypted secrets tied to provision_uuid (OpenAI keys, etc.)
+CREATE TABLE IF NOT EXISTS delivery_secrets (
+  secret_id TEXT PRIMARY KEY,
+  provision_uuid TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  ciphertext BLOB NOT NULL,
+  iv BLOB NOT NULL,
+  tag BLOB NOT NULL,
+  alg TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  meta_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_delivery_secrets_uuid ON delivery_secrets(provision_uuid, kind);
