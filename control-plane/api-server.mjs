@@ -400,19 +400,10 @@ app.get('/api/p/state', (req, res) => {
 
     const { db } = openDb();
 
-    // Busy signal (A-mode strict): only count pool instances that are READY AND WhatsApp-unlinked.
-    const poolRows = db.prepare(
-      "SELECT instance_id, public_ip, lifecycle_status, health_status, meta_json FROM instances WHERE lifecycle_status='IN_POOL' AND public_ip IS NOT NULL AND public_ip != '' ORDER BY created_at ASC LIMIT 50"
-    ).all();
-    const provisionReady = poolRows.filter((i) => (jsonMeta(i.meta_json) || {}).provision_ready === true);
-
-    let ready = 0;
-    for (const r of provisionReady) {
-      const inst = getInstanceById(db, r.instance_id);
-      const p = probeInstanceWhatsappClean(db, inst);
-      if (p.clean) ready++;
-    }
-
+    // Busy signal (A-mode strict): ONLY use DB-cached health_status here.
+    // Do NOT run live SSH probes inside /api/p/state (would block the Node event loop and slow down the site).
+    // A background worker / explicit ops probe should refresh READY/DIRTY.
+    const ready = db.prepare("SELECT COUNT(*) as c FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='READY'").get()?.c ?? 0;
     const busy = ready <= 0;
 
     const delivery = getDeliveryByUuid(db, uuid);
