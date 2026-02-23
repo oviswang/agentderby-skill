@@ -1,7 +1,8 @@
+// NOTE: this file is managed by task runner T20.
+
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Hook handler types are internal; keep it runtime-safe.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const handler = async (event: any) => {
   try {
@@ -9,6 +10,7 @@ const handler = async (event: any) => {
     try {
       console.log(`[bothook-onboarding] received channel=${event?.context?.channelId} from=${event?.context?.from} contentLen=${String(event?.context?.content||'').length}`);
     } catch {}
+
     const ctx = event.context || {};
     if (ctx.channelId !== 'whatsapp') return;
 
@@ -47,7 +49,7 @@ const handler = async (event: any) => {
       st.promoSentTo = st.promoSentTo || {};
       if (!st.promoSentTo[key]) {
         const msg = render(p.promo_external, await buildVars(apiBase, UUID));
-        await sendWhatsAppText(fromE164 || from, msg);
+        await sendViaLoopback(fromE164 || from, msg);
         try { console.log('[bothook-onboarding] sent promo_external'); } catch {}
         st.promoSentTo[key] = Date.now();
         saveState(UUID, st);
@@ -63,14 +65,12 @@ const handler = async (event: any) => {
     const keyVerified = Boolean(ks?.ok && ks?.verified);
 
     if (!paid) {
-      // Always reply with welcome_unpaid (countdown may change).
       const msg = render(p.welcome_unpaid, vars);
-      await sendWhatsAppText(fromE164 || from, msg);
+      await sendViaLoopback(fromE164 || from, msg);
       try { console.log('[bothook-onboarding] sent welcome_unpaid'); } catch {}
       return;
     }
 
-    // Paid but key not verified
     if (!keyVerified) {
       const maybeKey = extractOpenAiKey(content);
       if (maybeKey) {
@@ -81,18 +81,13 @@ const handler = async (event: any) => {
         });
 
         if (vr?.ok && vr?.verified) {
-          // Install key locally so OpenClaw can respond.
-          try { await installOpenAiKeyLocal(maybeKey); } catch {}
-          // Tell user success
-          await sendWhatsAppText(fromE164 || from, vr.message || '[bothook] OpenAI Key 验证成功 ✅ 现在你可以直接在这里对我说“帮我做什么”。');
+          await sendViaLoopback(fromE164 || from, vr.message || '[bothook] OpenAI Key 验证成功 ✅ 现在你可以直接在这里对我说“帮我做什么”。');
           return;
         }
-
-        // Invalid → fall through to guide
       }
 
       const msg = render(p.guide_key_paid, vars);
-      await sendWhatsAppText(fromE164 || from, msg);
+      await sendViaLoopback(fromE164 || from, msg);
       try { console.log('[bothook-onboarding] sent guide_key_paid'); } catch {}
       return;
     }
@@ -155,7 +150,6 @@ function render(tpl: string, vars: Record<string,string>) {
 function extractOpenAiKey(s: string): string | null {
   const t = String(s || '').trim();
   if (!t) return null;
-  // common formats: sk-..., also allow sk_...
   const m = t.match(/(sk-[A-Za-z0-9]{20,}|sk_[A-Za-z0-9]{20,})/);
   return m ? m[1] : null;
 }
@@ -175,18 +169,17 @@ async function buildVars(apiBase: string, uuid: string) {
     pay_countdown_minutes: '15',
   };
 
-  // p/state contains instance config
-  const st = await fetchJson(`${apiBase}/api/p/state?uuid=${encodeURIComponent(uuid)}&lang=en`);
-  if (st?.ok) {
-    vars.region = String(st.instance?.region || '—');
-    vars.public_ip = String(st.instance?.public_ip || '—');
-    vars.cpu = String(st.instance?.config?.cpu ?? '—');
-    vars.ram_gb = String(st.instance?.config?.memory_gb ?? '—');
-    // disk isn't currently exposed; keep placeholder
-    vars.p_link = `${apiBase}/p/${encodeURIComponent(uuid)}?lang=en`;
-  }
+  try {
+    const st = await fetchJson(`${apiBase}/api/p/state?uuid=${encodeURIComponent(uuid)}&lang=en`);
+    if (st?.ok) {
+      vars.region = String(st.instance?.region || '—');
+      vars.public_ip = String(st.instance?.public_ip || '—');
+      vars.cpu = String(st.instance?.config?.cpu ?? '—');
+      vars.ram_gb = String(st.instance?.config?.memory_gb ?? '—');
+      vars.p_link = `${apiBase}/p/${encodeURIComponent(uuid)}?lang=en`;
+    }
+  } catch {}
 
-  // pay link
   try {
     const pl = await fetchJson(`${apiBase}/api/pay/link`, {
       method: 'POST',
@@ -196,58 +189,23 @@ async function buildVars(apiBase: string, uuid: string) {
     if (pl?.ok && pl?.payUrl) vars.pay_short_link = String(pl.payUrl);
   } catch {}
 
-  // local openclaw version
-  try {
-    const { spawnSync } = await import('node:child_process');
-    const r = spawnSync('bash', ['-lc', 'openclaw --version'], { encoding: 'utf8', timeout: 2000 });
-    const t = String(r.stdout || '').trim();
-    const m = t.match(/OpenClaw\s+([0-9]{4}\.[0-9]+\.[0-9]+-[0-9]+)/i);
-    vars.openclaw_version = m ? m[1] : (t || '—');
-  } catch {}
-
   return vars;
 }
 
-async function sendWhatsAppText(target: string, message: string) {
-  const t = String(target || '').trim();
-  const m = String(message || '').trim();
-  if (!t || !m) return;
-  const { spawnSync } = await import('node:child_process');
-  // Use CLI message send (does not require model API keys)
-  const r = spawnSync('bash', ['-lc', `openclaw message send --channel whatsapp --target '${t.replace(/'/g,"'\\''")}' --message '${m.replace(/'/g,"'\\''")}' --json`], {
-    encoding: 'utf8',
-    timeout: 15000,
-    maxBuffer: 2 * 1024 * 1024,
+async function sendViaLoopback(to: string, text: string) {
+  const target = String(to || '').trim();
+  const msg = String(text || '').trim();
+  if (!target || !msg) return;
+
+  const r = await fetch('http://127.0.0.1:18789/__bothook__/wa/send', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ to: target, text: msg })
   });
-  if ((r.status ?? 0) !== 0) {
-    try { console.log('[bothook-onboarding] sendWhatsAppText failed', (r.stderr || r.stdout || '').slice(0, 200)); } catch {}
+  const t = await r.text().catch(()=> '');
+  if (!r.ok) {
+    try { console.log('[bothook-onboarding] loopback send failed', r.status, t.slice(0,200)); } catch {}
   }
-}
-
-async function installOpenAiKeyLocal(key: string) {
-  // Best-effort: create auth profile store and set default model.
-  // Keep it simple; avoid interactive commands.
-  const { spawnSync } = await import('node:child_process');
-
-  const agentDir = '/home/ubuntu/.openclaw/agents/main/agent';
-  const p = path.join(agentDir, 'auth-profiles.json');
-  fs.mkdirSync(agentDir, { recursive: true, mode: 0o700 });
-
-  const store = {
-    version: 1,
-    profiles: {
-      'openai:manual': { type: 'api_key', provider: 'openai', key },
-    },
-    lastGood: { openai: 'openai:manual' },
-  };
-  fs.writeFileSync(p, JSON.stringify(store, null, 2) + '\n', { mode: 0o600 });
-
-  // Switch default model to OpenAI alias
-  spawnSync('bash', ['-lc', 'openclaw models set gpt 2>/dev/null || true'], { encoding: 'utf8', timeout: 4000 });
-  // Enable self-chat model replies
-  spawnSync('bash', ['-lc', 'openclaw config set channels.whatsapp.selfChatMode true 2>/dev/null || true'], { encoding: 'utf8', timeout: 4000 });
-  // Restart gateway to pick up auth + config
-  spawnSync('bash', ['-lc', 'sudo systemctl restart openclaw-gateway.service 2>/dev/null || true'], { encoding: 'utf8', timeout: 8000 });
 }
 
 export default handler;
