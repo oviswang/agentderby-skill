@@ -817,31 +817,24 @@
               if (linkedCard) linkedCard.style.display = 'block';
               break;
             }
-
             if (everLinked && !isConnected) {
-              // Relink flow: keep showing the QR so the user has time to scan.
-              // Only fall back to Retry UI when we truly have no QR to show.
-              if (hadQr && canvas) {
-                {
-                  const s = window.__bothook_i18n || {};
-                  qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
-                }
-                canvas.style.display = 'block';
-                getQrBtn.style.display = 'none';
-                restartBtn.style.display = 'none';
-                await sleep(1200);
-                continue;
-              }
-
-              {
+              // Previously linked but currently disconnected.
+              // If we already have a QR on screen, keep it visible for relink instead of hiding it.
+              if (hadQr) {
+                const s = window.__bothook_i18n || {};
+                qrStatus.textContent = s.previouslyLinkedDisconnected || '⚠️ Previously linked, but currently disconnected. Keep scanning the QR, or tap “Retry” to regenerate.';
+                restartBtn.style.display = 'inline-flex';
+                restartBtn.disabled = false;
+                // do NOT break; keep polling while QR is visible
+              } else {
                 const s = window.__bothook_i18n || {};
                 qrStatus.textContent = s.previouslyLinkedDisconnected || '⚠️ Previously linked, but currently disconnected. Click “Retry” to relink and generate a new QR.';
+                if (canvas) canvas.style.display = 'none';
+                getQrBtn.style.display = 'none';
+                restartBtn.style.display = 'inline-flex';
+                restartBtn.disabled = false;
+                break;
               }
-              if (canvas) canvas.style.display = 'none';
-              getQrBtn.style.display = 'none';
-              restartBtn.style.display = 'inline-flex';
-              restartBtn.disabled = false;
-              break;
             }
 
             // Not linked yet: rely on pool status
