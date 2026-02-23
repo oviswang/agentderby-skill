@@ -1,6 +1,6 @@
 {
   "langName": "繁體中文",
-  "welcome": "[bothook] 已連結成功。",
-  "guide": "下一步：打開你的 UUID 頁面，依照引導操作，並在提示時貼上你的 OpenAI API Key。",
-  "promo": "BOTHook：WhatsApp AI 裝置交付。"
+  "welcome_unpaid": "[bothook] 裝置連結成功 ✅ 你的專屬 OpenClaw 助手伺服器已為你保留\n\n伺服器資訊：\n- 地區：{{region}}\n- 公網 IP：{{public_ip}}\n- 規格：{{cpu}} vCPU / {{ram_gb}} GB 記憶體 / {{disk_gb}} GB SSD\n- OpenClaw 版本：{{openclaw_version}}\n- 找回入口（建議收藏）：{{p_link}}\n- UUID：{{uuid}}\n\n下一步需要先完成付款。\n請在 {{pay_countdown_minutes}} 分鐘內完成付款，否則本次會話會自動取消並回收機器。\n{{pay_short_link}}",
+  "promo_external": "[bothook] 機主正在啟用一個「WhatsApp 私人 AI 助理」（專屬伺服器，不是群組機器人）。\n\n規格亮點：\n- {{cpu}} vCPU / {{ram_gb}} GB 記憶體 / {{disk_gb}} GB SSD\n- 地區：{{region}}\n\n了解更多：https://bothook.me",
+  "guide_key_paid": "[bothook] 下一步：設定你的 OpenAI API Key（驅動你的專屬助理）\n\n1) 建立 Key：前往 https://platform.openai.com/api-keys → Create new secret key\n2) 確認 OpenAI 帳號已啟用計費/有可用餘額（否則驗證可能失敗）\n3) 在這裡一次貼上完整 Key（不要加引號/空格，不要分多則訊息）。\n\n範例（假的）：\nsk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\n安全提醒：只發在自聊；若疑似外洩，請到 OpenAI 後台撤銷並重新建立。"
 }

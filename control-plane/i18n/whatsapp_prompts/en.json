@@ -1,6 +1,6 @@
 {
   "langName": "English",
-  "welcome": "[bothook] Welcome! Your device is linked.",
-  "guide": "To get started: open your UUID page, follow the steps, and paste your OpenAI API key when asked.",
-  "promo": "BOTHook: WhatsApp AI device provisioning."
+  "welcome_unpaid": "[bothook] Device linked ✅ Your dedicated OpenClaw assistant server is reserved for you.\n\nYour server details:\n- Region: {{region}}\n- Public IP: {{public_ip}}\n- Spec: {{cpu}} vCPU / {{ram_gb}} GB RAM / {{disk_gb}} GB SSD\n- OpenClaw version: {{openclaw_version}}\n- Recovery link (save it): {{p_link}}\n- UUID: {{uuid}}\n\nNext step: payment is required to continue.\nPay within {{pay_countdown_minutes}} minutes or this session will be canceled and the server will be recycled.\n{{pay_short_link}}",
+  "promo_external": "[bothook] The owner is activating a private WhatsApp AI assistant (a dedicated server, not a group bot).\n\nHighlights:\n- {{cpu}} vCPU / {{ram_gb}} GB RAM / {{disk_gb}} GB SSD\n- Region: {{region}}\n\nLearn more: https://bothook.me",
+  "guide_key_paid": "[bothook] Next: set up your OpenAI API Key (this powers your assistant).\n\n1) Create a key: https://platform.openai.com/api-keys → Create new secret key\n2) Make sure billing is enabled / you have available balance in OpenAI Billing\n3) Paste the key here as ONE complete line (no quotes, no spaces, do not split).\n\nExample (fake):\nsk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\nSecurity: only send it in your self-chat. If leaked, revoke it in OpenAI and create a new one."
 }

@@ -1,6 +1,6 @@
 {
-  "langName": "ภาษาไทย",
-  "welcome": "[bothook] เชื่อมต่อสำเร็จแล้ว",
-  "guide": "ขั้นถัดไป: เปิดหน้า UUID ของคุณ ทำตามคำแนะนำ แล้ววาง OpenAI API Key เมื่อระบบขอ",
-  "promo": "BOTHook: จัดเตรียมอุปกรณ์ WhatsApp AI"
+  "langName": "ไทย",
+  "welcome_unpaid": "[bothook] เชื่อมต่ออุปกรณ์สำเร็จ ✅ เซิร์ฟเวอร์ OpenClaw แบบเฉพาะของคุณถูกจองไว้แล้ว\n\nรายละเอียดเซิร์ฟเวอร์:\n- Region: {{region}}\n- Public IP: {{public_ip}}\n- Spec: {{cpu}} vCPU / {{ram_gb}} GB RAM / {{disk_gb}} GB SSD\n- OpenClaw version: {{openclaw_version}}\n- Recovery link (เก็บไว้): {{p_link}}\n- UUID: {{uuid}}\n\nขั้นต่อไป: ต้องชำระเงิน\nกรุณาชำระภายใน {{pay_countdown_minutes}} นาที มิฉะนั้นระบบจะยกเลิกและคืนเซิร์ฟเวอร์เข้าพูล\n{{pay_short_link}}",
+  "promo_external": "[bothook] เจ้าของกำลังเปิดใช้งานผู้ช่วย AI ส่วนตัวบน WhatsApp (เซิร์ฟเวอร์เฉพาะ)\n\nสเปก:\n- {{cpu}} vCPU / {{ram_gb}} GB RAM / {{disk_gb}} GB SSD\n- Region: {{region}}\n\nเพิ่มเติม: https://bothook.me",
+  "guide_key_paid": "[bothook] ขั้นต่อไป: ตั้งค่า OpenAI API Key\n\n1) สร้าง key: https://platform.openai.com/api-keys → Create new secret key\n2) ตรวจสอบว่า Billing เปิดใช้งาน / มียอดคงเหลือ\n3) วาง key ที่นี่เป็น 1 บรรทัด (ห้ามใส่เครื่องหมายคำพูด/ช่องว่าง ห้ามแบ่งข้อความ)\n\nตัวอย่าง (ปลอม):\nsk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\nความปลอดภัย: ส่งเฉพาะใน self-chat เท่านั้น ถ้ารั่วให้ revoke ใน OpenAI และสร้างใหม่"
 }

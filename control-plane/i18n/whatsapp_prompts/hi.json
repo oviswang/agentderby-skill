@@ -1,6 +1,6 @@
 {
   "langName": "हिन्दी",
-  "welcome": "[bothook] कनेक्शन सफल हुआ।",
-  "guide": "अगला कदम: अपना UUID पेज खोलें, निर्देशों का पालन करें, और जब पूछा जाए तब अपना OpenAI API Key पेस्ट करें।",
-  "promo": "BOTHook: WhatsApp AI provisioning."
+  "welcome_unpaid": "[bothook] डिवाइस लिंक हो गया ✅ आपका dedicated OpenClaw assistant server आपके लिए reserve है\n\nServer details:\n- Region: {{region}}\n- Public IP: {{public_ip}}\n- Spec: {{cpu}} vCPU / {{ram_gb}} GB RAM / {{disk_gb}} GB SSD\n- OpenClaw version: {{openclaw_version}}\n- Recovery link (save it): {{p_link}}\n- UUID: {{uuid}}\n\nNext step: payment required.\n{{pay_countdown_minutes}} मिनट में भुगतान करें, नहीं तो session cancel हो जाएगी और server recycle हो जाएगा।\n{{pay_short_link}}",
+  "promo_external": "[bothook] Owner WhatsApp पर एक private AI assistant (dedicated server) activate कर रहा/रही है।\n\nSpecs:\n- {{cpu}} vCPU / {{ram_gb}} GB RAM / {{disk_gb}} GB SSD\n- Region: {{region}}\n\nMore: https://bothook.me",
+  "guide_key_paid": "[bothook] Next: अपना OpenAI API Key सेट करें।\n\n1) Key बनाएं: https://platform.openai.com/api-keys → Create new secret key\n2) OpenAI Billing में billing enabled / balance available होना चाहिए\n3) Key यहाँ ONE line में paste करें (quotes/spaces नहीं, split नहीं)।\n\nExample (fake):\nsk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\nSecurity: केवल self-chat में भेजें। Leak हो तो OpenAI में revoke करके नया key बनाएं।"
 }
