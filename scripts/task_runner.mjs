@@ -999,7 +999,10 @@ console.log('generated ' + locales.length + ' prompt files into ' + outDir);
       const bump = Number(act.progress_bump || 5);
       // Never let placeholder/autofill scaffolds advance progress; they are bookkeeping only.
       const isScaffold = Boolean(act.autofill_scaffold) || (typeof act.file === 'string' && String(act.file).startsWith('docs/_autofill_'));
-      e.task.progress_percent = isScaffold ? prev : Math.min(100, Math.max(prev, prev + bump));
+      // If there are remaining actions after this one, avoid reaching 100% prematurely.
+      const nextActionsCount = (taskActions.slice(1) || []).length;
+      const capped = isScaffold ? prev : Math.min(100, Math.max(prev, prev + bump));
+      e.task.progress_percent = (nextActionsCount > 0 && capped >= 100) ? 99 : capped;
       e.task.last_action = `runner_execute_${RUNNER_MODE}@${nowIso()} (${act.kind})`;
       e.task.last_updated = nowIso();
       e.task.evidence_path = cpDir;
@@ -1011,6 +1014,7 @@ console.log('generated ' + locales.length + ' prompt files into ' + outDir);
       e.task.recent_evidence.unshift(`runner: executed ${act.kind} @ ${e.task.last_updated} evidence=${cpDir}`);
       e.task.recent_evidence = e.task.recent_evidence.slice(0, 10);
 
+      // Only mark DONE when we've completed all queued actions.
       if ((e.task.actions || []).length === 0 && e.task.progress_percent >= 100) {
         // Guardrail: don't allow scaffold-only tasks to be marked DONE.
         if (!Boolean(act.autofill_scaffold)) {
