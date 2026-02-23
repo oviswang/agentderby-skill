@@ -144,6 +144,26 @@ function sh(cmd, { timeoutMs = 12000 } = {}) {
   return { code: res.status ?? 0, stdout: res.stdout || '', stderr: res.stderr || '' };
 }
 
+function poolSsh(instance, remoteCmd, { timeoutMs = 20000, tty = false, retries = 2 } = {}) {
+  const ip = instance.public_ip;
+  if (!ip) return { code: 1, stdout: '', stderr: 'instance_missing_ip' };
+  const tflag = tty ? '-tt' : '';
+  const cmd = `ssh ${tflag} -i '${POOL_SSH_KEY}' -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=25 ubuntu@${ip} '${String(remoteCmd).replace(/'/g, "'\\''")}'`;
+
+  let last = null;
+  for (let i = 0; i <= retries; i++) {
+    const r = sh(cmd, { timeoutMs });
+    last = r;
+    // 255 is typically SSH transport failure; retry with small backoff.
+    if ((r.code ?? 0) === 255 && i < retries) {
+      try { require('child_process').spawnSync('bash', ['-lc', 'sleep 0.6'], { stdio: 'ignore' }); } catch {}
+      continue;
+    }
+    return r;
+  }
+  return last || { code: 255, stdout: '', stderr: 'ssh_failed' };
+}
+
 async function poolFetch(instance, path, opts = {}) {
   const ip = instance.public_ip;
   if (!ip) return { ok: false, status: 0, json: null, text: 'instance_missing_ip', url: null };
@@ -169,7 +189,7 @@ async function poolFetch(instance, path, opts = {}) {
       curl = `curl -sS -m ${Math.ceil(timeoutMs / 1000)} -X ${method} ${headerFlags} '${remoteUrl}'`;
     }
 
-    const cmd = `ssh -i '${POOL_SSH_KEY}' -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ubuntu@${ip} '${curl.replace(/'/g, "'\\''")}'`;
+    const cmd = `ssh -i '${POOL_SSH_KEY}' -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=25 ubuntu@${ip} '${curl.replace(/'/g, "'\\''")}'`;
     const r = sh(cmd, { timeoutMs: timeoutMs + 3000 });
     const text = (r.stdout || r.stderr || '').trim();
     let json;
@@ -473,7 +493,6 @@ app.post('/api/wa/start', async (req, res) => {
     // Policy: allow when either
     // - delivery.status is PAID (legacy MVP), OR
     // - Stripe subscription is still in the paid effective period (including cancel_at_period_end but not yet ended).
-    // Rationale: without this gate, a leaked UUID can be used to trigger relink/QR spam or takeover attempts.
     if (force) {
       const st = String(delivery.status || '');
       let entitled = (st === 'PAID');
@@ -496,7 +515,6 @@ app.post('/api/wa/start', async (req, res) => {
           const cpe = sub?.current_period_end ? Date.parse(sub.current_period_end) : null;
           const cancelAt = sub?.cancel_at ? Date.parse(sub.cancel_at) : null;
 
-          // Active entitlement if period end is in the future (or cancel_at in the future), and not ended.
           const notEnded = !endedAt || endedAt > now;
           const inPeriod = (cpe && cpe > now) || (cancelAt && cancelAt > now);
           const statusOk = ['active', 'trialing'].includes(String(sub?.status || '').toLowerCase());
@@ -510,22 +528,76 @@ app.post('/api/wa/start', async (req, res) => {
       }
     }
 
-    const r = await poolFetch(instance, '/api/wa/start', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ uuid, force }),
-      timeoutMs: 12000,
-    });
+    // SINGLE-CHANNEL login model (tmux-backed):
+    // - stop gateway (avoid competition)
+    // - start `openclaw channels login --channel whatsapp` inside tmux (stable TTY)
+    // - QR is only display (tmux capture), success judged by `openclaw channels status`
+    const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
 
-    if (!r.ok) return send(res, 502, { ok: false, error: 'pool_start_failed', detail: r.json || r.text, poolUrl: r.url });
+    const remoteCmd = `set -euo pipefail; `
+      + `systemctl --user stop openclaw-gateway.service 2>/dev/null || true; `
+      + `sudo systemctl stop openclaw-gateway.service 2>/dev/null || true; `
+      + `sudo systemctl stop bothook-provision.service 2>/dev/null || true; `
+      + `sudo systemctl disable bothook-provision.service 2>/dev/null || true; `
+      + `tmux has-session -t '${tmuxSession}' 2>/dev/null && { echo already_running; exit 0; } || true; `
+      + `tmux new-session -d -s '${tmuxSession}' "bash -lc 'stty cols 220 rows 80 2>/dev/null || true; export COLUMNS=220 LINES=80; openclaw channels login --channel whatsapp'"; `
+      + `echo started`;
 
-    const out = { ok: true, uuid, instance_id: instance.instance_id, status: r.json?.status || 'starting', connected: Boolean(r.json?.connected) };
-    if (isDebug(req)) out.debug = { upstreamUrl: r.url, upstreamStatus: r.status, upstreamBody: r.json || r.text };
+    const r = poolSsh(instance, remoteCmd, { timeoutMs: 20000, tty: false, retries: 2 });
+    if (r.code !== 0) {
+      const detail = ((r.stdout || '') + '\n' + (r.stderr || '')).trim();
+      return send(res, 502, { ok: false, error: 'pool_start_failed', detail: detail || `ssh_failed_exit_${r.code}` });
+    }
+
+    const out = { ok: true, uuid, instance_id: instance.instance_id, status: 'starting', mode: 'channels_login_tmux', tmuxSession };
+    if (isDebug(req)) out.debug = { stdout: r.stdout, stderr: r.stderr };
     return send(res, 200, out);
   } catch (e) {
     return send(res, e.statusCode || 500, { ok: false, error: e.message || 'server_error' });
   }
 });
+
+function stripAnsi(s) {
+  return String(s || '').replace(/\u001b\[[0-9;]*[A-Za-z]/g, '');
+}
+
+function extractAsciiQrBlock(text) {
+  const lines = stripAnsi(String(text || '')).replace(/\r/g, '').split('\n');
+  // There can be multiple QR blocks over time; always return the latest.
+  let best = null;
+  for (let start = 0; start < lines.length; start++) {
+    if (!lines[start].includes('Scan this QR')) continue;
+    const out = [];
+    for (let i = start; i < lines.length; i++) {
+      const l = lines[i];
+      if (i > start && l === '') break;
+      out.push(l);
+    }
+
+    // Post-process: drop truncated trailing QR lines (script output can contain broken bytes).
+    // Find QR glyph line range.
+    const glyphIdx = out.findIndex(l => /[█▄▀]{5,}/.test(l));
+    if (glyphIdx === -1) continue;
+    const glyph = out.slice(glyphIdx);
+    const widths = glyph.map(l => l.length);
+    const maxW = Math.max(...widths);
+    while (glyph.length && glyph[glyph.length - 1].length < Math.floor(maxW * 0.9)) {
+      glyph.pop();
+    }
+    const cleaned = out.slice(0, glyphIdx).concat(glyph);
+
+    const joined = cleaned.join('\n');
+    if (/[█▄▀]{10,}/.test(joined)) best = joined.trimEnd();
+  }
+  return best;
+}
+
+const qrWatch = new Map();
+// qrWatch.get(uuid) => { lastHash, lastSeenAtMs, lastRestartAtMs }
+
+function sha256Hex(s){
+  return crypto.createHash('sha256').update(String(s||''), 'utf8').digest('hex');
+}
 
 app.get('/api/wa/qr', async (req, res) => {
   try {
@@ -537,22 +609,47 @@ app.get('/api/wa/qr', async (req, res) => {
     if (!delivery) return send(res, 404, { ok: false, error: 'unknown_uuid' });
 
     const instance = getInstanceById(db, delivery.instance_id);
-    const r = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, { timeoutMs: 12000 });
+    const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
 
-    if (r.status === 409) {
-      const out = r.json || { ok: false, error: 'qr_not_ready' };
-      if (isDebug(req)) out.debug = { upstreamUrl: r.url, upstreamStatus: r.status, upstreamBody: r.json || r.text };
-      return send(res, 409, out);
-    }
-    if (!r.ok) {
-      const out = { ok: false, error: 'pool_qr_failed', detail: r.json || r.text };
-      if (isDebug(req)) out.debug = { upstreamUrl: r.url, upstreamStatus: r.status, upstreamBody: r.json || r.text };
-      return send(res, 502, out);
+    const rr = poolSsh(instance, `set -euo pipefail; tmux has-session -t '${tmuxSession}' 2>/dev/null || exit 3; tmux capture-pane -t '${tmuxSession}' -p -S - | tail -n 260`, { timeoutMs: 12000, tty: false, retries: 1 });
+    const raw = (rr.stdout || rr.stderr || '').toString();
+    const qrText = extractAsciiQrBlock(raw);
+
+    if (!qrText) {
+      return send(res, 409, { ok: false, error: 'qr_not_ready' });
     }
 
-    const out = { ok: true, uuid, instance_id: instance.instance_id, qrDataUrl: r.json?.qrDataUrl, status: r.json?.status };
-    if (isDebug(req)) out.debug = { upstreamUrl: r.url, upstreamStatus: r.status };
-    return send(res, 200, out);
+    // Watchdog: ensure QR rotates.
+    // If QR hasn't changed for a while, restart tmux session to obtain a fresh QR.
+    const now = Date.now();
+    const h = sha256Hex(qrText);
+    const w = qrWatch.get(uuid) || { lastHash: null, lastSeenAtMs: now, lastRestartAtMs: 0 };
+    if (w.lastHash !== h) {
+      w.lastHash = h;
+      w.lastSeenAtMs = now;
+    }
+
+    const staleMs = now - (w.lastSeenAtMs || now);
+    const sinceRestartMs = now - (w.lastRestartAtMs || 0);
+
+    let loginRunning = (rr.code ?? 0) !== 3; // code 3 => no session
+
+    const shouldRestart = (staleMs > 25_000);
+    if (shouldRestart && sinceRestartMs > 15_000) {
+      w.lastRestartAtMs = now;
+      w.lastSeenAtMs = now;
+      try {
+        const remoteCmd = `set -euo pipefail; `
+          + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
+          + `tmux new-session -d -s '${tmuxSession}' "bash -lc 'stty cols 220 rows 80 2>/dev/null || true; export COLUMNS=220 LINES=80; openclaw channels login --channel whatsapp'"; `
+          + `echo restarted`;
+        poolSsh(instance, remoteCmd, { timeoutMs: 20000, tty: false, retries: 1 });
+      } catch {}
+    }
+
+    qrWatch.set(uuid, w);
+
+    return send(res, 200, { ok: true, uuid, instance_id: instance.instance_id, status: 'qr', qrText, qrHash: h, qrAgeMs: staleMs, loginRunning });
   } catch (e) {
     return send(res, 500, { ok: false, error: e.message || 'server_error' });
   }
@@ -568,17 +665,41 @@ app.get('/api/wa/status', async (req, res) => {
     if (!delivery) return send(res, 404, { ok: false, error: 'unknown_uuid' });
 
     const instance = getInstanceById(db, delivery.instance_id);
-    const r = await poolFetch(instance, `/api/wa/status?uuid=${encodeURIComponent(uuid)}`, { timeoutMs: 8000 });
 
-    if (!r.ok) {
-      const out = { ok: false, error: 'pool_status_failed', detail: r.json || r.text };
-      if (isDebug(req)) out.debug = { upstreamUrl: r.url, upstreamStatus: r.status, upstreamBody: r.json || r.text };
-      return send(res, 502, out);
+    // SINGLE-CHANNEL model: status is from `openclaw channels status`.
+    const rr = poolSsh(instance, `set -euo pipefail; openclaw channels status --json 2>/dev/null || openclaw channels status`, { timeoutMs: 12000, tty: false });
+    const text = (rr.stdout || rr.stderr || '').trim();
+
+    let connected = false;
+    let waJid = null;
+
+    // Best-effort parse:
+    // - JSON mode: { ok, channels: { whatsapp: { state, jid, ... } } }
+    // - Text mode: contains 'WhatsApp' and 'linked/connected/ready'
+    try {
+      const j = JSON.parse(text);
+      const w = j?.channels?.whatsapp || j?.whatsapp || null;
+      const state = String(w?.state || w?.status || '').toLowerCase();
+      connected = Boolean(w?.connected) || ['ok', 'ready', 'connected', 'linked'].includes(state);
+      waJid = w?.jid || w?.wa_jid || w?.id || null;
+      if (waJid) waJid = String(waJid);
+    } catch {
+      const lower = text.toLowerCase();
+      // If gateway is unreachable, we cannot claim connected.
+      if (lower.includes('gateway not reachable') || lower.includes('gateway closed')) {
+        connected = false;
+      } else {
+        connected = lower.includes('whatsapp') && (lower.includes('connected') || lower.includes('ready') || lower.includes('linked'));
+      }
+      waJid = null;
+    }
+
+    if (rr.code !== 0 && !text) {
+      return send(res, 502, { ok: false, error: 'pool_status_failed', detail: (rr.stderr || rr.stdout || '').trim() });
     }
 
     // If connected: bind UUID to WhatsApp identity (prevents relink takeover)
-    if (r.json?.connected) {
-      const waJid = r.json?.wa_jid || null;
+    if (connected) {
       const ts = nowIso();
 
       db.exec('BEGIN IMMEDIATE');
@@ -628,8 +749,8 @@ app.get('/api/wa/status', async (req, res) => {
       }
     }
 
-    const out = { ok: true, uuid, instance_id: instance.instance_id, ...r.json };
-    if (isDebug(req)) out.debug = { upstreamUrl: r.url, upstreamStatus: r.status };
+    const out = { ok: true, uuid, instance_id: instance.instance_id, status: connected ? 'connected' : 'linking', connected: Boolean(connected), wa_jid: waJid, lastUpdateAt: nowIso() };
+    if (isDebug(req)) out.debug = { raw: text.slice(0, 800) };
     return send(res, 200, out);
   } catch (e) {
     return send(res, 500, { ok: false, error: e.message || 'server_error' });

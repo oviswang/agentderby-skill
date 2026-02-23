@@ -627,8 +627,8 @@
         getQrBtn.disabled = true;
         try { if (window.turnstile) window.turnstile.reset(); } catch {}
 
-        const img = document.getElementById('qrImg');
-        if (img) img.style.display = 'none';
+        const canvas = document.getElementById('qrCanvas');
+        if (canvas) canvas.style.display = 'none';
 
         {
           const s = window.__bothook_i18n || {};
@@ -661,37 +661,88 @@
         }
 
         try {
-          await startProvision(uuid, forceRelink);
+          try {
+            await startProvision(uuid, forceRelink);
+          } catch (e) {
+            // Even if start fails (e.g. transient SSH failure), keep trying to fetch QR from existing login stdout.
+            {
+              const s = window.__bothook_i18n || {};
+              qrStatus.textContent = (s.connectingRetrying || 'Connecting… (retrying)') + ` (start failed, still fetching QR)`;
+            }
+          }
           forceRelink = false;
 
-          // Create / reuse QR image element
-          let img = document.getElementById('qrImg');
-          // NOTE: do not shadow outer hadQr; it drives relink UI decisions.
-          if (!img) {
-            img = document.createElement('img');
-            img.id = 'qrImg';
-            img.alt = 'WhatsApp QR code';
-            img.style.width = '260px';
-            img.style.maxWidth = '100%';
-            img.style.borderRadius = '16px';
-            img.style.background = '#fff';
-            img.style.padding = '10px';
-            img.style.display = 'block';
-            img.style.marginTop = '12px';
-            verifyCard.appendChild(img);
+          function renderAsciiQrToCanvas(qrText, canvas) {
+            const lines = String(qrText || '').replace(/\r/g,'').split('\n');
+            // Find the first QR line (starts with block chars)
+            const idx = lines.findIndex(l => /[█▄▀]{5,}/.test(l));
+            if (idx === -1) return false;
+            // Keep all lines after idx, including trailing spaces (important for full width).
+            // Drop only the trailing empty lines at the end.
+            let qrLines = lines.slice(idx);
+            while (qrLines.length && qrLines[qrLines.length-1] === '') qrLines.pop();
+            if (!qrLines.length) return false;
+
+            const hChars = qrLines.length;
+            const wChars = Math.max(...qrLines.map(l => l.length));
+
+            // Each character encodes 2 vertical pixels (▀ top, ▄ bottom, █ both)
+            const pxW = wChars;
+            const pxH = hChars * 2;
+            const scale = 5; // module scale (bigger for phone scanners)
+
+            canvas.width = pxW * scale;
+            canvas.height = pxH * scale;
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+
+            // white background
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0,0,canvas.width,canvas.height);
+
+            ctx.fillStyle = '#000';
+            for (let y = 0; y < hChars; y++) {
+              const line = qrLines[y].padEnd(wChars, ' ');
+              for (let x = 0; x < wChars; x++) {
+                const ch = line[x];
+                const top = (ch === '█' || ch === '▀');
+                const bot = (ch === '█' || ch === '▄');
+                if (top) ctx.fillRect(x*scale, (y*2)*scale, scale, scale);
+                if (bot) ctx.fillRect(x*scale, (y*2+1)*scale, scale, scale);
+              }
+            }
+            return true;
+          }
+
+          // Create / reuse QR canvas element (scan-friendly)
+          let canvas = document.getElementById('qrCanvas');
+          if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.id = 'qrCanvas';
+            canvas.style.width = '260px';
+            canvas.style.maxWidth = '100%';
+            canvas.style.borderRadius = '16px';
+            canvas.style.background = '#fff';
+            canvas.style.padding = '10px';
+            canvas.style.display = 'block';
+            canvas.style.marginTop = '12px';
+            canvas.style.imageRendering = 'pixelated';
+            verifyCard.appendChild(canvas);
           }
 
           // Poll until QR ready
-          for (let i = 0; i < 20; i++) {
+          for (let i = 0; i < 25; i++) {
             try {
               const q = await fetchQr(uuid);
-              img.src = q.qrDataUrl;
-              hadQr = true;
-              {
-                const s = window.__bothook_i18n || {};
-                qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
+              if (q.qrText) {
+                renderAsciiQrToCanvas(q.qrText, canvas);
+                hadQr = true;
+                {
+                  const s = window.__bothook_i18n || {};
+                  qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
+                }
+                break;
               }
-              break;
             } catch (e) {
               {
                 const s = window.__bothook_i18n || {};
@@ -701,16 +752,16 @@
             }
           }
 
-          // Keep QR fresh until linked (WhatsApp QR rotates/expirs).
+          // Keep QR visible until linked (single-channel model; QR is stdout display)
           let lastQr = null;
           let statusErrs = 0;
           for (;;) {
             // Try refresh QR
             try {
               const q = await fetchQr(uuid);
-              if (q && q.qrDataUrl && q.qrDataUrl !== lastQr) {
-                lastQr = q.qrDataUrl;
-                img.src = q.qrDataUrl;
+              if (q && q.qrText && q.qrText !== lastQr) {
+                lastQr = q.qrText;
+                renderAsciiQrToCanvas(q.qrText, canvas);
                 hadQr = true;
                 {
                   const s = window.__bothook_i18n || {};
@@ -735,7 +786,7 @@
                 const s = window.__bothook_i18n || {};
                 qrStatus.textContent = s.linkExpiredRetry || '❌ This link has expired. Please click Retry to generate a new one.';
               }
-              if (img) img.style.display = 'none';
+              if (canvas) canvas.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';
               restartBtn.disabled = false;
@@ -760,7 +811,7 @@
                 const s = window.__bothook_i18n || {};
                 qrStatus.textContent = s.linkedOk || '✅ Linked! This delivery machine is now connected.';
               }
-              if (img) img.style.display = 'none';
+              if (canvas) canvas.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'none';
               verifyCard.style.display = 'none';
@@ -771,12 +822,12 @@
             if (everLinked && !isConnected) {
               // Relink flow: even if previously linked, we MUST keep showing the QR so the user has time to scan.
               // Only fall back to Retry UI when we truly have no QR to show.
-              if (hadQr && img && img.src) {
+              if (hadQr && canvas) {
                 {
                   const s = window.__bothook_i18n || {};
                   qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
                 }
-                img.style.display = 'block';
+                canvas.style.display = 'block';
                 getQrBtn.style.display = 'none';
                 restartBtn.style.display = 'none';
                 await sleep(1200);
@@ -787,7 +838,7 @@
                 const s = window.__bothook_i18n || {};
                 qrStatus.textContent = s.previouslyLinkedDisconnected || '⚠️ Previously linked, but currently disconnected. Click “Retry” to relink and generate a new QR.';
               }
-              if (img) img.style.display = 'none';
+              if (canvas) canvas.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';
               restartBtn.disabled = false;
@@ -802,7 +853,7 @@
                   const s = window.__bothook_i18n || {};
                   qrStatus.textContent = s.cannotReachRetry || 'Cannot reach the delivery machine (status failed). Click “Retry”.';
                 }
-                if (img) img.style.display = 'none';
+                if (canvas) canvas.style.display = 'none';
                 getQrBtn.style.display = 'none';
                 restartBtn.style.display = 'inline-flex';
                 restartBtn.disabled = false;
@@ -823,7 +874,7 @@
                 const s = window.__bothook_i18n || {};
                 qrStatus.textContent = s.linkedOk || '✅ Linked! This delivery machine is now connected.';
               }
-              if (img) img.style.display = 'none';
+              if (canvas) canvas.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'none';
               verifyCard.style.display = 'none';
@@ -837,7 +888,7 @@
                   ? (s.qrExpiredSessionEnded || 'QR expired (session ended). Click “Get a new QR” and verify again.')
                   : (s.failedGenerateQrSessionEnded || 'Failed to generate QR (session ended). Click “Get a new QR” to retry.');
               }
-              if (img) img.style.display = 'none';
+              if (canvas) canvas.style.display = 'none';
               getQrBtn.style.display = 'none';
               restartBtn.style.display = 'inline-flex';
               restartBtn.disabled = false;
