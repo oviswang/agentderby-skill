@@ -151,7 +151,7 @@ function getOrCreateDeliveryForUuid(db, uuid) {
     `).run(
       delivery_id,
       null,
-      'anon',
+      uuid,
       chosen.instance_id,
       'LINKING',
       uuid,
@@ -419,9 +419,9 @@ app.get('/api/p/state', (req, res) => {
 
     if (delivery) {
       state = 'LINKING';
-      // Paid-mode must be strongly scoped to the delivery user.
-      // IMPORTANT: 'anon' UUID sessions are temporary and MUST NOT inherit global subscriptions.
-      if (String(delivery.user_id || '') && String(delivery.user_id) !== 'anon') {
+      // Paid-mode must be strongly scoped to the delivery user_id.
+      // We use user_id = provision_uuid for isolation (prevents subscription leakage across UUIDs).
+      if (String(delivery.user_id || '')) {
         try {
           subscription = db.prepare(
             "SELECT provider_sub_id, provider, user_id, plan, status, current_period_end, cancel_at, canceled_at, ended_at, cancel_at_period_end, updated_at FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1"
@@ -1010,7 +1010,26 @@ app.get('/api/delivery/status', (req, res) => {
     const { db } = openDb();
     const d = db.prepare('SELECT delivery_id, status, wa_jid, bound_at, updated_at, user_lang FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
     if (!d) return send(res, 404, { ok:false, error:'unknown_uuid' });
-    return send(res, 200, { ok:true, uuid, delivery_id: d.delivery_id, status: d.status, paid: d.status === 'PAID', wa_jid: d.wa_jid, bound_at: d.bound_at, user_lang: d.user_lang || null, updated_at: d.updated_at });
+
+    // paid: delivery.status=PAID OR an active subscription exists for this UUID-scoped user_id.
+    let paid = (d.status === 'PAID');
+    try {
+      const sub = db.prepare('SELECT status, ended_at, cancel_at, current_period_end FROM subscriptions WHERE user_id=? ORDER BY updated_at DESC LIMIT 1').get(uuid);
+      if (sub) {
+        const st = String(sub.status || '').toLowerCase();
+        const now = Date.now();
+        const endedAt = sub.ended_at ? Date.parse(sub.ended_at) : null;
+        const cancelAt = sub.cancel_at ? Date.parse(sub.cancel_at) : null;
+        const cpe = sub.current_period_end ? Date.parse(sub.current_period_end) : null;
+        const notEnded = !endedAt || endedAt > now;
+        const inPeriod = (cancelAt && cancelAt > now) || (cpe && cpe > now);
+        if (!paid && (st === 'active' || st === 'trialing') && notEnded && inPeriod) {
+          paid = true;
+        }
+      }
+    } catch {}
+
+    return send(res, 200, { ok:true, uuid, delivery_id: d.delivery_id, status: d.status, paid, wa_jid: d.wa_jid, bound_at: d.bound_at, user_lang: d.user_lang || null, updated_at: d.updated_at });
   } catch (e) {
     return send(res, 500, { ok:false, error:'server_error' });
   }
@@ -1033,8 +1052,12 @@ app.post('/api/ops/qr-generated', (req, res) => {
     db.exec('BEGIN IMMEDIATE');
     try {
       const meta = mergeMeta(d.meta_json, { preferred_lang: lang || undefined, qr_generated_at: ts, qr_expires_at: expiresAt });
-      db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
-        .run('LINKING', ts, meta, d.delivery_id);
+      // Do NOT downgrade state for already-bound/paid deliveries.
+      // Only move to LINKING when not yet bound.
+      const cur = db.prepare('SELECT status, wa_jid FROM deliveries WHERE delivery_id=?').get(d.delivery_id);
+      const nextStatus = (cur?.wa_jid ? String(cur.status || 'LINKING') : 'LINKING');
+      db.prepare('UPDATE deliveries SET status=?, user_lang=COALESCE(user_lang, ?), updated_at=?, meta_json=? WHERE delivery_id=?')
+        .run(nextStatus, lang || null, ts, meta, d.delivery_id);
 
       db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
         crypto.randomUUID(), ts, 'delivery', d.delivery_id, 'QR_GENERATED', JSON.stringify({ uuid, lang, expires_at: expiresAt, instance_id: d.instance_id })
