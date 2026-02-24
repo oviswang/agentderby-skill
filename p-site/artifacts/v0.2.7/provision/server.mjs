@@ -147,7 +147,7 @@ function parseWhatsappStatus(text){
 }
 
 const sessions = new Map();
-// uuid -> { pty, buf, lastQrDataUrl, lastQrAt, lastLoginAt, status, lastStatusAt, lastStatusRaw, qrSeq, _pendingQr, _lastQrHash }
+// uuid -> { pty, buf, lastQrDataUrl, lastQrAt, lastLoginAt, status, lastStatusAt, lastStatusRaw, qrSeq, welcomeSentAt, _pendingQr, _lastQrHash }
 
 function ensureSession(uuid){
   let s = sessions.get(uuid);
@@ -162,6 +162,7 @@ function ensureSession(uuid){
       lastStatusAt: null,
       lastStatusRaw: null,
       qrSeq: 0,
+      welcomeSentAt: null,
       _pendingQr: false,
       _lastQrHash: null,
     };
@@ -239,6 +240,61 @@ function startLogin(uuid, { force=false } = {}){
   });
 }
 
+function shellReadUuidLink(uuid){
+  // Best-effort: read from /opt/bothook/UUID.txt if present.
+  // Fallback: construct from uuid.
+  const p = '/opt/bothook/UUID.txt';
+  try {
+    const t = fs.readFileSync(p, 'utf8');
+    const m = t.match(/https?:\/\/\S+/);
+    if (m) return m[0];
+  } catch {}
+  return `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=en`;
+}
+
+function getSelfE164(){
+  // Parse from `openclaw status --json --deep` channelSummary line:
+  // "WhatsApp: linked +6598..."
+  const r = sh('openclaw status --json --deep', { timeoutMs: 8000 });
+  const raw = (r.stdout || '').trim();
+  if (!raw) return null;
+  try {
+    const j = JSON.parse(raw);
+    const arr = Array.isArray(j.channelSummary) ? j.channelSummary : [];
+    for (const line of arr) {
+      const m = String(line).match(/WhatsApp:\s+linked\s+(\+\d{6,20})/);
+      if (m) return m[1];
+    }
+  } catch {}
+  return null;
+}
+
+function sendWelcomeIfNeeded(uuid){
+  const s = ensureSession(uuid);
+  if (s.welcomeSentAt) return;
+
+  const self = getSelfE164();
+  if (!self) return;
+
+  const link = shellReadUuidLink(uuid);
+  const msg = [
+    '[bothook] Linked ✅',
+    '',
+    'Next step:',
+    `1) Open: ${link}`,
+    '2) Follow the setup steps (payment + OpenAI key) shown on the page.',
+    '',
+    'If you need to relink later, you can come back to the same UUID page and scan again.'
+  ].join('\n');
+
+  // Use OpenClaw to send a self-chat message.
+  const cmd = `openclaw message send --channel whatsapp --target ${self} --message ${JSON.stringify(msg)} --json`;
+  const r = sh(cmd, { timeoutMs: 10000 });
+  if ((r.stdout || '').includes('"ok":true')) {
+    s.welcomeSentAt = nowIso();
+  }
+}
+
 function pollStatus(uuid){
   const s = ensureSession(uuid);
   const r = sh('openclaw channels status', { timeoutMs: 5000 });
@@ -250,6 +306,8 @@ function pollStatus(uuid){
   if (s.status) {
     // Once connected, gateway can be started.
     startGateway();
+    // Autoresponder/onboarding: send welcome + relink guidance to self-chat (best-effort).
+    try { sendWelcomeIfNeeded(uuid); } catch {}
   }
 }
 
