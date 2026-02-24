@@ -257,12 +257,23 @@ function shellReadUuidLink(uuid){
 }
 
 function getSelfE164(){
-  // Parse from `openclaw status --json --deep` channelSummary line:
-  // "WhatsApp: linked +6598..."
-  const r = sh('openclaw status --json --deep', { timeoutMs: 8000 });
-  const raw = (r.stdout || '').trim();
-  if (!raw) return null;
+  // Prefer channels status JSON (fast, does not depend on agent auth).
   try {
+    const r = sh('openclaw channels status --probe --json', { timeoutMs: 8000 });
+    const raw = (r.stdout || '').trim();
+    if (raw) {
+      const j = JSON.parse(raw);
+      const w = j?.channels?.whatsapp || j?.whatsapp || null;
+      const e164 = w?.self?.e164 ? String(w.self.e164) : null;
+      if (e164 && e164.startsWith('+')) return e164;
+    }
+  } catch {}
+
+  // Fallback: parse from `openclaw status --json --deep` channelSummary line.
+  try {
+    const r = sh('openclaw status --json --deep', { timeoutMs: 8000 });
+    const raw = (r.stdout || '').trim();
+    if (!raw) return null;
     const j = JSON.parse(raw);
     const arr = Array.isArray(j.channelSummary) ? j.channelSummary : [];
     for (const line of arr) {
