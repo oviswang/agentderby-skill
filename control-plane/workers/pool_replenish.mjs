@@ -23,7 +23,11 @@ const API_BASE = process.env.BOTHOOK_API_BASE || 'http://127.0.0.1:18998';
 const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || 'lhbp-1l4ptuvm';
 const DEFAULT_BUNDLE_ID = process.env.BOTHOOK_POOL_BUNDLE_ID || 'bundle_rs_nmc_lin_med2_01';
-const FALLBACK_BUNDLES = (process.env.BOTHOOK_POOL_BUNDLE_FALLBACKS || 'bundle_starter_nmc_lin_med2_01').split(',').map(s=>s.trim()).filter(Boolean);
+const FALLBACK_BUNDLES = (process.env.BOTHOOK_POOL_BUNDLE_FALLBACKS || '').split(',').map(s=>s.trim()).filter(Boolean);
+const MIN_CPU = parseInt(process.env.BOTHOOK_POOL_MIN_CPU || '2', 10);
+const MIN_MEM_GB = parseInt(process.env.BOTHOOK_POOL_MIN_MEM_GB || '2', 10);
+const BUNDLE_CACHE_PATH = process.env.BOTHOOK_POOL_BUNDLE_CACHE_PATH || '/tmp/bothook_bundle_cache.json';
+const BUNDLE_CACHE_TTL_MS = parseInt(process.env.BOTHOOK_POOL_BUNDLE_CACHE_TTL_MS || String(30*60*1000), 10);
 const ZONES = (process.env.BOTHOOK_POOL_ZONES || 'ap-singapore-1,ap-singapore-3').split(',').map(s=>s.trim()).filter(Boolean);
 
 const TARGET_READY = parseInt(process.env.BOTHOOK_POOL_TARGET_READY || '5', 10);
@@ -83,6 +87,47 @@ function chooseZone() {
   return ZONES[i];
 }
 
+function getBundlesFromCache() {
+  try {
+    const j = JSON.parse(fs.readFileSync(BUNDLE_CACHE_PATH, 'utf8'));
+    if (!j?.ts || !Array.isArray(j.bundles)) return null;
+    if ((Date.now() - Date.parse(j.ts)) > BUNDLE_CACHE_TTL_MS) return null;
+    return j.bundles.map(String).filter(Boolean);
+  } catch { return null; }
+}
+
+function setBundlesCache(bundles) {
+  try {
+    fs.writeFileSync(BUNDLE_CACHE_PATH, JSON.stringify({ ts: new Date().toISOString(), bundles }, null, 2));
+  } catch {}
+}
+
+function pickCheapestBundles() {
+  const cached = getBundlesFromCache();
+  if (cached?.length) return cached;
+
+  const txt = tccli(`tccli lighthouse DescribeBundles --region ${REGION} --output json`);
+  const j = JSON.parse(txt);
+  const bs = j.BundleSet || [];
+  const cand = [];
+
+  for (const b of bs) {
+    if (!b?.SupportLinuxUnixPlatform) continue;
+    if (String(b?.BundleSalesState || '') !== 'AVAILABLE') continue;
+    const cpu = Number(b?.CPU || 0);
+    const mem = Number(b?.Memory || 0);
+    if (cpu < MIN_CPU) continue;
+    if (mem < MIN_MEM_GB) continue;
+    const price = Number(b?.Price?.InstancePrice?.DiscountPrice ?? b?.Price?.InstancePrice?.OriginalPrice ?? NaN);
+    cand.push({ bundleId: String(b.BundleId), cpu, mem, price: Number.isFinite(price) ? price : 1e18 });
+  }
+
+  cand.sort((a,b)=> (a.price-b.price) || (a.cpu-b.cpu) || (a.mem-b.mem) || a.bundleId.localeCompare(b.bundleId));
+  const bundles = cand.map(x=>x.bundleId);
+  if (bundles.length) setBundlesCache(bundles);
+  return bundles;
+}
+
 function main() {
   const { db } = openDb();
   const ts = nowIso();
@@ -121,40 +166,51 @@ function main() {
   const name = `bothook-pool-${ts.replace(/[:.]/g,'-')}`;
   const clientToken = crypto.randomUUID();
 
-  const bundlesToTry = [DEFAULT_BUNDLE_ID, ...FALLBACK_BUNDLES].filter(Boolean);
+  const cheapest = pickCheapestBundles();
+  const bundlesToTry = [DEFAULT_BUNDLE_ID, ...FALLBACK_BUNDLES, ...cheapest].filter(Boolean)
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .slice(0, 8); // avoid huge loops
+
   let resp = null;
   let usedBundle = null;
 
-  for (const bundleId of bundlesToTry) {
-    const payload = {
-      BundleId: bundleId,
-      BlueprintId: BLUEPRINT_ID,
-      InstanceChargePrepaid: { Period: 1, RenewFlag: 'NOTIFY_AND_MANUAL_RENEW' },
-      InstanceName: name,
-      InstanceCount: 1,
-      Zones: zone ? [zone] : undefined,
-      ClientToken: clientToken
-    };
+  // Try zone rotation too (some zones may be out of stock)
+  const zonesToTry = (zone ? [zone, ...ZONES] : [...ZONES]).filter(Boolean)
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .slice(0, 3);
 
-    const tmp = `/tmp/bothook_create_${clientToken}.json`;
-    fs.writeFileSync(tmp, JSON.stringify(payload));
-    try {
-      const json = tccli(`tccli lighthouse CreateInstances --region ${REGION} --cli-input-json file://${tmp} --output json`);
-      resp = JSON.parse(json);
-      usedBundle = bundleId;
-      break;
-    } catch (e) {
-      const s = String(e?._stderr || e?.message || e);
-      // Try next bundle on quota/limit errors.
-      if (s.includes('InstanceQuotaLimitExceeded') || s.includes('LimitExceeded')) {
-        tgSend(`[bothook][WARN] pool create blocked for bundle=${bundleId} (quota). trying fallback...`);
-        continue;
+  for (const bundleId of bundlesToTry) {
+    for (const z of zonesToTry.length ? zonesToTry : [null]) {
+      const payload = {
+        BundleId: bundleId,
+        BlueprintId: BLUEPRINT_ID,
+        InstanceChargePrepaid: { Period: 1, RenewFlag: 'NOTIFY_AND_MANUAL_RENEW' },
+        InstanceName: name,
+        InstanceCount: 1,
+        Zones: z ? [z] : undefined,
+        ClientToken: clientToken
+      };
+
+      const tmp = `/tmp/bothook_create_${clientToken}.json`;
+      fs.writeFileSync(tmp, JSON.stringify(payload));
+      try {
+        const json = tccli(`tccli lighthouse CreateInstances --region ${REGION} --cli-input-json file://${tmp} --output json`);
+        resp = JSON.parse(json);
+        usedBundle = bundleId;
+        break;
+      } catch (e) {
+        const s = String(e?._stderr || e?.message || e);
+        if (s.includes('InstanceQuotaLimitExceeded') || s.includes('LimitExceeded')) {
+          // try next zone/bundle
+          continue;
+        }
+        tgSend(`[bothook][WARN] pool create failed bundle=${bundleId} zone=${z||''}: ${s.slice(0,180)}`);
+        throw e;
+      } finally {
+        try { fs.unlinkSync(tmp); } catch {}
       }
-      tgSend(`[bothook][WARN] pool create failed bundle=${bundleId}: ${s.slice(0,200)}`);
-      throw e;
-    } finally {
-      try { fs.unlinkSync(tmp); } catch {}
     }
+    if (resp) break;
   }
 
   if (!resp) {
