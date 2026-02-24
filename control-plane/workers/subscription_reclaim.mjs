@@ -89,6 +89,25 @@ function postJson(url, body) {
   return JSON.parse(out);
 }
 
+function loadEnvFile(p) {
+  try {
+    const text = sh(`bash -lc 'set -a; source ${JSON.stringify(p)}; set +a; python3 - <<"PY"\nimport os, json\nkeys=["TELEGRAM_BOT_TOKEN","TELEGRAM_TOKEN","TELEGRAM_CHAT_ID","OWNER_CHAT_ID"]\nprint(json.dumps({k:os.environ.get(k) for k in keys}))\nPY'`);
+    return JSON.parse(text);
+  } catch { return {}; }
+}
+
+function tgSend(text) {
+  const envFile = process.env.TELEGRAM_ENV || '/home/ubuntu/.openclaw/credentials/telegram.env';
+  const env = loadEnvFile(envFile);
+  const token = env.TELEGRAM_BOT_TOKEN || env.TELEGRAM_TOKEN;
+  const chatId = env.TELEGRAM_CHAT_ID || env.OWNER_CHAT_ID;
+  if (!token || !chatId) return false;
+  try {
+    sh(`curl -s -X POST https://api.telegram.org/bot${token}/sendMessage -d chat_id=${chatId} -d text=${JSON.stringify(text)} >/dev/null`);
+    return true;
+  } catch { return false; }
+}
+
 function isExpiredByTime(tsIso) {
   if (!tsIso) return false;
   const t = Date.parse(tsIso);
@@ -179,6 +198,8 @@ function main() {
     return;
   }
 
+  tgSend(`[bothook] subscription_reclaim: start instance=${decided.instance_id} reason=${decided.reason}`);
+
   const instance_id = decided.instance_id;
   const delivery_id = decided.delivery_id;
   const user_id = decided.user_id;
@@ -245,7 +266,9 @@ function main() {
       process.exit(3);
     }
 
-    console.log(JSON.stringify({ ok:true, ts, action:'destroy', instance_id, delivery_id, reason: decided.reason, readyNow, targetReady: TARGET_READY, returnable: ret }, null, 2));
+    const out = { ok:true, ts, action:'destroy', instance_id, delivery_id, reason: decided.reason, readyNow, targetReady: TARGET_READY, returnable: ret };
+    console.log(JSON.stringify(out, null, 2));
+    tgSend(`[bothook] subscription_reclaim: destroy sent instance=${instance_id} returnable=${ret?.IsReturnable ?? ret?.isReturnable ?? 'unknown'}`);
     return;
   }
 
@@ -264,7 +287,9 @@ function main() {
     console.error('[subscription_reclaim] pool init trigger failed', String(e?.message || e));
   }
 
-  console.log(JSON.stringify({ ok:true, ts, action:'reimage', instance_id, delivery_id, reason: decided.reason, readyNow, targetReady: TARGET_READY, reset_blueprint_id: BLUEPRINT_ID, pool_init: job }, null, 2));
+  const out = { ok:true, ts, action:'reimage', instance_id, delivery_id, reason: decided.reason, readyNow, targetReady: TARGET_READY, reset_blueprint_id: BLUEPRINT_ID, pool_init: job };
+  console.log(JSON.stringify(out, null, 2));
+  tgSend(`[bothook] subscription_reclaim: reimage+init triggered instance=${instance_id}`);
 }
 
 main();

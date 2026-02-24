@@ -14,6 +14,29 @@ import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { openDb, nowIso } from '../lib/db.mjs';
 
+function sh2(cmd){
+  return execSync(cmd, { stdio:['ignore','pipe','pipe'], encoding:'utf8', shell:'/bin/bash' });
+}
+
+function loadEnvFile(p) {
+  try {
+    const text = sh2(`bash -lc 'set -a; source ${JSON.stringify(p)}; set +a; python3 - <<"PY"\nimport os, json\nkeys=["TELEGRAM_BOT_TOKEN","TELEGRAM_TOKEN","TELEGRAM_CHAT_ID","OWNER_CHAT_ID"]\nprint(json.dumps({k:os.environ.get(k) for k in keys}))\nPY'`);
+    return JSON.parse(text);
+  } catch { return {}; }
+}
+
+function tgSend(text) {
+  const envFile = process.env.TELEGRAM_ENV || '/home/ubuntu/.openclaw/credentials/telegram.env';
+  const env = loadEnvFile(envFile);
+  const token = env.TELEGRAM_BOT_TOKEN || env.TELEGRAM_TOKEN;
+  const chatId = env.TELEGRAM_CHAT_ID || env.OWNER_CHAT_ID;
+  if (!token || !chatId) return false;
+  try {
+    sh2(`curl -s -X POST https://api.telegram.org/bot${token}/sendMessage -d chat_id=${chatId} -d text=${JSON.stringify(text)} >/dev/null`);
+    return true;
+  } catch { return false; }
+}
+
 const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 const POOL_KEY_ID = process.env.BOTHOOK_POOL_KEY_ID || 'lhkp-q1oc3vdz';
 const MAX_BATCH = parseInt(process.env.BOTHOOK_RECONCILE_BATCH || '20', 10);
@@ -117,7 +140,11 @@ function main() {
     }
   }
 
-  console.log(JSON.stringify({ ok: true, ts, scanned: rows.length, refreshed, keyfix, fail }, null, 2));
+  const summary = { ok: true, ts, scanned: rows.length, refreshed, keyfix, fail };
+  console.log(JSON.stringify(summary, null, 2));
+  if (keyfix || fail) {
+    tgSend(`[bothook] cloud_reconcile: refreshed=${refreshed} keyfix=${keyfix} fail=${fail}`);
+  }
 }
 
 main();
