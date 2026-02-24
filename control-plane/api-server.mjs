@@ -560,7 +560,9 @@ async function associatePoolKey(instance_id){
   const out = String((r.stdout||'') + (r.stderr||''));
   if ((r.code ?? 0) === 0) return true;
   if (out.includes('KeyPairBindDuplicate')) return true;
+  // Retryable: cloud is busy or instance still pending.
   if (out.includes('LatestOperationUnfinished')) return false;
+  if (out.includes('InvalidInstanceState') && out.includes('PENDING')) return false;
   throw new Error('associate_key_failed');
 }
 
