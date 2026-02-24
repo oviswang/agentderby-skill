@@ -1037,7 +1037,7 @@ console.log('generated ' + locales.length + ' prompt files into ' + outDir);
 
           const region = act.region || 'ap-singapore';
           const cred = act.cred_env || '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env';
-          const cmd = `set -a; source ${cred}; set +a; tccli lighthouse AssociateInstancesKeyPairs --region ${region} --InstanceIds ${instanceId} --KeyIds ${keyId} --output json`;
+          const cmd = `set -a; source ${cred}; set +a; tccli lighthouse AssociateInstancesKeyPairs --region ${region} --InstanceIds '["${instanceId}"]' --KeyIds '["${keyId}"]' --output json`;
           const r = run(cmd);
           if (r.code !== 0) throw new Error('tccli_associate_keypair_failed');
 
