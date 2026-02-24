@@ -44,6 +44,35 @@ function getDeliveryLang(delivery){
     return String(delivery?.user_lang || meta.preferred_lang || 'en').toLowerCase();
   } catch { return 'en'; }
 }
+function deliveryEntitled(db, delivery){
+  try {
+    const uid = String(delivery?.user_id || '').trim();
+    if (!uid) return false;
+    const sub = db.prepare(
+      `SELECT provider_sub_id, provider, user_id, status,
+              current_period_end, cancel_at, canceled_at, ended_at, updated_at
+       FROM subscriptions
+       WHERE user_id = ?
+       ORDER BY updated_at DESC
+       LIMIT 1`
+    ).get(uid) || null;
+
+    const now = Date.now();
+    const providerOk = String(sub?.provider || '') === 'stripe' && !!sub?.provider_sub_id;
+    const endedAt = sub?.ended_at ? Date.parse(sub.ended_at) : null;
+    const cpe = sub?.current_period_end ? Date.parse(sub.current_period_end) : null;
+    const cancelAt = sub?.cancel_at ? Date.parse(sub.cancel_at) : null;
+
+    const notEnded = !endedAt || endedAt > now;
+    const inPeriod = (cpe && cpe > now) || (cancelAt && cancelAt > now);
+    const statusOk = ['active', 'trialing'].includes(String(sub?.status || '').toLowerCase());
+
+    return Boolean(providerOk && notEnded && inPeriod && statusOk);
+  } catch {
+    return false;
+  }
+}
+
 function sendSelfChatOnInstance(instance, text){
   // Derive self e164 from channel status JSON, then send via gateway.
   const cmd = `set -euo pipefail; `
@@ -1308,7 +1337,7 @@ app.get('/api/wa/status', async (req, res) => {
         // - guide exists
         // - subscription is active (entitled)
         // - not already sent for this QR generation
-        if (guide && typeof entitled !== 'undefined' && entitled === true) {
+        if (guide && deliveryEntitled(db, delivery)) {
           const shouldSend = (!lastGuideAt) || (qrGenAt && lastGuideAt && qrGenAt > lastGuideAt);
           if (shouldSend) {
             const ts = nowIso();
