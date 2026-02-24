@@ -167,18 +167,8 @@ function getOrCreateDeliveryForUuid(db, uuid) {
     db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=?, assigned_at=? WHERE instance_id=?')
       .run('ALLOCATED', uuid, ts, chosen.instance_id);
 
-    // Prepare a short-lived READY-report token for this instance.
-    try {
-      const expIso = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-      const token = makeReadyReportToken();
-      const instNow = getInstanceById(db, chosen.instance_id);
-      db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(
-        mergeMeta(instNow?.meta_json, { ready_report_token: token, ready_report_exp: expIso }),
-        chosen.instance_id
-      );
-      // Write token onto the pool machine.
-      writeReadyReportFilesOnInstance(chosen, { token, expIso });
-    } catch {}
+    // NOTE: READY-report tokens are issued during pool init/reimage (instance lifecycle),
+    // not during user allocation (delivery lifecycle). Do not couple instance readiness to user UUID.
 
     // Persist UUID recovery link on the user machine for later relink/support.
     try {
