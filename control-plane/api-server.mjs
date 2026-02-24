@@ -717,8 +717,9 @@ app.post('/api/pool/ready', (req, res) => {
   try {
     const instance_id = String(req.body?.instance_id || '').trim();
     const token = String(req.body?.token || '').trim();
-    const public_ip = String(req.body?.public_ip || '').trim() || null;
-    const private_ip = String(req.body?.private_ip || '').trim() || null;
+    // Do not trust reporter-provided IPs (often private IP from hostname -I). We'll refresh from cloud DescribeInstances.
+    const public_ip = null;
+    const private_ip = null;
     const checks = req.body?.checks || null;
     if (!instance_id || !token) return send(res, 400, { ok:false, error:'instance_id_and_token_required' });
 
@@ -742,7 +743,21 @@ app.post('/api/pool/ready', (req, res) => {
 
     const ts = nowIso();
 
-    // Reverse-probe (fast, best-effort). If it fails, do NOT mark READY.
+    // Refresh instance IPs from cloud (authoritative)
+    try {
+      const r = sh(`set -a; source /home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env; set +a; tccli lighthouse DescribeInstances --region ap-singapore --InstanceIds '["${instance_id}"]' --output json`, { timeoutMs: 20000 });
+      if ((r.code ?? 1) === 0) {
+        const j = JSON.parse(String(r.stdout||'{}'));
+        const it = (j.InstanceSet||[])[0] || {};
+        const pub = (it.PublicAddresses||[])[0] || null;
+        const priv = (it.PrivateAddresses||[])[0] || null;
+        if (pub) {
+          db.prepare('UPDATE instances SET public_ip=COALESCE(?,public_ip), private_ip=COALESCE(?,private_ip) WHERE instance_id=?').run(pub, priv, instance_id);
+        }
+      }
+    } catch {}
+
+    // Reverse-probe (fast). If it fails, do NOT mark READY.
     try {
       const instForProbe = getInstanceById(db, instance_id);
       const probe = poolSsh(instForProbe, '/opt/bothook/healthcheck.sh', { timeoutMs: 15000, tty: false, retries: 0 });

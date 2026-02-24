@@ -76,7 +76,7 @@ if $ok && [[ -f "$READY_FILE" ]]; then
   priv_ip="$(ip -4 addr show scope global 2>/dev/null | awk '/inet /{print $2}' | head -n1 | cut -d/ -f1 || true)"
   if [[ -n "$inst_id" && -n "$token" ]]; then
     curl -fsS --max-time 5 -H 'content-type: application/json' \
-      -d "{\"instance_id\":\"${inst_id}\",\"token\":\"${token}\",\"public_ip\":\"${pub_ip}\",\"private_ip\":\"${priv_ip}\",\"checks\":$(cat "$OUT" | python3 -c 'import json,sys; j=json.load(sys.stdin); import json as J; print(J.dumps(j.get("checks")))') }" \
+      -d "{\"instance_id\":\"${inst_id}\",\"token\":\"${token}\",\"checks\":$(cat "$OUT" | python3 -c 'import json,sys; j=json.load(sys.stdin); import json as J; print(J.dumps(j.get("checks")))') }" \
       "https://p.bothook.me/api/pool/ready" >/dev/null 2>&1 || true
   fi
 fi
