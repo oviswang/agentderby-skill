@@ -141,8 +141,12 @@ function asciiQrToPngDataUrl(blockLines, { scale = 6, border = 2 } = {}) {
 function parseWhatsappStatus(text){
   const t = stripAnsi(text);
   const lower = t.toLowerCase();
-  const connected = lower.includes('connected') || lower.includes('ready');
-  // very rough; we mainly need a boolean.
+
+  // We treat "linked" as sufficient signal that login succeeded.
+  // After login, the gateway may still be stopped (we start it once we detect this).
+  const linked = lower.includes('linked') && !lower.includes('not linked');
+  const connected = linked || lower.includes('connected') || lower.includes('ready');
+
   return { connected, raw: t.trim() };
 }
 
