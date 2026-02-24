@@ -23,6 +23,35 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { openDb, nowIso } from './lib/db.mjs';
+
+// i18n WhatsApp prompt templates (for self-chat onboarding/relink messaging)
+const WA_PROMPTS_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), 'i18n', 'whatsapp_prompts');
+function loadWaPrompts(lang){
+  const safe = String(lang||'').toLowerCase();
+  const pick = (safe && fs.existsSync(path.join(WA_PROMPTS_DIR, `${safe}.json`))) ? safe : 'en';
+  try { return JSON.parse(fs.readFileSync(path.join(WA_PROMPTS_DIR, `${pick}.json`), 'utf8')); } catch { return null; }
+}
+function renderTpl(s, vars){
+  let out = String(s||'');
+  for (const [k,v] of Object.entries(vars||{})) {
+    out = out.split(`{{${k}}}`).join(String(v ?? ''));
+  }
+  return out;
+}
+function getDeliveryLang(delivery){
+  try {
+    const meta = jsonMeta(delivery?.meta_json) || {};
+    return String(delivery?.user_lang || meta.preferred_lang || 'en').toLowerCase();
+  } catch { return 'en'; }
+}
+function sendSelfChatOnInstance(instance, text){
+  // Derive self e164 from channel status JSON, then send via gateway.
+  const cmd = `set -euo pipefail; `
+    + `SELF=$(openclaw channels status --probe --json 2>/dev/null | jq -r '.channels.whatsapp.self.e164 // empty'); `
+    + `[ -n "$SELF" ] || { echo no_self; exit 2; }; `
+    + `openclaw message send --channel whatsapp --target "$SELF" --message ${JSON.stringify(String(text||''))} --json`;
+  return poolSsh(instance, cmd, { timeoutMs: 15000, tty:false, retries: 1 });
+}
 import { encryptAesGcm } from './lib/crypto.mjs';
 import { verifyOpenAiKey } from './lib/openai_verify.mjs';
 
@@ -1265,6 +1294,34 @@ app.get('/api/wa/status', async (req, res) => {
     // If waJid is unavailable (e.g. gateway not yet reachable), but we have a boundJid and status indicates linked,
     // treat it as connected for UI purposes.
     const claimConnected = Boolean(connected && boundJid && (!waJid || normalizeWaBase(boundJid) === normalizeWaBase(waJid)));
+    // If connected + entitled, send OpenAI key setup guide (localized) once per QR session.
+    try {
+      if (claimConnected) {
+        const lang = getDeliveryLang(delivery);
+        const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
+        const guide = prompts.guide_key_paid;
+        const meta = jsonMeta(delivery.meta_json) || {};
+        const lastGuideAt = meta.guide_key_sent_at ? Date.parse(meta.guide_key_sent_at) : null;
+        const qrGenAt = meta.qr_generated_at ? Date.parse(meta.qr_generated_at) : null;
+
+        // Only send guide if:
+        // - guide exists
+        // - subscription is active (entitled)
+        // - not already sent for this QR generation
+        if (guide && typeof entitled !== 'undefined' && entitled === true) {
+          const shouldSend = (!lastGuideAt) || (qrGenAt && lastGuideAt && qrGenAt > lastGuideAt);
+          if (shouldSend) {
+            const ts = nowIso();
+            const msg = renderTpl(guide, { uuid });
+            const rr2 = sendSelfChatOnInstance(instance, msg);
+            // Record attempt (even if send fails) to avoid spamming.
+            const meta2 = mergeMeta(delivery.meta_json, { guide_key_sent_at: ts, guide_key_lang: lang, guide_key_send_ok: (rr2.code ?? 1) === 0 });
+            db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts, delivery.delivery_id);
+          }
+        }
+      }
+    } catch {}
+
     const out = { ok: true, uuid, instance_id: instance.instance_id, status: claimConnected ? 'connected' : 'linking', connected: claimConnected, wa_jid: boundJid || null, lastUpdateAt: nowIso() };
     if (isDebug(req)) out.debug = { raw: text.slice(0, 800) };
     return send(res, 200, out);
