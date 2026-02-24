@@ -325,6 +325,87 @@ function baseUrlForShortlinks(){
   return process.env.BOTHOOK_SHORTLINK_BASE || 'https://s.bothook.me/s/';
 }
 
+function waJidToE164(waJid){
+  try{
+    const base = normalizeWaBase(waJid);
+    if(!base) return null;
+    const num = String(base).split('@')[0];
+    if(!/^\d{6,20}$/.test(num)) return null;
+    return '+' + num;
+  }catch{ return null; }
+}
+
+function isKeyVerified(db, uuid){
+  try{
+    const row = db.prepare('SELECT meta_json FROM delivery_secrets WHERE provision_uuid=? AND kind=? LIMIT 1').get(uuid, 'openai_api_key');
+    if(!row) return false;
+    let meta={};
+    try{ meta = row.meta_json ? JSON.parse(row.meta_json) : {}; }catch{ meta={}; }
+    return Boolean(meta.verified_at);
+  }catch{ return false; }
+}
+
+function isPaid(db, uuid){
+  // same logic as /api/delivery/status
+  try{
+    const d = getDeliveryByUuid(db, uuid);
+    if(!d) return false;
+    if(String(d.status||'') === 'PAID') return true;
+    const sub = db.prepare('SELECT status, ended_at, cancel_at, current_period_end FROM subscriptions WHERE user_id=? ORDER BY updated_at DESC LIMIT 1').get(uuid);
+    if(!sub) return false;
+    const st = String(sub.status || '').toLowerCase();
+    const now = Date.now();
+    const endedAt = sub.ended_at ? Date.parse(sub.ended_at) : null;
+    const cancelAt = sub.cancel_at ? Date.parse(sub.cancel_at) : null;
+    const cpe = sub.current_period_end ? Date.parse(sub.current_period_end) : null;
+    const notEnded = !endedAt || endedAt > now;
+    const inPeriod = (cancelAt && cancelAt > now) || (cpe && cpe > now);
+    return (st === 'active' || st === 'trialing') && notEnded && inPeriod;
+  }catch{ return false; }
+}
+
+function tryCutoverDelivered(db, uuid, { reason } = {}) {
+  // Control-plane decides and triggers cutover on the user machine.
+  // Preconditions: linked + paid + key verified.
+  const d = getDeliveryByUuid(db, uuid);
+  if(!d) return { ok:false, skip:'no_delivery' };
+
+  if(String(d.status||'') === 'DELIVERED') return { ok:true, skip:'already_delivered' };
+
+  const linked = Boolean(d.wa_jid);
+  const paid = isPaid(db, uuid);
+  const verified = isKeyVerified(db, uuid);
+  if(!linked || !paid || !verified) {
+    return { ok:false, skip:'preconditions_not_met', linked, paid, verified };
+  }
+
+  const inst = getInstanceById(db, d.instance_id);
+  if(!inst?.public_ip) return { ok:false, skip:'instance_missing_ip' };
+
+  const controller = waJidToE164(d.wa_jid);
+  const ts = nowIso();
+
+  // Trigger cutover script on the user machine (idempotent).
+  const remote = `set -euo pipefail; sudo -n true; `
+    + `BOTHOOK_UUID='${uuid}' BOTHOOK_CONTROLLER_E164='${controller || ''}' sudo -E /opt/bothook/bin/cutover_delivered.sh`;
+
+  const r = poolSsh(inst, remote, { timeoutMs: 30000, tty: false, retries: 1 });
+
+  // Mark delivered if remote ran (best-effort). If remote fails, keep status for retry.
+  if((r.code ?? 1) === 0) {
+    const row = db.prepare('SELECT meta_json FROM deliveries WHERE provision_uuid=?').get(uuid);
+    const meta2 = mergeMeta(row?.meta_json || null, { delivered_at: ts, cutover_reason: reason || null });
+    db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE provision_uuid=?').run('DELIVERED', ts, meta2, uuid);
+    db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)').run(
+      crypto.randomUUID(), ts, 'delivery', uuid, 'CUTOVER_DELIVERED', JSON.stringify({ uuid, instance_id: d.instance_id, reason: reason || null })
+    );
+    return { ok:true, delivered:true, controller, ssh_code:r.code };
+  }
+
+  return { ok:false, delivered:false, ssh_code:r.code, err: (r.stderr||r.stdout||'').slice(0,300) };
+}
+
+
 function randCode(n=7){
   const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
   let out='';
@@ -1087,6 +1168,8 @@ app.post('/api/stripe/webhook', async (req, res) => {
         db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
           crypto.randomUUID(), ts, 'delivery', delivery_id, 'PAYMENT_CONFIRMED', JSON.stringify({ uuid, stripe_event_id: eventId })
         );
+        // If key already verified + linked, cutover now.
+        try { tryCutoverDelivered(db, uuid, { reason: 'payment_confirmed' }); } catch {}
       }
     }
 
@@ -1181,6 +1264,12 @@ app.post('/api/key/verify', async (req, res) => {
       try { db.exec('ROLLBACK'); } catch {}
       throw e;
     }
+
+    // If paid + linked, trigger cutover automatically.
+    try {
+      const { db } = openDb();
+      tryCutoverDelivered(db, uuid, { reason: 'openai_key_verified' });
+    } catch {}
 
     return send(res, 200, { ok:true, verified:true, message:'[bothook] OpenAI Key 验证成功 ✅ 现在你可以直接在 WhatsApp 里对它说“帮我做什么”。' });
   } catch (e) {
