@@ -106,11 +106,11 @@ UNIT
 
 install_unit bothook-cloud-reconcile.timer <<UNIT
 [Unit]
-Description=Run BOTHook Cloud Reconcile Worker every 5 minutes
+Description=Run BOTHook Cloud Reconcile Worker every 10 minutes
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=5min
+OnUnitActiveSec=10min
 RandomizedDelaySec=30
 Unit=bothook-cloud-reconcile.service
 
