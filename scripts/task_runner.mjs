@@ -1039,7 +1039,14 @@ console.log('generated ' + locales.length + ' prompt files into ' + outDir);
           const cred = act.cred_env || '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env';
           const cmd = `set -a; source ${cred}; set +a; tccli lighthouse AssociateInstancesKeyPairs --region ${region} --InstanceIds '["${instanceId}"]' --KeyIds '["${keyId}"]' --output json`;
           const r = run(cmd);
-          if (r.code !== 0) throw new Error('tccli_associate_keypair_failed');
+          if (r.code !== 0) {
+            const out = String((r.stdout||'') + (r.stderr||''));
+            if (out.includes('UnsupportedOperation.LatestOperationUnfinished')) {
+              // Treat as transient/in-progress; do not fail the task.
+              return { ok:true, kind, instance_id: instanceId, key_id: keyId, region, note: 'in_progress' };
+            }
+            throw new Error('tccli_associate_keypair_failed');
+          }
 
           // Best-effort: record in DB meta_json so automation has local truth.
           try {
