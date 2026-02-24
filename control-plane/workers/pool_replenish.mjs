@@ -23,6 +23,7 @@ const API_BASE = process.env.BOTHOOK_API_BASE || 'http://127.0.0.1:18998';
 const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || 'lhbp-1l4ptuvm';
 const DEFAULT_BUNDLE_ID = process.env.BOTHOOK_POOL_BUNDLE_ID || 'bundle_rs_nmc_lin_med2_01';
+const FALLBACK_BUNDLES = (process.env.BOTHOOK_POOL_BUNDLE_FALLBACKS || 'bundle_starter_nmc_lin_med2_01').split(',').map(s=>s.trim()).filter(Boolean);
 const ZONES = (process.env.BOTHOOK_POOL_ZONES || 'ap-singapore-1,ap-singapore-3').split(',').map(s=>s.trim()).filter(Boolean);
 
 const TARGET_READY = parseInt(process.env.BOTHOOK_POOL_TARGET_READY || '5', 10);
@@ -119,34 +120,46 @@ function main() {
   const zone = chooseZone();
   const name = `bothook-pool-${ts.replace(/[:.]/g,'-')}`;
   const clientToken = crypto.randomUUID();
-  const payload = {
-    BundleId: DEFAULT_BUNDLE_ID,
-    BlueprintId: BLUEPRINT_ID,
-    InstanceChargePrepaid: { Period: 1, RenewFlag: 'NOTIFY_AND_MANUAL_RENEW' },
-    InstanceName: name,
-    InstanceCount: 1,
-    Zones: zone ? [zone] : undefined,
-    ClientToken: clientToken
-  };
 
-  const tmp = `/tmp/bothook_create_${clientToken}.json`;
-  fs.writeFileSync(tmp, JSON.stringify(payload));
+  const bundlesToTry = [DEFAULT_BUNDLE_ID, ...FALLBACK_BUNDLES].filter(Boolean);
   let resp = null;
-  try {
-    const json = tccli(`tccli lighthouse CreateInstances --region ${REGION} --cli-input-json file://${tmp} --output json`);
-    resp = JSON.parse(json);
-  } catch (e) {
-    const s = String(e?._stderr || e?.message || e);
-    // Quota / limit exceeded: alert + noop (do not crash timer)
-    if (s.includes('InstanceQuotaLimitExceeded') || s.includes('LimitExceeded')) {
-      tgSend(`[bothook][WARN] pool create blocked by cloud quota: total=${total}/${CAP_TOTAL}, ready=${ready}/${TARGET_READY}`);
-      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'cloud_quota', detail: s.slice(0,400) }, null, 2));
-      return;
+  let usedBundle = null;
+
+  for (const bundleId of bundlesToTry) {
+    const payload = {
+      BundleId: bundleId,
+      BlueprintId: BLUEPRINT_ID,
+      InstanceChargePrepaid: { Period: 1, RenewFlag: 'NOTIFY_AND_MANUAL_RENEW' },
+      InstanceName: name,
+      InstanceCount: 1,
+      Zones: zone ? [zone] : undefined,
+      ClientToken: clientToken
+    };
+
+    const tmp = `/tmp/bothook_create_${clientToken}.json`;
+    fs.writeFileSync(tmp, JSON.stringify(payload));
+    try {
+      const json = tccli(`tccli lighthouse CreateInstances --region ${REGION} --cli-input-json file://${tmp} --output json`);
+      resp = JSON.parse(json);
+      usedBundle = bundleId;
+      break;
+    } catch (e) {
+      const s = String(e?._stderr || e?.message || e);
+      // Try next bundle on quota/limit errors.
+      if (s.includes('InstanceQuotaLimitExceeded') || s.includes('LimitExceeded')) {
+        tgSend(`[bothook][WARN] pool create blocked for bundle=${bundleId} (quota). trying fallback...`);
+        continue;
+      }
+      tgSend(`[bothook][WARN] pool create failed bundle=${bundleId}: ${s.slice(0,200)}`);
+      throw e;
+    } finally {
+      try { fs.unlinkSync(tmp); } catch {}
     }
-    tgSend(`[bothook][WARN] pool create failed: ${s.slice(0,200)}`);
-    throw e;
-  } finally {
-    try { fs.unlinkSync(tmp); } catch {}
+  }
+
+  if (!resp) {
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'cloud_quota_all_bundles', total, ready, bundlesToTry }, null, 2));
+    return;
   }
 
   const ids = resp.InstanceIdSet || [];
@@ -165,7 +178,7 @@ function main() {
        blueprint_id=excluded.blueprint_id,
        lifecycle_status='IN_POOL',
        health_status='NEEDS_VERIFY'`
-  ).run(instance_id, 'tencent_lighthouse', REGION, zone, DEFAULT_BUNDLE_ID, BLUEPRINT_ID, 'IN_POOL', 'NEEDS_VERIFY', ts, JSON.stringify({ created_by:'pool_replenish', client_token: clientToken }));
+  ).run(instance_id, 'tencent_lighthouse', REGION, zone, usedBundle || DEFAULT_BUNDLE_ID, BLUEPRINT_ID, 'IN_POOL', 'NEEDS_VERIFY', ts, JSON.stringify({ created_by:'pool_replenish', client_token: clientToken }));
 
   db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
     .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_INSTANCE_CREATED', JSON.stringify({ bundle_id: DEFAULT_BUNDLE_ID, blueprint_id: BLUEPRINT_ID, zone, request_id: resp.RequestId }));
