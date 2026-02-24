@@ -1188,13 +1188,14 @@ app.get('/api/wa/status', async (req, res) => {
       if (waJid) waJid = String(waJid);
     } catch {
       const lower = text.toLowerCase();
-      // If gateway is unreachable, we cannot claim connected.
-      if (lower.includes('gateway not reachable') || lower.includes('gateway closed')) {
-        connected = false;
-      } else {
-        connected = lower.includes('whatsapp') && (lower.includes('connected') || lower.includes('ready') || lower.includes('linked'));
-      }
+      // Text-mode fallback: treat "linked" as sufficient signal that QR scan succeeded.
+      connected = lower.includes('whatsapp') && (lower.includes('connected') || lower.includes('ready') || lower.includes('linked'));
       waJid = null;
+
+      // If we detect linked but gateway is not running, try starting it (best-effort).
+      if (connected && (lower.includes('gateway not reachable') || lower.includes('gateway closed'))) {
+        try { poolSsh(instance, 'sudo systemctl start openclaw-gateway.service || true', { timeoutMs: 12000, tty: false, retries: 0 }); } catch {}
+      }
     }
 
     if (rr.code !== 0 && !text) {
@@ -1261,7 +1262,9 @@ app.get('/api/wa/status', async (req, res) => {
       boundJid = row?.wa_jid || null;
     } catch {}
 
-    const claimConnected = Boolean(connected && boundJid && normalizeWaBase(boundJid) === normalizeWaBase(waJid));
+    // If waJid is unavailable (e.g. gateway not yet reachable), but we have a boundJid and status indicates linked,
+    // treat it as connected for UI purposes.
+    const claimConnected = Boolean(connected && boundJid && (!waJid || normalizeWaBase(boundJid) === normalizeWaBase(waJid)));
     const out = { ok: true, uuid, instance_id: instance.instance_id, status: claimConnected ? 'connected' : 'linking', connected: claimConnected, wa_jid: boundJid || null, lastUpdateAt: nowIso() };
     if (isDebug(req)) out.debug = { raw: text.slice(0, 800) };
     return send(res, 200, out);
