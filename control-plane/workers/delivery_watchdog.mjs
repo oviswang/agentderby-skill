@@ -1,0 +1,208 @@
+#!/usr/bin/env node
+/**
+ * delivery_watchdog.mjs
+ *
+ * Enforce linking/payment timeouts to prevent half-allocated instances from draining pool capacity.
+ *
+ * Policy (owner-confirmed):
+ * - Stage A (pre-bind): 5 minutes from instance.assigned_at (or delivery.created_at) until bound_at is set.
+ *   Action: release instance back to IN_POOL (NEEDS_VERIFY) and mark delivery timeout.
+ * - Stage B (post-bind, unpaid): 15 minutes from delivery.bound_at until paid.
+ *   Action: reimage instance (ResetInstance) then return to pool via /api/ops/pool/init.
+ *
+ * Notes:
+ * - We treat deliveries.status in ('PAID','DELIVERED','ACTIVE') or meta_json.paid_at set as PAID.
+ * - Heavy concurrency: 1 per run (systemd flock + LIMIT=1).
+ */
+
+import crypto from 'node:crypto';
+import { execSync } from 'node:child_process';
+import { openDb, nowIso } from '../lib/db.mjs';
+
+const API_BASE = process.env.BOTHOOK_API_BASE || 'http://127.0.0.1:18998';
+const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
+const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || 'lhbp-1l4ptuvm';
+
+const STAGE_A_MS = 5 * 60 * 1000;
+const STAGE_B_MS = 15 * 60 * 1000;
+
+function sh(cmd) {
+  return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', shell: '/bin/bash' });
+}
+
+function tccli(cmd) {
+  const envFile = '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env';
+  const full = `set -a; source ${envFile}; set +a; ${cmd}`;
+  return sh(full);
+}
+
+function parseJson(s) {
+  try { return s ? JSON.parse(s) : {}; } catch { return {}; }
+}
+
+function mergeMeta(oldMetaStr, patch) {
+  const m = parseJson(oldMetaStr);
+  return JSON.stringify({ ...m, ...patch });
+}
+
+function postJson(url, body) {
+  const payload = JSON.stringify(body);
+  const out = sh(`curl -s -X POST ${JSON.stringify(url)} -H 'content-type: application/json' --data-binary ${JSON.stringify(payload)}`);
+  return JSON.parse(out);
+}
+
+function loadEnvFile(p) {
+  try {
+    const text = sh(`bash -lc 'set -a; source ${JSON.stringify(p)}; set +a; python3 - <<"PY"\nimport os, json\nkeys=["TELEGRAM_BOT_TOKEN","TELEGRAM_TOKEN","TELEGRAM_CHAT_ID","OWNER_CHAT_ID"]\nprint(json.dumps({k:os.environ.get(k) for k in keys}))\nPY'`);
+    return JSON.parse(text);
+  } catch { return {}; }
+}
+
+function tgSend(text) {
+  const envFile = process.env.TELEGRAM_ENV || '/home/ubuntu/.openclaw/credentials/telegram.env';
+  const env = loadEnvFile(envFile);
+  const token = env.TELEGRAM_BOT_TOKEN || env.TELEGRAM_TOKEN;
+  const chatId = env.TELEGRAM_CHAT_ID || env.OWNER_CHAT_ID;
+  if (!token || !chatId) return false;
+  try {
+    sh(`curl -s -X POST https://api.telegram.org/bot${token}/sendMessage -d chat_id=${chatId} -d text=${JSON.stringify(text)} >/dev/null`);
+    return true;
+  } catch { return false; }
+}
+
+function isPaid(delivery_status, delivery_meta_json) {
+  const st = String(delivery_status || '').toUpperCase();
+  if (['PAID','DELIVERED','ACTIVE'].includes(st)) return true;
+  const m = parseJson(delivery_meta_json);
+  return Boolean(m?.paid_at);
+}
+
+function main() {
+  const { db } = openDb();
+  const ts = nowIso();
+
+  // Candidates: allocated deliveries that are not paid.
+  const rows = db.prepare(
+    `SELECT
+        d.delivery_id, d.user_id, d.instance_id, d.status as delivery_status, d.created_at as delivery_created_at,
+        d.bound_at, d.meta_json as delivery_meta,
+        i.lifecycle_status, i.health_status, i.assigned_at, i.meta_json as instance_meta
+     FROM deliveries d
+     JOIN instances i ON i.instance_id = d.instance_id
+     WHERE i.lifecycle_status = 'ALLOCATED'
+     ORDER BY COALESCE(d.bound_at, d.created_at) ASC
+     LIMIT 50`
+  ).all();
+
+  let chosen = null;
+  let stage = null;
+
+  for (const r of rows) {
+    if (isPaid(r.delivery_status, r.delivery_meta)) continue;
+
+    // Stage A: not bound yet
+    if (!r.bound_at) {
+      const anchor = r.assigned_at || r.delivery_created_at;
+      const t0 = Date.parse(anchor || '');
+      if (Number.isFinite(t0) && (Date.now() - t0 >= STAGE_A_MS)) {
+        chosen = r;
+        stage = 'A_PRE_BIND_5M';
+        break;
+      }
+      continue;
+    }
+
+    // Stage B: bound but unpaid
+    const t1 = Date.parse(r.bound_at || '');
+    if (Number.isFinite(t1) && (Date.now() - t1 >= STAGE_B_MS)) {
+      chosen = r;
+      stage = 'B_POST_BIND_15M';
+      break;
+    }
+  }
+
+  if (!chosen) {
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', scanned: rows.length }, null, 2));
+    return;
+  }
+
+  const instance_id = String(chosen.instance_id);
+  const delivery_id = String(chosen.delivery_id);
+
+  if (stage === 'A_PRE_BIND_5M') {
+    // Release allocation back to pool.
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
+        .run('LINKING_TIMEOUT', ts, mergeMeta(chosen.delivery_meta, { timeout_stage: stage, timeout_at: ts }), delivery_id);
+
+      db.prepare(
+        `UPDATE instances
+            SET lifecycle_status='IN_POOL',
+                health_status='NEEDS_VERIFY',
+                assigned_user_id=NULL,
+                assigned_order_id=NULL,
+                assigned_at=NULL,
+                meta_json=?
+          WHERE instance_id=?`
+      ).run(mergeMeta(chosen.instance_meta, { released_by: 'delivery_watchdog', released_at: ts, timeout_stage: stage }), instance_id);
+
+      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+        .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_LINKING_TIMEOUT_RELEASE', JSON.stringify({ instance_id }));
+      db.exec('COMMIT');
+    } catch (e) {
+      try { db.exec('ROLLBACK'); } catch {}
+      throw e;
+    }
+
+    tgSend(`[bothook][watchdog] pre-bind timeout (5m): released instance=${instance_id} delivery=${delivery_id}`);
+    console.log(JSON.stringify({ ok:true, ts, action:'release', stage, instance_id, delivery_id }, null, 2));
+    return;
+  }
+
+  // Stage B: reimage + return to pool via init
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
+      .run('PAYMENT_TIMEOUT', ts, mergeMeta(chosen.delivery_meta, { timeout_stage: stage, timeout_at: ts, reclaim_plan: 'reimage_and_return_to_pool' }), delivery_id);
+
+    db.prepare(
+      `UPDATE instances
+          SET lifecycle_status='IN_POOL',
+              health_status='NEEDS_VERIFY',
+              assigned_user_id=NULL,
+              assigned_order_id=NULL,
+              assigned_at=NULL,
+              meta_json=?
+        WHERE instance_id=?`
+    ).run(mergeMeta(chosen.instance_meta, { reclaimed_by: 'delivery_watchdog', reclaimed_at: ts, timeout_stage: stage }), instance_id);
+
+    db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+      .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_PAYMENT_TIMEOUT_REIMAGE', JSON.stringify({ instance_id }));
+    db.exec('COMMIT');
+  } catch (e) {
+    try { db.exec('ROLLBACK'); } catch {}
+    throw e;
+  }
+
+  // Cloud reimage
+  try {
+    tccli(`tccli lighthouse ResetInstance --region ${REGION} --InstanceId ${instance_id} --BlueprintId ${BLUEPRINT_ID} --output json`);
+  } catch (e) {
+    tgSend(`[bothook][watchdog][WARN] ResetInstance failed instance=${instance_id} delivery=${delivery_id}`);
+    throw e;
+  }
+
+  // Kick pool init
+  let job = null;
+  try {
+    job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
+  } catch {
+    job = { ok:false, error:'pool_init_trigger_failed' };
+  }
+
+  tgSend(`[bothook][watchdog] post-bind unpaid timeout (15m): reimage+init instance=${instance_id} delivery=${delivery_id}`);
+  console.log(JSON.stringify({ ok:true, ts, action:'reimage_and_init', stage, instance_id, delivery_id, job }, null, 2));
+}
+
+main();

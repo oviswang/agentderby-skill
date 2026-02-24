@@ -160,10 +160,46 @@ WantedBy=timers.target
 UNIT
 
 sudo systemctl daemon-reload
+install_unit bothook-delivery-watchdog.service <<UNIT
+[Unit]
+Description=BOTHook Delivery Watchdog (5m pre-bind, 15m post-bind unpaid)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=${ROOT}/control-plane
+Environment=BOTHOOK_DB_PATH=${ROOT}/control-plane/data/bothook.sqlite
+Environment=BOTHOOK_API_BASE=http://127.0.0.1:18998
+Environment=BOTHOOK_CLOUD_REGION=ap-singapore
+Environment=BOTHOOK_REIMAGE_BLUEPRINT_ID=lhbp-1l4ptuvm
+${PATH_LINE}
+${TG_LINE}
+ExecStart=/usr/bin/flock -n /tmp/bothook-delivery-watchdog.lock /usr/bin/node ${ROOT}/control-plane/workers/delivery_watchdog.mjs
+UNIT
+
+install_unit bothook-delivery-watchdog.timer <<UNIT
+[Unit]
+Description=Run BOTHook Delivery Watchdog every 1 minute
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=1min
+RandomizedDelaySec=10
+Unit=bothook-delivery-watchdog.service
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+sudo systemctl daemon-reload
 sudo systemctl enable --now \
   bothook-stripe-reconcile.timer \
   bothook-subscription-reclaim.timer \
   bothook-cloud-reconcile.timer \
-  bothook-pool-replenish.timer
+  bothook-pool-replenish.timer \
+  bothook-delivery-watchdog.timer
 
 echo "[ok] deployed bothook timers"
