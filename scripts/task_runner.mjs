@@ -149,9 +149,20 @@ function autofillActionsIfMissing(tid, task) {
     }
 
     const baseUrl = 'https://p.bothook.me/artifacts/v0.2.7/bootstrap.sh';
+    const keyId = 'lhkp-q1oc3vdz'; // bothook_pool_key
     const newActions = [];
     for (const instance_id of targets) {
-      // 0) SSH readiness probe (best-effort). Don't fail hard: wrap in `|| true` to avoid stalling on reboot window.
+      // 0) Ensure SSH key is associated (cloud-side). Critical after reimage.
+      newActions.push({
+        kind: 'tccli_lighthouse_associate_keypair',
+        instance_id,
+        key_id: keyId,
+        region: 'ap-singapore',
+        cred_env: '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env',
+        progress_bump: 1
+      });
+
+      // 1) SSH readiness probe (best-effort). Don't fail hard.
       newActions.push({
         kind: 'ssh_exec',
         instance_id,
@@ -162,13 +173,12 @@ function autofillActionsIfMissing(tid, task) {
         progress_bump: 2
       });
 
-      // 1) Bootstrap v0.2.7 (re-runnable)
+      // 2) Bootstrap v0.2.7 (re-runnable)
       newActions.push({
         kind: 'ssh_exec',
         instance_id,
         commands: [
           'set -euo pipefail',
-          // Ensure sudo works; if not, bootstrap won't succeed.
           'sudo -n true',
           `sudo bash -lc "curl -fsSL ${baseUrl} | bash"`
         ],
@@ -507,8 +517,17 @@ function main() {
             const targets = Array.isArray(e.task?.targets) ? e.task.targets.map(String) : [];
             if (targets.length === 0) return null;
             const baseUrl = 'https://p.bothook.me/artifacts/v0.2.7/bootstrap.sh';
+            const keyId = 'lhkp-q1oc3vdz'; // bothook_pool_key
             const out = [];
             for (const instance_id of targets) {
+              out.push({
+                kind: 'tccli_lighthouse_associate_keypair',
+                instance_id,
+                key_id: keyId,
+                region: 'ap-singapore',
+                cred_env: '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env',
+                progress_bump: 1
+              });
               out.push({
                 kind: 'ssh_exec',
                 instance_id,
@@ -1006,6 +1025,32 @@ console.log('generated ' + locales.length + ' prompt files into ' + outDir);
           const r = run(cmd);
           if (r.code !== 0) throw new Error('local_exec_failed');
           return { ok:true, kind, exit: r.code };
+        }
+
+        if (kind === 'tccli_lighthouse_associate_keypair') {
+          // REAL cloud action: ensure SSH keypair is associated with the instance.
+          const instanceId = act.instance_id;
+          const keyId = act.key_id;
+          if (!instanceId) throw new Error('bad_action_missing_instance_id');
+          if (instanceId === 'lhins-npsqfxvn') throw new Error('forbidden_master_host');
+          if (!keyId) throw new Error('bad_action_missing_key_id');
+
+          const region = act.region || 'ap-singapore';
+          const cred = act.cred_env || '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env';
+          const cmd = `set -a; source ${cred}; set +a; tccli lighthouse AssociateInstancesKeyPairs --region ${region} --InstanceIds ${instanceId} --KeyIds ${keyId} --output json`;
+          const r = run(cmd);
+          if (r.code !== 0) throw new Error('tccli_associate_keypair_failed');
+
+          // Best-effort: record in DB meta_json so automation has local truth.
+          try {
+            const py = `python3 - <<'PY'\nimport sqlite3,json\ncon=sqlite3.connect('${WORKSPACE}/control-plane/data/bothook.sqlite')\ncur=con.cursor()\nrow=cur.execute('select meta_json from instances where instance_id=?', ('${instanceId}',)).fetchone()\nmeta={}\ntry:\n  meta=json.loads(row[0] or '{}') if row else {}\nexcept Exception:\n  meta={}\nmeta['key_ids']=[str('${keyId}')]
+meta['latest_operation']='AssociateInstancesKeyPairs'
+meta['latest_operation_state']='SUCCESS'
+cur.execute('update instances set meta_json=? where instance_id=?', (json.dumps(meta,ensure_ascii=False), '${instanceId}'))\ncon.commit()\nprint('ok')\nPY`;
+            run(py);
+          } catch {}
+
+          return { ok:true, kind, instance_id: instanceId, key_id: keyId, region };
         }
 
         if (kind === 'tccli_lighthouse_reset_instance') {
