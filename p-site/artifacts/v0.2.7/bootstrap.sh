@@ -113,13 +113,47 @@ main(){
 
   systemctl daemon-reload
 
+  # Write a minimal OpenClaw config so the gateway can actually come up.
+  # NOTE: No secrets here. Token is randomly generated per machine.
+  mkdir -p /home/ubuntu/.openclaw
+  chown -R ubuntu:ubuntu /home/ubuntu/.openclaw
+  chmod 700 /home/ubuntu/.openclaw
+
+  if [[ ! -f /home/ubuntu/.openclaw/openclaw.json ]]; then
+    local token
+    token="$(openssl rand -hex 24)"
+    cat > /home/ubuntu/.openclaw/openclaw.json <<JSON
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "loopback",
+    "port": 18789,
+    "auth": { "mode": "token", "token": "${token}" }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "/home/ubuntu/.openclaw/workspace"
+    }
+  },
+  "plugins": {
+    "entries": {
+      "whatsapp": { "enabled": false },
+      "telegram": { "enabled": false }
+    }
+  }
+}
+JSON
+    chown ubuntu:ubuntu /home/ubuntu/.openclaw/openclaw.json
+    chmod 600 /home/ubuntu/.openclaw/openclaw.json
+  fi
+
   # Enable + start gateway to persist across reboot/idle.
-  # The service will block waiting for config file before launching the gateway.
   systemctl enable --now openclaw-gateway.service || true
 
-  # Enable + start provisioning server (Baileys)
+  # If the service was already running and waiting, restart to pick up the new config.
+  systemctl restart openclaw-gateway.service || true
 
-  log "Bootstrap done. Gateway+Provision services enabled+started."
+  log "Bootstrap done. Gateway service enabled+started."
 }
 
 main "$@"

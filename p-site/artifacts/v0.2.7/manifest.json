@@ -3,8 +3,8 @@
   "files": [
     {
       "path": "bootstrap.sh",
-      "sha256": "08d45af874644fc9e1bd59218729dd662fcee728f9d40827a636605d19ae9e72",
-      "bytes": 4245
+      "sha256": "a819267a87509546b7d9c4db32c485de5549f20da713d45019d97a424e840d50",
+      "bytes": 5150
     },
     {
       "path": "README.md",
@@ -28,8 +28,8 @@
     },
     {
       "path": "scripts/openclaw-gateway-start.sh",
-      "sha256": "77f75cfa6671d60c5e6dede53650e3514053c5f87a117a58ba391f64f5b8dd88",
-      "bytes": 1897
+      "sha256": "082be46d72023c628c9ace34c771dd8e63dee5c40063be855827ada3985f9997",
+      "bytes": 1918
     },
     {
       "path": "scripts/rollback_sendguard_v2_patch.sh",

@@ -65,7 +65,7 @@ main(){
     fi
     # Once config is valid, exec into the gateway. If it exits, systemd will restart us.
     # Use --force to kill any stray gateway already bound to the port (e.g. a foreground/dev run).
-    exec "$bin" gateway --port "$PORT" --force
+    exec "$bin" gateway --port "$PORT" --force --allow-unconfigured
   done
 }
 
