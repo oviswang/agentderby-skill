@@ -88,6 +88,9 @@ main(){
   ensure_node
   ensure_openclaw
 
+  # Ensure WhatsApp channel plugin is enabled (required for QR login flows)
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable whatsapp >/dev/null 2>&1 || true
+
   # Fetch manifest + checksums
   fetch "$ARTIFACT_BASE_URL/manifest.json" "$INSTALL_DIR/artifacts/manifest.json"
   fetch "$ARTIFACT_BASE_URL/sha256sums.txt" "$INSTALL_DIR/artifacts/sha256sums.txt"
