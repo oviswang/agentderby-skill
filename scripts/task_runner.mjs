@@ -89,7 +89,15 @@ function taskSkipReason(task, { force = false } = {}) {
   if (st === 'DONE') return 'DONE';
   if (st === 'BLOCKED') return 'BLOCKED';
   if (st === 'IDLE') return 'IDLE';
-  if (st === 'PAUSED' && !force) return 'PAUSED';
+
+  // Autonomy: allow transient PAUSED tasks to keep retrying without human intervention.
+  // This is critical for reimage/reboot windows where SSH may be unavailable for several minutes.
+  if (st === 'PAUSED' && !force) {
+    const er = String(task?.error_reason || '');
+    if (er === 'ssh_exec_failed') return null; // keep runnable
+    return 'PAUSED';
+  }
+
   return null; // runnable
 }
 
@@ -345,13 +353,25 @@ function tickTask(entry, note = 'no-op safe tick') {
 function markError(entry, reason) {
   const { file, task } = entry;
   const ts = nowIso();
-  task.status = 'ERROR';
-  task.error_reason = reason;
-  task.last_action = `runner_error@${ts}`;
+
+  // Default: mark as ERROR.
+  // Exception: transient ssh_exec_failed during reimage/boot windows should PAUSE (retry later) rather than hard-error.
+  if (String(reason || '') === 'ssh_exec_failed') {
+    task.status = 'PAUSED';
+    task.error_reason = reason;
+    task.blocked_reason = null;
+    task.next_action = task.next_action || 'SSH not reachable yet (likely reimage/reboot window). Retry runner later.';
+    task.last_action = `runner_pause@${ts}`;
+  } else {
+    task.status = 'ERROR';
+    task.error_reason = reason;
+    task.last_action = `runner_error@${ts}`;
+  }
+
   task.last_updated = ts;
   task.retry_count = Number(task.retry_count || 0) + 1;
   task.recent_evidence = Array.isArray(task.recent_evidence) ? task.recent_evidence : [];
-  task.recent_evidence.unshift(`runner: ERROR ${path.basename(file)} @ ${ts}: ${reason}`);
+  task.recent_evidence.unshift(`runner: ${task.status} ${path.basename(file)} @ ${ts}: ${reason}`);
   task.recent_evidence = task.recent_evidence.slice(0, 10);
   writeJsonAtomic(file, task);
 }
