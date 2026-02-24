@@ -107,6 +107,11 @@ main(){
   mkdir -p "$INSTALL_DIR/provision"
   fetch "$ARTIFACT_BASE_URL/provision/server.mjs" "$INSTALL_DIR/provision/server.mjs"
   fetch "$ARTIFACT_BASE_URL/provision/package.json" "$INSTALL_DIR/provision/package.json"
+
+  # Fetch BOTHook OpenClaw plugins
+  mkdir -p "$INSTALL_DIR/plugins/bothook-wa-autoreply"
+  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-autoreply/openclaw.plugin.json" "$INSTALL_DIR/plugins/bothook-wa-autoreply/openclaw.plugin.json"
+  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-autoreply/index.ts" "$INSTALL_DIR/plugins/bothook-wa-autoreply/index.ts"
   # Fetch BOTHook ops scripts (send-guard apply/rollback). Do NOT auto-run here.
   mkdir -p "$INSTALL_DIR/ops-scripts"
   fetch "$ARTIFACT_BASE_URL/scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/apply_sendguard_v2_patch.sh"
@@ -170,6 +175,10 @@ JSON
     chown ubuntu:ubuntu /home/ubuntu/.openclaw/openclaw.json
     chmod 600 /home/ubuntu/.openclaw/openclaw.json
   fi
+
+  # Install + enable BOTHook WhatsApp autoreply plugin (key capture + promo + warning suppression)
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins install "$INSTALL_DIR/plugins/bothook-wa-autoreply" >/dev/null 2>&1 || true
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-autoreply >/dev/null 2>&1 || true
 
   # Enable + start gateway to persist across reboot/idle.
   systemctl enable --now openclaw-gateway.service || true
