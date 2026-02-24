@@ -78,8 +78,8 @@
     },
     {
       "path": "plugins/bothook-wa-autoreply/index.ts",
-      "sha256": "c6661d5a096b68f96905a0ba4d8a5810d8f86f9aacb3c11a8d6c1d8f2878642f",
-      "bytes": 6292
+      "sha256": "b206b55864a192aa5ec29884d92ae4b3046fce8411264772670c412976b7b6b1",
+      "bytes": 6390
     },
     {
       "path": "plugins/bothook-wa-autoreply/openclaw.plugin.json",

@@ -112,6 +112,7 @@ export default {
       // Prefer WhatsApp only, but ctx can be missing in some paths; do best-effort.
       if (ctx?.channelId && ctx.channelId !== 'whatsapp') return;
       if (shouldSuppressAutoReply(event?.content || '')) {
+        try { logger.info(`[bothook-wa-autoreply] suppress outbound to=${event?.to}`); } catch {}
         return { cancel: true };
       }
     });
