@@ -32,21 +32,33 @@ else
   ok=false; errs+=("provision /healthz not ready");
 fi
 
+# Export checks for JSON build (avoid bash heredoc-in-substitution issues)
+export CHK_GATEWAY=$(svc_active openclaw-gateway.service && echo 1 || echo 0)
+export CHK_PROVISION=$(svc_active bothook-provision.service && echo 1 || echo 0)
+export CHK_PORT18789=$(port_listen 18789 && echo 1 || echo 0)
+export CHK_PROV_HEALTHZ=$([ "$prov_ok" = true ] && echo 1 || echo 0)
+
+checks_json=$(python3 - <<'PY'
+import json,sys
+import os
+j={
+  'openclaw_gateway_active': os.environ.get('CHK_GATEWAY')=='1',
+  'bothook_provision_active': os.environ.get('CHK_PROVISION')=='1',
+  'port_18789_listening': os.environ.get('CHK_PORT18789')=='1',
+  'provision_healthz_ok': os.environ.get('CHK_PROV_HEALTHZ')=='1'
+}
+print(json.dumps(j,ensure_ascii=False))
+PY
+)
+
+errors_json=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:],ensure_ascii=False))' "${errs[@]-}")
+
 cat > "$OUT" <<JSON
 {
   "ok": ${ok},
   "ts": "$(now)",
-  "checks": {
-    "openclaw_gateway_active": $(svc_active openclaw-gateway.service && echo true || echo false),
-    "bothook_provision_active": $(svc_active bothook-provision.service && echo true || echo false),
-    "port_18789_listening": $(port_listen 18789 && echo true || echo false),
-    "provision_healthz_ok": ${prov_ok}
-  },
-  "errors": $(python3 - <<'PY'
-import json,sys
-errs=sys.argv[1:]
-print(json.dumps(errs,ensure_ascii=False))
-PY "${errs[@]-}")
+  "checks": ${checks_json},
+  "errors": ${errors_json}
 }
 JSON
 

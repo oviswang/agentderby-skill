@@ -38,8 +38,8 @@
     },
     {
       "path": "scripts/postboot_verify.sh",
-      "sha256": "7449ccb7ed31cea13d1183f542f6f156380b4ebf5064ee8a42180bb3bc48248d",
-      "bytes": 2697
+      "sha256": "cc53d2654e6136bfc903e99f09a3df4cd98b52d3ebbfa31dbdab7603d4034bdb",
+      "bytes": 3142
     },
     {
       "path": "scripts/rollback_sendguard_v2_patch.sh",
