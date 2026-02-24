@@ -53,6 +53,19 @@ function normalizeFrom(from: string) {
   return String(from || '').trim();
 }
 
+function digits(s: string) {
+  return String(s || '').replace(/\D+/g, '');
+}
+
+function isSelfMessage(from: string, selfE164: string | null) {
+  if (!selfE164) return false;
+  const a = digits(from);
+  const b = digits(selfE164);
+  if (!a || !b) return false;
+  // Match full number or suffix match (jid formats may embed the number)
+  return a === b || a.endsWith(b) || b.endsWith(a);
+}
+
 function shouldSuppressAutoReply(text: string) {
   const t = String(text || '');
   // Suppress noisy agent failure warnings during onboarding/key-capture phase.
@@ -117,6 +130,17 @@ export default {
       }
     });
 
+    api.on('before_message_write', (event) => {
+      try {
+        const msg: any = event?.message;
+        const content = String(msg?.content || msg?.text || '').trim();
+        if (shouldSuppressAutoReply(content)) {
+          try { logger.info('[bothook-wa-autoreply] blocked message write (auto-reply noise)'); } catch {}
+          return { block: true };
+        }
+      } catch {}
+    });
+
     api.on('message_received', async (event, ctx) => {
       try {
         if (ctx?.channelId !== 'whatsapp') return;
@@ -129,6 +153,7 @@ export default {
         if (!uuid) return;
 
         const self = await getSelfE164(api);
+        logger.info(`[bothook-wa-autoreply] inbound from=${from} self=${self||''} content=${content.slice(0,40)}`);
 
         const st = loadState();
         st.autoreply ||= {};
@@ -136,26 +161,33 @@ export default {
 
         const controlPlane = String(process.env.BOTHOOK_API_BASE || 'https://p.bothook.me').replace(/\/$/, '');
 
+        const isSelf = isSelfMessage(from, self);
+
         // Self-chat key capture
-        if (self && from.includes(self.replace('+','')) && looksLikeOpenAiKey(content)) {
+        if (isSelf && looksLikeOpenAiKey(content)) {
           const key = content.split(/\s+/)[0];
           const keyHash = sha256(key);
-          if (st.autoreply.lastKeyHash === keyHash) {
-            // dedup
-            return;
-          }
+          if (st.autoreply.lastKeyHash === keyHash) return;
+
           st.autoreply.lastKeyHash = keyHash;
           st.autoreply.lastKeyAt = nowIso();
           saveState(st);
 
           const vr = await postJson(`${controlPlane}/api/key/verify`, { uuid, provider: 'openai', key }, 15000);
           const msg = vr?.json?.message || (vr?.json?.verified ? '[bothook] OpenAI Key verified ✅' : `[bothook] OpenAI Key verify failed: ${vr?.json?.detail || vr?.json?.error || 'unknown'}`);
-          await sendWhatsApp(api, self, msg);
+          await sendWhatsApp(api, self!, msg);
+          return;
+        }
+
+        // If self-chat says "hi" (or similar), show guide hint.
+        if (isSelf && /^(hi|hello|你好|嗨|h+i+)$/i.test(content)) {
+          const hint = `[bothook] Next: paste your OpenAI API key here as ONE line starting with sk- (self-chat only).\nLink: ${link || `https://p.bothook.me/p/${uuid}`}`;
+          await sendWhatsApp(api, self!, hint);
           return;
         }
 
         // External promo one-time reply
-        if (self && !from.includes(self.replace('+',''))) {
+        if (!isSelf) {
           const key = from;
           if (!st.autoreply.externalReplied[key]) {
             st.autoreply.externalReplied[key] = nowIso();
@@ -163,12 +195,6 @@ export default {
             const promo = `[bothook] The owner is activating a private WhatsApp AI assistant (dedicated server).\n\nLearn more: https://bothook.me`;
             await sendWhatsApp(api, from, promo);
           }
-        }
-
-        // If self-chat says "hi" and no key verified, remind guide.
-        if (self && from.includes(self.replace('+','')) && /^hi$/i.test(content)) {
-          const hint = `[bothook] Next: paste your OpenAI API key here as ONE line starting with sk- (self-chat only).\nLink: ${link || `https://p.bothook.me/p/${uuid}`}`;
-          await sendWhatsApp(api, self, hint);
         }
 
       } catch (e: any) {
