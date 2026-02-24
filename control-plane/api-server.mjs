@@ -225,8 +225,9 @@ function writeReadyReportFilesOnInstance(instance, { token, expIso } = {}) {
   const instId = instance.instance_id;
   const ip = instance.public_ip;
   if (!instId || !ip || !token) return;
-  const remote = `set -euo pipefail; sudo mkdir -p /opt/bothook; `
-    + `sudo sh -lc 'cat > /opt/bothook/READY_REPORT.txt <<EOF\ninstance_id=${instId}\nready_report_token=${token}\nready_report_exp=${expIso || ''}\nEOF'; `
+  const content = `instance_id=${instId}\nready_report_token=${token}\nready_report_exp=${expIso || ''}\n`;
+  const b64 = Buffer.from(content, 'utf8').toString('base64');
+  const remote = `set -euo pipefail; sudo mkdir -p /opt/bothook; echo '${b64}' | base64 -d | sudo tee /opt/bothook/READY_REPORT.txt >/dev/null; `
     + `sudo chmod 600 /opt/bothook/READY_REPORT.txt; sudo chown root:root /opt/bothook/READY_REPORT.txt; echo ok`;
   try { poolSsh(instance, remote, { timeoutMs: 12000, tty: false, retries: 1 }); } catch {}
 }

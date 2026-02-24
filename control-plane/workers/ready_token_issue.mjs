@@ -53,8 +53,10 @@ db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(JSON.stri
 // Write to instance via SSH (pool key)
 const key = process.env.BOTHOOK_POOL_SSH_KEY || '/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519';
 const ip = inst.public_ip;
-const remote = `set -euo pipefail; sudo mkdir -p /opt/bothook; sudo sh -lc 'cat > /opt/bothook/READY_REPORT.txt <<EOF\ninstance_id=${instanceId}\nready_report_token=${token}\nready_report_exp=${expIso}\nEOF'; sudo chmod 600 /opt/bothook/READY_REPORT.txt; sudo chown root:root /opt/bothook/READY_REPORT.txt; echo ok`;
-const cmd = ['bash','-lc', `ssh -i ${key} -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null ubuntu@${ip} ${JSON.stringify(remote)}`];
+const content = `instance_id=${instanceId}\nready_report_token=${token}\nready_report_exp=${expIso}\n`;
+const b64 = Buffer.from(content,'utf8').toString('base64');
+const remote = `set -euo pipefail; sudo mkdir -p /opt/bothook; echo '${b64}' | base64 -d | sudo tee /opt/bothook/READY_REPORT.txt >/dev/null; sudo chmod 600 /opt/bothook/READY_REPORT.txt; sudo chown root:root /opt/bothook/READY_REPORT.txt; echo ok`;
+const cmd = ['bash','-lc', `ssh -i ${key} -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null ubuntu@${ip} '${remote.replace(/'/g, "'\\''")}'`];
 const r = spawnSync(cmd[0], cmd.slice(1), { encoding:'utf8', timeout: 15000, maxBuffer: 2*1024*1024 });
 if((r.status ?? 0) !== 0){
   console.error('ssh write failed', r.stdout, r.stderr);
