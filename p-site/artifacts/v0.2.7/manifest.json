@@ -3,8 +3,8 @@
   "files": [
     {
       "path": "bootstrap.sh",
-      "sha256": "d01dd631d60bcb46516554d0eb1bb7673cd1e8b397086182676ee4dab1898589",
-      "bytes": 8165
+      "sha256": "52904667d0f9c4b530c48b6630afa5d31e4471a030c84ad2527061c994fa6d21",
+      "bytes": 8293
     },
     {
       "path": "README.md",
@@ -85,6 +85,11 @@
       "path": "plugins/bothook-wa-autoreply/openclaw.plugin.json",
       "sha256": "dac061f844849e50b1e089532721d9e4c64cb9fb4811e24c10f2464859933d90",
       "bytes": 220
+    },
+    {
+      "path": "plugins/bothook-wa-autoreply/package.json",
+      "sha256": "2bbc8eae82804b076e0a03559b4168ed3118e61605866476e6205ba08289df90",
+      "bytes": 178
     }
   ]
 }

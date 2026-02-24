@@ -111,6 +111,7 @@ main(){
   # Fetch BOTHook OpenClaw plugins
   mkdir -p "$INSTALL_DIR/plugins/bothook-wa-autoreply"
   fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-autoreply/openclaw.plugin.json" "$INSTALL_DIR/plugins/bothook-wa-autoreply/openclaw.plugin.json"
+  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-autoreply/package.json" "$INSTALL_DIR/plugins/bothook-wa-autoreply/package.json"
   fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-autoreply/index.ts" "$INSTALL_DIR/plugins/bothook-wa-autoreply/index.ts"
   # Fetch BOTHook ops scripts (send-guard apply/rollback). Do NOT auto-run here.
   mkdir -p "$INSTALL_DIR/ops-scripts"
