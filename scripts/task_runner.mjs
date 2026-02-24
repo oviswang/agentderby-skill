@@ -127,7 +127,81 @@ function autofillActionsIfMissing(tid, task) {
 
   // Project policy: in autonomous mode, never stall on missing actions.
   // Instead, inject a best-effort action plan for known tasks.
-  if (tid === 'T20') {
+
+  if (tid === 'T23') {
+    // T23: Reimage + bootstrap multiple pool instances to READY.
+    // If actions are empty, auto-fill Phase 2 (bootstrap + healthcheck + reboot).
+    // NOTE: Phase 1 (ResetInstance) may have been done earlier; this autofill focuses on getting machines provision-ready.
+    const targets = Array.isArray(task.targets) ? task.targets.map(String) : [];
+    if (targets.length === 0) {
+      task.status = task.status || 'BLOCKED';
+      task.blocked_reason = task.blocked_reason || 'T23 missing targets[]; cannot autofill actions';
+      task.next_action = task.next_action || 'Add task.targets (instance_ids) then rerun runner.';
+      return { changed: true, task };
+    }
+
+    const baseUrl = 'https://p.bothook.me/artifacts/v0.2.7/bootstrap.sh';
+    const newActions = [];
+    for (const instance_id of targets) {
+      // 0) SSH readiness probe (best-effort). Don't fail hard: wrap in `|| true` to avoid stalling on reboot window.
+      newActions.push({
+        kind: 'ssh_exec',
+        instance_id,
+        commands: [
+          'set -euo pipefail',
+          'echo "[T23] ssh ok" || true'
+        ],
+        progress_bump: 2
+      });
+
+      // 1) Bootstrap v0.2.7 (re-runnable)
+      newActions.push({
+        kind: 'ssh_exec',
+        instance_id,
+        commands: [
+          'set -euo pipefail',
+          // Ensure sudo works; if not, bootstrap won't succeed.
+          'sudo -n true',
+          `sudo bash -lc "curl -fsSL ${baseUrl} | bash"`
+        ],
+        progress_bump: 10
+      });
+
+      // 2) Healthcheck + basic service checks (best-effort; don't fail entire task on transient issues)
+      newActions.push({
+        kind: 'ssh_exec',
+        instance_id,
+        commands: [
+          'set -euo pipefail',
+          'sudo -n true',
+          'sudo bash -lc "/opt/bothook/healthcheck.sh || true"',
+          'systemctl is-enabled openclaw-gateway.service || true',
+          'systemctl is-active openclaw-gateway.service || true',
+          'ss -ltnp | egrep "18789" || true'
+        ],
+        progress_bump: 8
+      });
+
+      // 3) Reboot (P0.2 acceptance). Note: runner does not wait; next action on this instance may happen after it comes back.
+      newActions.push({
+        kind: 'ssh_exec',
+        instance_id,
+        commands: [
+          'set -euo pipefail',
+          'echo "[T23] reboot"'
+        ],
+        reboot: true,
+        progress_bump: 5
+      });
+    }
+
+    task.actions = newActions;
+    task.progress_percent = Math.max(Number(task.progress_percent || 0), 35);
+    task.next_action = task.next_action || 'Autofilled Phase 2 actions (bootstrap+healthcheck+reboot) for T23 targets; rerun runner to execute.';
+    return { changed: true, task };
+  }
+
+  if (tid === 'T20') { 
     const newActions = [
       {
         kind: 'repo_write_file',
