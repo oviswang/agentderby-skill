@@ -509,8 +509,198 @@ app.use(express.json({ limit: '256kb', verify: (req, res, buf) => { req.rawBody 
 
 app.get('/healthz', (req, res) => res.type('text/plain').send('ok'));
 
+// Ops: pool init job runner (no autonomous tasks; explicit ops call only)
+const poolInitJobs = new Map(); // job_id -> { status, startedAt, endedAt, instance_id, mode, log:[] }
+let poolInitBusy = false;
+
+function sleepMs(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+function pushJobLog(job, msg){
+  job.log.push({ ts: nowIso(), msg: String(msg) });
+  if (job.log.length > 200) job.log = job.log.slice(-200);
+}
+
+async function tccli(cmd, { envFile='/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env' } = {}) {
+  const full = `set -a; source ${envFile}; set +a; ${cmd}`;
+  return sh(full, { timeoutMs: 20000 });
+}
+
+async function describeInstance(instance_id){
+  const r = await tccli(`tccli lighthouse DescribeInstances --region ap-singapore --InstanceIds '["${instance_id}"]' --output json`);
+  if ((r.code ?? 1) !== 0) throw new Error('describe_instances_failed');
+  const j = JSON.parse(String(r.stdout||'{}'));
+  const it = (j.InstanceSet||[])[0];
+  if (!it) throw new Error('instance_not_found');
+  return it;
+}
+
+async function waitPort22(ip, { timeoutMs=10*60*1000 } = {}){
+  const start = Date.now();
+  while (Date.now()-start < timeoutMs) {
+    const rr = sh(`timeout 3 bash -lc "</dev/tcp/${ip}/22"`, { timeoutMs: 5000 });
+    if ((rr.code ?? 1) === 0) return true;
+    await sleepMs(5000);
+  }
+  return false;
+}
+
+async function waitSshEcho(instance, { timeoutMs=10*60*1000 } = {}){
+  const start = Date.now();
+  while (Date.now()-start < timeoutMs) {
+    const r = poolSsh(instance, 'echo ssh_ok', { timeoutMs: 8000, tty: false, retries: 0 });
+    if ((r.code ?? 1) === 0 && String(r.stdout||'').includes('ssh_ok')) return true;
+    await sleepMs(5000);
+  }
+  return false;
+}
+
+async function associatePoolKey(instance_id){
+  const r = await tccli(`tccli lighthouse AssociateInstancesKeyPairs --region ap-singapore --InstanceIds '["${instance_id}"]' --KeyIds '["lhkp-q1oc3vdz"]' --output json`);
+  // Allow "duplicate" as success.
+  const out = String((r.stdout||'') + (r.stderr||''));
+  if ((r.code ?? 0) === 0) return true;
+  if (out.includes('KeyPairBindDuplicate')) return true;
+  if (out.includes('LatestOperationUnfinished')) return false;
+  throw new Error('associate_key_failed');
+}
+
+async function issueReadyToken(db, instRow){
+  const token = makeReadyReportToken();
+  const expIso = new Date(Date.now() + 10*60*1000).toISOString();
+  const meta = mergeMeta(instRow.meta_json, { ready_report_token: token, ready_report_exp: expIso });
+  db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta, instRow.instance_id);
+  writeReadyReportFilesOnInstance(instRow, { token, expIso });
+}
+
+async function runPoolInitJob(job){
+  const { db } = openDb();
+  const ts0 = nowIso();
+  job.startedAt = ts0;
+  job.status = 'RUNNING';
+  pushJobLog(job, `start (instance=${job.instance_id}, mode=${job.mode})`);
+
+  try {
+    const inst0 = getInstanceById(db, job.instance_id);
+    if (!inst0) throw new Error('instance_not_found');
+    if (inst0.instance_id === 'lhins-npsqfxvn') throw new Error('forbidden_master_host');
+    if (String(inst0.lifecycle_status||'') !== 'IN_POOL') throw new Error('not_in_pool');
+
+    // Describe + write IP/KeyIds to DB
+    const it = await describeInstance(job.instance_id);
+    const pub = (it.PublicAddresses||[])[0] || null;
+    const priv = (it.PrivateAddresses||[])[0] || null;
+    const keyIds = ((it.LoginSettings||{}).KeyIds||[]).map(String);
+    pushJobLog(job, `describe: ip=${pub}, keyIds=${keyIds.join(',')||'[]'}`);
+    let meta = {};
+    try { meta = inst0.meta_json ? JSON.parse(inst0.meta_json) : {}; } catch { meta = {}; }
+    meta.key_ids = keyIds;
+    db.prepare('UPDATE instances SET public_ip=COALESCE(?,public_ip), private_ip=COALESCE(?,private_ip), meta_json=? WHERE instance_id=?')
+      .run(pub, priv, JSON.stringify(meta), job.instance_id);
+
+    // Associate pool key (retry window)
+    pushJobLog(job, 'associate keypair bothook_pool_key');
+    for (let i=0;i<20;i++){
+      const ok = await associatePoolKey(job.instance_id);
+      if (ok) break;
+      await sleepMs(3000);
+      if (i===19) throw new Error('associate_key_timeout');
+    }
+
+    // Refresh describe
+    const it2 = await describeInstance(job.instance_id);
+    const pub2 = (it2.PublicAddresses||[])[0] || pub;
+    pushJobLog(job, `describe2: ip=${pub2}`);
+    db.prepare('UPDATE instances SET public_ip=COALESCE(?,public_ip) WHERE instance_id=?').run(pub2, job.instance_id);
+
+    const inst = getInstanceById(db, job.instance_id);
+    if (!inst.public_ip) throw new Error('missing_public_ip');
+
+    // Issue ready token
+    pushJobLog(job, 'issue ready_report_token');
+    await issueReadyToken(db, inst);
+
+    // Wait SSH
+    pushJobLog(job, 'wait port22');
+    await waitPort22(inst.public_ip, { timeoutMs: 10*60*1000 });
+    pushJobLog(job, 'wait ssh echo');
+    const sshOk = await waitSshEcho(inst, { timeoutMs: 10*60*1000 });
+    if (!sshOk) throw new Error('ssh_unreachable');
+
+    // Bootstrap
+    pushJobLog(job, 'run bootstrap v0.2.7');
+    const boot = poolSsh(inst, "sudo bash -lc \"curl -fsSL https://p.bothook.me/artifacts/v0.2.7/bootstrap.sh | bash\"", { timeoutMs: 20*60*1000, tty:false, retries:0 });
+    if ((boot.code ?? 1) !== 0) throw new Error('bootstrap_failed');
+
+    // Wait reboot
+    pushJobLog(job, 'wait reboot ssh');
+    const sshBack = await waitSshEcho(inst, { timeoutMs: 15*60*1000 });
+    if (!sshBack) throw new Error('ssh_not_back_after_reboot');
+
+    // Ensure postboot verify has run (kick once)
+    pushJobLog(job, 'kick postboot verify');
+    poolSsh(inst, 'sudo systemctl start bothook-postboot-verify.service || true', { timeoutMs: 12000, tty:false, retries:0 });
+
+    // Wait DB READY (from push)
+    pushJobLog(job, 'wait DB READY');
+    const startWait = Date.now();
+    while (Date.now()-startWait < 10*60*1000) {
+      const cur = getInstanceById(db, job.instance_id);
+      if (String(cur.health_status||'') === 'READY') {
+        job.status='DONE';
+        job.endedAt=nowIso();
+        pushJobLog(job, 'done: READY');
+        return;
+      }
+      await sleepMs(5000);
+    }
+    throw new Error('db_ready_timeout');
+
+  } catch (e) {
+    job.status = 'ERROR';
+    job.endedAt = nowIso();
+    pushJobLog(job, `error: ${e?.message || 'unknown'}`);
+    try {
+      const { db } = openDb();
+      db.prepare('UPDATE instances SET health_status=? WHERE instance_id=?').run('NEEDS_VERIFY', job.instance_id);
+    } catch {}
+  }
+}
+
+app.post('/api/ops/pool/init', (req, res) => {
+  try {
+    const instance_id = String(req.body?.instance_id || '').trim();
+    const mode = String(req.body?.mode || 'init_only').trim();
+    if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
+    if (poolInitBusy) return send(res, 429, { ok:false, error:'pool_init_busy' });
+    if (!['init_only','reimage_and_init'].includes(mode)) return send(res, 400, { ok:false, error:'bad_mode' });
+
+    const job_id = crypto.randomUUID();
+    const job = { job_id, instance_id, mode, status:'QUEUED', startedAt:null, endedAt:null, log:[] };
+    poolInitJobs.set(job_id, job);
+    poolInitBusy = true;
+
+    setTimeout(async () => {
+      try { await runPoolInitJob(job); } finally { poolInitBusy = false; }
+    }, 0);
+
+    return send(res, 200, { ok:true, job_id, status: job.status });
+  } catch {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
+app.get('/api/ops/pool/init/status', (req, res) => {
+  const job_id = String(req.query?.job_id || '').trim();
+  if (!job_id) return send(res, 400, { ok:false, error:'job_id_required' });
+  const job = poolInitJobs.get(job_id);
+  if (!job) return send(res, 404, { ok:false, error:'job_not_found' });
+  return send(res, 200, { ok:true, job });
+});
+
+
 // Pool READY report (push): called by pool instances after they finish bootstrap + verification.
 // Auth: short-lived instance-scoped token stored in instances.meta_json.ready_report_token.
+// Safety: control-plane runs a quick reverse-probe before marking READY.
 app.post('/api/pool/ready', (req, res) => {
   try {
     const instance_id = String(req.body?.instance_id || '').trim();
@@ -539,6 +729,23 @@ app.post('/api/pool/ready', (req, res) => {
     }
 
     const ts = nowIso();
+
+    // Reverse-probe (fast, best-effort). If it fails, do NOT mark READY.
+    try {
+      const instForProbe = getInstanceById(db, instance_id);
+      const probe = poolSsh(instForProbe, '/opt/bothook/healthcheck.sh', { timeoutMs: 15000, tty: false, retries: 0 });
+      const text = String((probe.stdout || '') + (probe.stderr || '')).toLowerCase();
+      const okGate = (probe.code === 0) && text.includes('healthcheck completed');
+      if (!okGate) {
+        db.prepare('UPDATE instances SET health_status=?, last_probe_at=? WHERE instance_id=?')
+          .run('NEEDS_VERIFY', ts, instance_id);
+        return send(res, 200, { ok:false, error:'reverse_probe_failed', instance_id });
+      }
+    } catch {
+      db.prepare('UPDATE instances SET health_status=?, last_probe_at=? WHERE instance_id=?')
+        .run('NEEDS_VERIFY', ts, instance_id);
+      return send(res, 200, { ok:false, error:'reverse_probe_error', instance_id });
+    }
 
     // Update instance status
     const patch = {
