@@ -97,6 +97,11 @@ main(){
   chmod +x "$INSTALL_DIR/healthcheck.sh"
 
   fetch "$ARTIFACT_BASE_URL/scripts/openclaw-gateway-start.sh" "$INSTALL_DIR/bin/openclaw-gateway-start.sh"
+
+  # Fetch provisioning server (Baileys) source bundle
+  mkdir -p "$INSTALL_DIR/provision"
+  fetch "$ARTIFACT_BASE_URL/provision/server.mjs" "$INSTALL_DIR/provision/server.mjs"
+  fetch "$ARTIFACT_BASE_URL/provision/package.json" "$INSTALL_DIR/provision/package.json"
   # Fetch BOTHook ops scripts (send-guard apply/rollback). Do NOT auto-run here.
   mkdir -p "$INSTALL_DIR/ops-scripts"
   fetch "$ARTIFACT_BASE_URL/scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/apply_sendguard_v2_patch.sh"
@@ -107,9 +112,11 @@ main(){
 
   # Fetch units
   fetch "$ARTIFACT_BASE_URL/systemd/openclaw-gateway.service" "$INSTALL_DIR/artifacts/openclaw-gateway.service"
+  fetch "$ARTIFACT_BASE_URL/systemd/bothook-provision.service" "$INSTALL_DIR/artifacts/bothook-provision.service"
 
   # Install units
   install -m 0644 "$INSTALL_DIR/artifacts/openclaw-gateway.service" "$SYSTEMD_DIR/openclaw-gateway.service"
+  install -m 0644 "$INSTALL_DIR/artifacts/bothook-provision.service" "$SYSTEMD_DIR/bothook-provision.service"
 
   systemctl daemon-reload
 
@@ -153,7 +160,13 @@ JSON
   # If the service was already running and waiting, restart to pick up the new config.
   systemctl restart openclaw-gateway.service || true
 
-  log "Bootstrap done. Gateway service enabled+started."
+  # Install provisioning deps + enable service
+  # NOTE: install as ubuntu so node_modules is readable by ubuntu and does not require root to update.
+  chown -R ubuntu:ubuntu "$INSTALL_DIR/provision"
+  sudo -u ubuntu bash -lc "cd '$INSTALL_DIR/provision' && npm install --omit=dev" || true
+  systemctl enable --now bothook-provision.service || true
+
+  log "Bootstrap done. Gateway + Provision services enabled+started."
 }
 
 main "$@"

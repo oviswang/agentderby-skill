@@ -3,8 +3,8 @@
   "files": [
     {
       "path": "bootstrap.sh",
-      "sha256": "a819267a87509546b7d9c4db32c485de5549f20da713d45019d97a424e840d50",
-      "bytes": 5150
+      "sha256": "6ab5ff7ed4b2cee58c7cbbb7b15933560ffbae9e1547e9b5f585289cd9d64db6",
+      "bytes": 6004
     },
     {
       "path": "README.md",
@@ -37,9 +37,29 @@
       "bytes": 3104
     },
     {
+      "path": "systemd/bothook-provision.service",
+      "sha256": "38aa719711a0a8889fc6ed576dfd2d5dc792335a21138228fb6055d6509fa9bc",
+      "bytes": 636
+    },
+    {
       "path": "systemd/openclaw-gateway.service",
       "sha256": "35e9071b597cdb619088e23c901605af353d0ac7ac3d33602d6748c6698ac0be",
       "bytes": 764
+    },
+    {
+      "path": "provision/package.json",
+      "sha256": "40e2d211e4f7c64d9495958bc58788e6297c6b1d656ff02063d5edfeb727f039",
+      "bytes": 218
+    },
+    {
+      "path": "provision/provision.tgz",
+      "sha256": "619f181974b34333dd76c0de518898a678d2fbc72dbf8844c1b9fea79736550c",
+      "bytes": 4245
+    },
+    {
+      "path": "provision/server.mjs",
+      "sha256": "630bf56efa7c9b829c3cf9276ea02e69be84aa9ef12f389c6867f22e2a10c08f",
+      "bytes": 10742
     }
   ]
 }
