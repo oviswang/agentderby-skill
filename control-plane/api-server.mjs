@@ -619,6 +619,18 @@ async function runPoolInitJob(job){
     pushJobLog(job, 'issue ready_report_token');
     await issueReadyToken(db, inst);
 
+    // Verify the token file exists on the instance (guard against write failures)
+    try {
+      const chk = poolSsh(inst, 'test -s /opt/bothook/READY_REPORT.txt && echo ok || echo missing', { timeoutMs: 12000, tty:false, retries: 0 });
+      if (!String(chk.stdout||'').includes('ok')) {
+        throw new Error('ready_report_file_missing');
+      }
+    } catch {
+      // re-issue once
+      pushJobLog(job, 're-issue ready_report_token (file missing)');
+      await issueReadyToken(db, inst);
+    }
+
     // Wait SSH
     pushJobLog(job, 'wait port22');
     await waitPort22(inst.public_ip, { timeoutMs: 10*60*1000 });
