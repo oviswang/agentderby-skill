@@ -12,6 +12,11 @@
       "bytes": 697
     },
     {
+      "path": "scripts/apply_inboundguard_v1_patch.sh",
+      "sha256": "1b6d0f50d95cb493c5a2618c6ab03722b1bd5a9a4e906c3a38bac591f55e1055",
+      "bytes": 6018
+    },
+    {
       "path": "scripts/apply_sendguard_v2_patch.sh",
       "sha256": "204932b2ec8a09dd871269c02a0a575cc21a0eab5cdcfcb47caac10aa4501d9c",
       "bytes": 1872
