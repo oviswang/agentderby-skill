@@ -98,6 +98,7 @@ main(){
 
   fetch "$ARTIFACT_BASE_URL/scripts/openclaw-gateway-start.sh" "$INSTALL_DIR/bin/openclaw-gateway-start.sh"
   fetch "$ARTIFACT_BASE_URL/scripts/postboot_verify.sh" "$INSTALL_DIR/bin/postboot_verify.sh"
+  fetch "$ARTIFACT_BASE_URL/scripts/cutover_delivered.sh" "$INSTALL_DIR/bin/cutover_delivered.sh"
 
   # Fetch provisioning server (Baileys) source bundle
   mkdir -p "$INSTALL_DIR/provision"
@@ -109,7 +110,7 @@ main(){
   fetch "$ARTIFACT_BASE_URL/scripts/rollback_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/rollback_sendguard_v2_patch.sh"
   chmod +x "$INSTALL_DIR/ops-scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/rollback_sendguard_v2_patch.sh"
 
-  chmod +x "$INSTALL_DIR/bin/openclaw-gateway-start.sh" "$INSTALL_DIR/bin/postboot_verify.sh"
+  chmod +x "$INSTALL_DIR/bin/openclaw-gateway-start.sh" "$INSTALL_DIR/bin/postboot_verify.sh" "$INSTALL_DIR/bin/cutover_delivered.sh"
 
   # Fetch units
   fetch "$ARTIFACT_BASE_URL/systemd/openclaw-gateway.service" "$INSTALL_DIR/artifacts/openclaw-gateway.service"

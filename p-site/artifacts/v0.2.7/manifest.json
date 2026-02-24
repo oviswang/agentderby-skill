@@ -3,8 +3,8 @@
   "files": [
     {
       "path": "bootstrap.sh",
-      "sha256": "c8b748507e74856b9a12d29d5aee11c4c32b77d23ee92990b44aa5bc2f6984c3",
-      "bytes": 6930
+      "sha256": "34510819dd99a193233de1af0a1019df651bb3833e8fce884b77061cb9a9bdc5",
+      "bytes": 7068
     },
     {
       "path": "README.md",
@@ -15,6 +15,11 @@
       "path": "scripts/apply_sendguard_v2_patch.sh",
       "sha256": "204932b2ec8a09dd871269c02a0a575cc21a0eab5cdcfcb47caac10aa4501d9c",
       "bytes": 1872
+    },
+    {
+      "path": "scripts/cutover_delivered.sh",
+      "sha256": "1c5eb703eba1726f80fc9dc5bfc487beb5b1d7765d5428735307a88ee124790c",
+      "bytes": 2225
     },
     {
       "path": "scripts/cutover.sh",
@@ -33,8 +38,8 @@
     },
     {
       "path": "scripts/postboot_verify.sh",
-      "sha256": "d8e37d95535d9256040735a1f26812a407c6d013574c3c83574b3ea56313e810",
-      "bytes": 1655
+      "sha256": "7449ccb7ed31cea13d1183f542f6f156380b4ebf5064ee8a42180bb3bc48248d",
+      "bytes": 2697
     },
     {
       "path": "scripts/rollback_sendguard_v2_patch.sh",
