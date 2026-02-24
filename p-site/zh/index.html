@@ -824,13 +824,13 @@
               // If we already have a QR on screen, keep it visible for relink instead of hiding it.
               if (hadQr) {
                 const s = window.__bothook_i18n || {};
-                qrStatus.textContent = s.previouslyLinkedDisconnected || '⏳ 已生成重新連結 QR。請在 WhatsApp → 已連結的裝置 掃描此 QR。掃碼後本頁會自動更新；若 30 秒內未更新，點「重試」重新產生。';
+                qrStatus.textContent = s.previouslyLinkedDisconnected || '⏳ 已生成重新連結 QR。請在 WhatsApp → 已連結的裝置 掃描此 QR。掃碼後本頁會自動更新；若 60 秒內未更新，點「重試」重新產生。';
                 restartBtn.style.display = 'inline-flex';
                 restartBtn.disabled = false;
                 // do NOT break; keep polling while QR is visible
               } else {
                 const s = window.__bothook_i18n || {};
-                qrStatus.textContent = s.previouslyLinkedDisconnected || '⚠️ Previously linked, but currently disconnected. Click “Retry” to relink and generate a new QR.';
+                qrStatus.textContent = s.previouslyLinkedDisconnected || '⚠️ Previously linked, but currently offline. Click “Retry” to generate a new QR, then scan it in WhatsApp → Linked devices.';
                 if (canvas) canvas.style.display = 'none';
                 getQrBtn.style.display = 'none';
                 restartBtn.style.display = 'inline-flex';
