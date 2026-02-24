@@ -141,6 +141,16 @@ main(){
     "port": 18789,
     "auth": { "mode": "token", "token": "${token}" }
   },
+  "update": {
+    "channel": "stable",
+    "checkOnStart": false,
+    "auto": {
+      "enabled": true,
+      "stableDelayHours": 6,
+      "stableJitterHours": 12,
+      "betaCheckIntervalHours": 1
+    }
+  },
   "agents": {
     "defaults": {
       "workspace": "/home/ubuntu/.openclaw/workspace"
