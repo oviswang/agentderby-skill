@@ -20,6 +20,7 @@ import { openDb, nowIso } from '../lib/db.mjs';
 const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || 'lhbp-1l4ptuvm';
 const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 const API_BASE = process.env.BOTHOOK_API_BASE || 'http://127.0.0.1:18998';
+const TARGET_READY = parseInt(process.env.BOTHOOK_POOL_TARGET_READY || '5', 10);
 const GRACE_MS = 24 * 60 * 60 * 1000;
 
 function parseJson(s) {
@@ -38,6 +39,48 @@ function tccli(cmd) {
   const envFile = '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env';
   const full = `set -a; source ${envFile}; set +a; ${cmd}`;
   return sh(full);
+}
+
+function describe(instance_id) {
+  const txt = tccli(`tccli lighthouse DescribeInstances --region ${REGION} --InstanceIds '["${instance_id}"]' --output json`);
+  const j = JSON.parse(txt);
+  const it = (j.InstanceSet || [])[0];
+  return it || null;
+}
+
+function waitStopped(instance_id, { timeoutMs=5*60*1000 } = {}) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const it = describe(instance_id);
+    if (!it) return true;
+    const st = String(it.InstanceState || '');
+    if (st === 'STOPPED') return true;
+    // best-effort sleep
+    execSync('sleep 5', { stdio:'ignore', shell:'/bin/bash' });
+  }
+  return false;
+}
+
+function ensureStopped(instance_id) {
+  const it = describe(instance_id);
+  if (!it) return true;
+  const st = String(it.InstanceState || '');
+  if (st === 'STOPPED') return true;
+  if (st === 'RUNNING') {
+    tccli(`tccli lighthouse StopInstances --region ${REGION} --InstanceIds '["${instance_id}"]' --StopType SOFT_FIRST --output json`);
+  }
+  return waitStopped(instance_id);
+}
+
+function returnable(instance_id) {
+  const txt = tccli(`tccli lighthouse DescribeInstancesReturnable --region ${REGION} --cli-unfold-argument --InstanceIds ${instance_id} --output json`);
+  const j = JSON.parse(txt);
+  const it = (j.Response?.InstanceReturnableSet || j.InstanceReturnableSet || [])[0];
+  return it || null;
+}
+
+function terminate(instance_id) {
+  tccli(`tccli lighthouse TerminateInstances --region ${REGION} --cli-unfold-argument --InstanceIds ${instance_id} --output json`);
 }
 
 function postJson(url, body) {
@@ -140,32 +183,73 @@ function main() {
   const delivery_id = decided.delivery_id;
   const user_id = decided.user_id;
 
+  const readyNow = db.prepare(`SELECT COUNT(*) c FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='READY'`).get().c;
+  const shouldDestroy = readyNow >= TARGET_READY;
+
   // 1) Mark DB states (idempotent-ish)
   db.exec('BEGIN IMMEDIATE');
   try {
     db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
-      .run('EXPIRED_RECLAIMING', ts, mergeMeta(decided.delivery_meta, { reclaim_reason: decided.reason, reclaim_started_at: ts }), delivery_id);
+      .run('EXPIRED_RECLAIMING', ts, mergeMeta(decided.delivery_meta, { reclaim_reason: decided.reason, reclaim_started_at: ts, reclaim_plan: shouldDestroy ? 'destroy' : 'reimage_and_return_to_pool' }), delivery_id);
 
-    db.prepare(
-      `UPDATE instances
-          SET lifecycle_status='IN_POOL',
-              health_status='NEEDS_VERIFY',
-              assigned_user_id=NULL,
-              assigned_order_id=NULL,
-              assigned_at=NULL,
-              meta_json=?
-        WHERE instance_id=?`
-    ).run(mergeMeta(decided.instance_meta, { reclaimed_from_user_id: user_id, reclaim_reason: decided.reason, reclaim_started_at: ts }), instance_id);
+    if (shouldDestroy) {
+      db.prepare(
+        `UPDATE instances
+            SET lifecycle_status='TERMINATING',
+                health_status='UNKNOWN',
+                assigned_user_id=NULL,
+                assigned_order_id=NULL,
+                assigned_at=NULL,
+                terminated_at=COALESCE(terminated_at, ?),
+                meta_json=?
+          WHERE instance_id=?`
+      ).run(ts, mergeMeta(decided.instance_meta, { reclaimed_from_user_id: user_id, reclaim_reason: decided.reason, reclaim_started_at: ts, reclaim_plan: 'destroy' }), instance_id);
+    } else {
+      db.prepare(
+        `UPDATE instances
+            SET lifecycle_status='IN_POOL',
+                health_status='NEEDS_VERIFY',
+                assigned_user_id=NULL,
+                assigned_order_id=NULL,
+                assigned_at=NULL,
+                meta_json=?
+          WHERE instance_id=?`
+      ).run(mergeMeta(decided.instance_meta, { reclaimed_from_user_id: user_id, reclaim_reason: decided.reason, reclaim_started_at: ts, reclaim_plan: 'reimage_and_return_to_pool' }), instance_id);
+    }
 
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-      .run(crypto.randomUUID(), ts, 'instance', instance_id, 'SUBSCRIPTION_RECLAIM_START', JSON.stringify({ delivery_id, user_id, reason: decided.reason }));
+      .run(crypto.randomUUID(), ts, 'instance', instance_id, 'SUBSCRIPTION_RECLAIM_START', JSON.stringify({ delivery_id, user_id, reason: decided.reason, readyNow, targetReady: TARGET_READY, plan: shouldDestroy ? 'destroy' : 'reimage' }));
     db.exec('COMMIT');
   } catch (e) {
     try { db.exec('ROLLBACK'); } catch {}
     throw e;
   }
 
-  // 2) Reimage (cloud)
+  if (shouldDestroy) {
+    // Two-step best-effort: stop -> check returnable -> terminate
+    try {
+      ensureStopped(instance_id);
+    } catch (e) {
+      console.error('[subscription_reclaim] stop failed (continuing)', String(e?.message || e));
+    }
+
+    let ret = null;
+    try { ret = returnable(instance_id); } catch {}
+
+    try {
+      terminate(instance_id);
+      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+        .run(crypto.randomUUID(), ts, 'instance', instance_id, 'SUBSCRIPTION_RECLAIM_TERMINATE_SENT', JSON.stringify({ returnable: ret }));
+    } catch (e) {
+      console.error('[subscription_reclaim] terminate failed', String(e?.message || e));
+      process.exit(3);
+    }
+
+    console.log(JSON.stringify({ ok:true, ts, action:'destroy', instance_id, delivery_id, reason: decided.reason, readyNow, targetReady: TARGET_READY, returnable: ret }, null, 2));
+    return;
+  }
+
+  // Else: reimage and return to pool
   try {
     tccli(`tccli lighthouse ResetInstance --region ${REGION} --InstanceId ${instance_id} --BlueprintId ${BLUEPRINT_ID} --output json`);
   } catch (e) {
@@ -173,7 +257,6 @@ function main() {
     process.exit(3);
   }
 
-  // 3) Kick pool init (init_only)
   let job = null;
   try {
     job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
@@ -181,16 +264,7 @@ function main() {
     console.error('[subscription_reclaim] pool init trigger failed', String(e?.message || e));
   }
 
-  console.log(JSON.stringify({
-    ok: true,
-    ts,
-    action: 'reclaim_started',
-    instance_id,
-    delivery_id,
-    reason: decided.reason,
-    reset_blueprint_id: BLUEPRINT_ID,
-    pool_init: job
-  }, null, 2));
+  console.log(JSON.stringify({ ok:true, ts, action:'reimage', instance_id, delivery_id, reason: decided.reason, readyNow, targetReady: TARGET_READY, reset_blueprint_id: BLUEPRINT_ID, pool_init: job }, null, 2));
 }
 
 main();
