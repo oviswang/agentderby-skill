@@ -53,6 +53,22 @@ JSON
 # Mark completion (even if failed) so operators can see it ran.
 touch "$EVID_DIR/postboot_verify.done"
 
+# READY report (push) to control-plane (best-effort)
+# Requires /opt/bothook/READY_REPORT.txt written by control-plane.
+READY_FILE="/opt/bothook/READY_REPORT.txt"
+if $ok && [[ -f "$READY_FILE" ]]; then
+  inst_id="$(grep -E '^instance_id=' "$READY_FILE" | head -n1 | cut -d= -f2- | tr -d '\r')"
+  token="$(grep -E '^ready_report_token=' "$READY_FILE" | head -n1 | cut -d= -f2- | tr -d '\r')"
+  # capture IPs locally
+  pub_ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  priv_ip="$(ip -4 addr show scope global 2>/dev/null | awk '/inet /{print $2}' | head -n1 | cut -d/ -f1 || true)"
+  if [[ -n "$inst_id" && -n "$token" ]]; then
+    curl -fsS --max-time 5 -H 'content-type: application/json' \
+      -d "{\"instance_id\":\"${inst_id}\",\"token\":\"${token}\",\"public_ip\":\"${pub_ip}\",\"private_ip\":\"${priv_ip}\",\"checks\":$(cat "$OUT" | python3 -c 'import json,sys; j=json.load(sys.stdin); import json as J; print(J.dumps(j.get("checks")))') }" \
+      "https://p.bothook.me/api/pool/ready" >/dev/null 2>&1 || true
+  fi
+fi
+
 if $ok; then
   exit 0
 fi

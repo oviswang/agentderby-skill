@@ -167,6 +167,19 @@ function getOrCreateDeliveryForUuid(db, uuid) {
     db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=?, assigned_at=? WHERE instance_id=?')
       .run('ALLOCATED', uuid, ts, chosen.instance_id);
 
+    // Prepare a short-lived READY-report token for this instance.
+    try {
+      const expIso = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      const token = makeReadyReportToken();
+      const instNow = getInstanceById(db, chosen.instance_id);
+      db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(
+        mergeMeta(instNow?.meta_json, { ready_report_token: token, ready_report_exp: expIso }),
+        chosen.instance_id
+      );
+      // Write token onto the pool machine.
+      writeReadyReportFilesOnInstance(chosen, { token, expIso });
+    } catch {}
+
     // Persist UUID recovery link on the user machine for later relink/support.
     try {
       const lang = 'en';
@@ -204,6 +217,28 @@ function mergeMeta(oldJson, patch){
   let obj = {};
   try { obj = oldJson ? JSON.parse(oldJson) : {}; } catch { obj = {}; }
   return JSON.stringify({ ...obj, ...patch });
+}
+
+function makeReadyReportToken(){
+  // short-lived capability token (instance-scoped)
+  return crypto.randomBytes(24).toString('hex');
+}
+
+function tokenNotExpired(expIso){
+  if (!expIso) return false;
+  try { return Date.parse(expIso) > Date.now(); } catch { return false; }
+}
+
+function writeReadyReportFilesOnInstance(instance, { token, expIso } = {}) {
+  // Store instance-scoped token on the pool machine so post-boot verify can report READY.
+  // No global secrets.
+  const instId = instance.instance_id;
+  const ip = instance.public_ip;
+  if (!instId || !ip || !token) return;
+  const remote = `set -euo pipefail; sudo mkdir -p /opt/bothook; `
+    + `sudo sh -lc 'cat > /opt/bothook/READY_REPORT.txt <<EOF\ninstance_id=${instId}\nready_report_token=${token}\nready_report_exp=${expIso || ''}\nEOF'; `
+    + `sudo chmod 600 /opt/bothook/READY_REPORT.txt; sudo chown root:root /opt/bothook/READY_REPORT.txt; echo ok`;
+  try { poolSsh(instance, remote, { timeoutMs: 12000, tty: false, retries: 1 }); } catch {}
 }
 
 function getInstanceById(db, instance_id) {
@@ -401,6 +436,65 @@ app.use(cors());
 app.use(express.json({ limit: '256kb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 
 app.get('/healthz', (req, res) => res.type('text/plain').send('ok'));
+
+// Pool READY report (push): called by pool instances after they finish bootstrap + verification.
+// Auth: short-lived instance-scoped token stored in instances.meta_json.ready_report_token.
+app.post('/api/pool/ready', (req, res) => {
+  try {
+    const instance_id = String(req.body?.instance_id || '').trim();
+    const token = String(req.body?.token || '').trim();
+    const public_ip = String(req.body?.public_ip || '').trim() || null;
+    const private_ip = String(req.body?.private_ip || '').trim() || null;
+    const checks = req.body?.checks || null;
+    if (!instance_id || !token) return send(res, 400, { ok:false, error:'instance_id_and_token_required' });
+
+    if (instance_id === 'lhins-npsqfxvn') return send(res, 403, { ok:false, error:'forbidden_master_host' });
+
+    const { db } = openDb();
+    const inst = getInstanceById(db, instance_id);
+    if (!inst) return send(res, 404, { ok:false, error:'instance_not_found' });
+
+    let meta = {};
+    try { meta = inst.meta_json ? JSON.parse(inst.meta_json) : {}; } catch { meta = {}; }
+
+    const exp = meta.ready_report_exp || null;
+    if (!tokenNotExpired(exp)) {
+      return send(res, 403, { ok:false, error:'token_expired_or_missing' });
+    }
+
+    if (String(meta.ready_report_token || '') !== token) {
+      return send(res, 403, { ok:false, error:'token_mismatch' });
+    }
+
+    const ts = nowIso();
+
+    // Update instance status
+    const patch = {
+      provision_ready: true,
+      ready_reported_at: ts,
+      ready_report_checks: checks || null,
+      ready_report_public_ip: public_ip,
+      ready_report_private_ip: private_ip,
+    };
+
+    db.prepare('UPDATE instances SET health_status=?, last_probe_at=?, last_ok_at=?, public_ip=COALESCE(?, public_ip), private_ip=COALESCE(?, private_ip), meta_json=? WHERE instance_id=?')
+      .run('READY', ts, ts, public_ip, private_ip, mergeMeta(inst.meta_json, patch), instance_id);
+
+    // One-shot: invalidate token after success to prevent replay.
+    try {
+      const inst2 = getInstanceById(db, instance_id);
+      let meta2 = {};
+      try { meta2 = inst2.meta_json ? JSON.parse(inst2.meta_json) : {}; } catch { meta2 = {}; }
+      meta2.ready_report_token = null;
+      meta2.ready_report_exp = null;
+      db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(JSON.stringify(meta2), instance_id);
+    } catch {}
+
+    return send(res, 200, { ok:true, instance_id, health_status:'READY', ts });
+  } catch (e) {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
 
 // C (Relink v2 / p-site state): minimal state endpoint (Phase 1)
 // Returns a coarse state derived from local DB only (Stripe integration later).
