@@ -3,8 +3,8 @@
   "files": [
     {
       "path": "bootstrap.sh",
-      "sha256": "6ab5ff7ed4b2cee58c7cbbb7b15933560ffbae9e1547e9b5f585289cd9d64db6",
-      "bytes": 6004
+      "sha256": "c8b748507e74856b9a12d29d5aee11c4c32b77d23ee92990b44aa5bc2f6984c3",
+      "bytes": 6930
     },
     {
       "path": "README.md",
@@ -32,9 +32,19 @@
       "bytes": 1918
     },
     {
+      "path": "scripts/postboot_verify.sh",
+      "sha256": "d8e37d95535d9256040735a1f26812a407c6d013574c3c83574b3ea56313e810",
+      "bytes": 1655
+    },
+    {
       "path": "scripts/rollback_sendguard_v2_patch.sh",
       "sha256": "f42d7aad652ccb0dca1d1a21a2d433de3d0e1848622be51b0de9c200f6b0ca35",
       "bytes": 3104
+    },
+    {
+      "path": "systemd/bothook-postboot-verify.service",
+      "sha256": "4f98bd2b9fb41f6460dc34bcef23578900302484a2bc050f7ca91b8ce7b3f807",
+      "bytes": 290
     },
     {
       "path": "systemd/bothook-provision.service",

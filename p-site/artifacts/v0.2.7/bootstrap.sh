@@ -97,6 +97,7 @@ main(){
   chmod +x "$INSTALL_DIR/healthcheck.sh"
 
   fetch "$ARTIFACT_BASE_URL/scripts/openclaw-gateway-start.sh" "$INSTALL_DIR/bin/openclaw-gateway-start.sh"
+  fetch "$ARTIFACT_BASE_URL/scripts/postboot_verify.sh" "$INSTALL_DIR/bin/postboot_verify.sh"
 
   # Fetch provisioning server (Baileys) source bundle
   mkdir -p "$INSTALL_DIR/provision"
@@ -108,15 +109,17 @@ main(){
   fetch "$ARTIFACT_BASE_URL/scripts/rollback_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/rollback_sendguard_v2_patch.sh"
   chmod +x "$INSTALL_DIR/ops-scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/rollback_sendguard_v2_patch.sh"
 
-  chmod +x "$INSTALL_DIR/bin/openclaw-gateway-start.sh"
+  chmod +x "$INSTALL_DIR/bin/openclaw-gateway-start.sh" "$INSTALL_DIR/bin/postboot_verify.sh"
 
   # Fetch units
   fetch "$ARTIFACT_BASE_URL/systemd/openclaw-gateway.service" "$INSTALL_DIR/artifacts/openclaw-gateway.service"
   fetch "$ARTIFACT_BASE_URL/systemd/bothook-provision.service" "$INSTALL_DIR/artifacts/bothook-provision.service"
+  fetch "$ARTIFACT_BASE_URL/systemd/bothook-postboot-verify.service" "$INSTALL_DIR/artifacts/bothook-postboot-verify.service"
 
   # Install units
   install -m 0644 "$INSTALL_DIR/artifacts/openclaw-gateway.service" "$SYSTEMD_DIR/openclaw-gateway.service"
   install -m 0644 "$INSTALL_DIR/artifacts/bothook-provision.service" "$SYSTEMD_DIR/bothook-provision.service"
+  install -m 0644 "$INSTALL_DIR/artifacts/bothook-postboot-verify.service" "$SYSTEMD_DIR/bothook-postboot-verify.service"
 
   systemctl daemon-reload
 
@@ -165,6 +168,18 @@ JSON
   chown -R ubuntu:ubuntu "$INSTALL_DIR/provision"
   sudo -u ubuntu bash -lc "cd '$INSTALL_DIR/provision' && npm install --omit=dev" || true
   systemctl enable --now bothook-provision.service || true
+
+  # Enable post-boot verification (runs automatically after reboot)
+  systemctl enable bothook-postboot-verify.service || true
+
+  # Optional: run a one-time reboot acceptance automatically on first bootstrap.
+  # This avoids manual reboot testing and proves the machine survives reboot.
+  if [[ ! -f "$INSTALL_DIR/evidence/postboot_verify.done" ]]; then
+    mkdir -p "$INSTALL_DIR/evidence"
+    # Reboot now; systemd will run bothook-postboot-verify.service on next boot.
+    log "Triggering one-time reboot for P0.2 acceptance"
+    reboot
+  fi
 
   log "Bootstrap done. Gateway + Provision services enabled+started."
 }
