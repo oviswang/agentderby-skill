@@ -53,9 +53,13 @@ function normalizeFrom(from: string) {
   return String(from || '').trim();
 }
 
-function suppressMissingKeyWarning(text: string) {
+function shouldSuppressAutoReply(text: string) {
   const t = String(text || '');
-  return /No API key found for provider\s+"anthropic"/i.test(t) && /Agent failed before reply/i.test(t);
+  // Suppress noisy agent failure warnings during onboarding/key-capture phase.
+  if (/Agent failed before reply/i.test(t)) return true;
+  // Suppress pairing-code replies; we'll send promo instead.
+  if (/pairing code/i.test(t) || /pairing required/i.test(t) || /openclaw devices approve/i.test(t)) return true;
+  return false;
 }
 
 async function postJson(url: string, body: any, timeoutMs = 12000): Promise<any> {
@@ -105,9 +109,9 @@ export default {
     const logger = api.logger;
 
     api.on('message_sending', async (event, ctx) => {
-      // Only suppress on WhatsApp
-      if (ctx?.channelId !== 'whatsapp') return;
-      if (suppressMissingKeyWarning(event?.content || '')) {
+      // Prefer WhatsApp only, but ctx can be missing in some paths; do best-effort.
+      if (ctx?.channelId && ctx.channelId !== 'whatsapp') return;
+      if (shouldSuppressAutoReply(event?.content || '')) {
         return { cancel: true };
       }
     });
