@@ -482,6 +482,52 @@ function main() {
       if (taskActions.length === 0) {
         const ts = nowIso();
         const autofill = (tid) => {
+          if (tid === 'T23') {
+            // T23: reimage done earlier; now bootstrap + healthcheck + reboot acceptance on targets.
+            const targets = Array.isArray(e.task?.targets) ? e.task.targets.map(String) : [];
+            if (targets.length === 0) return null;
+            const baseUrl = 'https://p.bothook.me/artifacts/v0.2.7/bootstrap.sh';
+            const out = [];
+            for (const instance_id of targets) {
+              out.push({
+                kind: 'ssh_exec',
+                instance_id,
+                user: 'ubuntu',
+                commands: [
+                  'set -euo pipefail',
+                  'sudo -n true',
+                  `sudo bash -lc "curl -fsSL ${baseUrl} | bash"`
+                ],
+                progress_bump: 10
+              });
+              out.push({
+                kind: 'ssh_exec',
+                instance_id,
+                user: 'ubuntu',
+                commands: [
+                  'set -euo pipefail',
+                  'sudo -n true',
+                  'sudo bash -lc "/opt/bothook/healthcheck.sh || true"',
+                  'systemctl is-enabled openclaw-gateway.service || true',
+                  'systemctl is-active openclaw-gateway.service || true',
+                  'ss -ltnp | egrep "18789" || true'
+                ],
+                progress_bump: 8
+              });
+              out.push({
+                kind: 'ssh_exec',
+                instance_id,
+                user: 'ubuntu',
+                commands: [
+                  'set -euo pipefail',
+                  'echo "[T23] reboot"'
+                ],
+                reboot: true,
+                progress_bump: 5
+              });
+            }
+            return out;
+          }
           if (tid === 'T20') {
             return [{
               kind: 'repo_write_file',
