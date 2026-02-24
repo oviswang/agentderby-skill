@@ -88,8 +88,8 @@
     },
     {
       "path": "plugins/bothook-wa-autoreply/package.json",
-      "sha256": "2bbc8eae82804b076e0a03559b4168ed3118e61605866476e6205ba08289df90",
-      "bytes": 178
+      "sha256": "bb0d4a46188bee08783f20dafc2504197dd9c393b92a436e0d57abda93ab3e7b",
+      "bytes": 196
     }
   ]
 }

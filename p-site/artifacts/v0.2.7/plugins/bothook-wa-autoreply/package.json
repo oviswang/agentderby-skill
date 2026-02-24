@@ -5,6 +5,8 @@
   "type": "module",
   "main": "index.ts",
   "openclaw": {
-    "plugin": "openclaw.plugin.json"
+    "extensions": [
+      "openclaw.plugin.json"
+    ]
   }
 }
