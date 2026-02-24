@@ -152,7 +152,16 @@ function autofillActionsIfMissing(tid, task) {
     const keyId = 'lhkp-q1oc3vdz'; // bothook_pool_key
     const newActions = [];
     for (const instance_id of targets) {
-      // 0) Ensure SSH key is associated (cloud-side). Critical after reimage.
+      // 0) Refresh cloud truth into DB (public_ip/private_ip/key_ids). Critical after reimage.
+      newActions.push({
+        kind: 'tccli_lighthouse_describe_instance',
+        instance_id,
+        region: 'ap-singapore',
+        cred_env: '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env',
+        progress_bump: 1
+      });
+
+      // 1) Ensure SSH key is associated (cloud-side).
       newActions.push({
         kind: 'tccli_lighthouse_associate_keypair',
         instance_id,
@@ -162,7 +171,16 @@ function autofillActionsIfMissing(tid, task) {
         progress_bump: 1
       });
 
-      // 1) SSH readiness probe (best-effort). Don't fail hard.
+      // 2) Refresh again (some API flows update IP/KeyIds asynchronously)
+      newActions.push({
+        kind: 'tccli_lighthouse_describe_instance',
+        instance_id,
+        region: 'ap-singapore',
+        cred_env: '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env',
+        progress_bump: 1
+      });
+
+      // 3) SSH readiness probe (best-effort).
       newActions.push({
         kind: 'ssh_exec',
         instance_id,
@@ -173,7 +191,7 @@ function autofillActionsIfMissing(tid, task) {
         progress_bump: 2
       });
 
-      // 2) Bootstrap v0.2.7 (re-runnable)
+      // 4) Bootstrap v0.2.7 (re-runnable)
       newActions.push({
         kind: 'ssh_exec',
         instance_id,
@@ -1027,6 +1045,40 @@ console.log('generated ' + locales.length + ' prompt files into ' + outDir);
           return { ok:true, kind, exit: r.code };
         }
 
+        if (kind === 'tccli_lighthouse_describe_instance') {
+          // Cloud action: refresh instance info (IP + KeyIds) and write back to DB for subsequent SSH.
+          const instanceId = act.instance_id;
+          if (!instanceId) throw new Error('bad_action_missing_instance_id');
+          if (instanceId === 'lhins-npsqfxvn') throw new Error('forbidden_master_host');
+
+          const region = act.region || 'ap-singapore';
+          const cred = act.cred_env || '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env';
+          const cmd = `set -a; source ${cred}; set +a; tccli lighthouse DescribeInstances --region ${region} --InstanceIds '["${instanceId}"]' --output json`;
+          const r = run(cmd);
+          if (r.code !== 0) throw new Error('tccli_describe_instance_failed');
+
+          let ip = '';
+          let pip = '';
+          let keyIds = [];
+          try {
+            const raw = String(r.stdout || '');
+            const j = JSON.parse(raw.slice(raw.indexOf('{')));
+            const it = (j.InstanceSet || [])[0] || {};
+            ip = String(((it.PublicAddresses || [])[0]) || '');
+            pip = String(((it.PrivateAddresses || [])[0]) || '');
+            keyIds = (((it.LoginSettings || {}).KeyIds) || []).map(String);
+          } catch {}
+
+          // Best-effort DB update
+          try {
+            const py = `python3 - <<'PY'\nimport sqlite3,json\ncon=sqlite3.connect('${WORKSPACE}/control-plane/data/bothook.sqlite')\ncur=con.cursor()\nrow=cur.execute('select meta_json from instances where instance_id=?', ('${instanceId}',)).fetchone()\nmeta={}\ntry:\n  meta=json.loads(row[0] or '{}') if row else {}\nexcept Exception:\n  meta={}\nmeta['key_ids']=${'__KEYIDS__'}\nmeta['latest_operation']='DescribeInstances'\nmeta['latest_operation_state']='SUCCESS'\ncur.execute('update instances set public_ip=?, private_ip=?, meta_json=? where instance_id=?', ('${'__IP__'}', '${'__PIP__'}', json.dumps(meta,ensure_ascii=False), '${instanceId}'))\ncon.commit()\nprint('ok')\nPY`;
+            const py2 = py.replace('__IP__', (ip||'').replace(/'/g,"''")).replace('__PIP__', (pip||'').replace(/'/g,"''")).replace('__KEYIDS__', JSON.stringify(keyIds));
+            run(py2);
+          } catch {}
+
+          return { ok:true, kind, instance_id: instanceId, public_ip: ip || null, private_ip: pip || null, key_ids: keyIds };
+        }
+
         if (kind === 'tccli_lighthouse_associate_keypair') {
           // REAL cloud action: ensure SSH keypair is associated with the instance.
           const instanceId = act.instance_id;
@@ -1110,11 +1162,11 @@ cur.execute('update instances set meta_json=? where instance_id=?', (json.dumps(
           run(`tar -czf '${tarFull}' -C '${localDirFull}' .`);
 
           const remoteTmp = `/tmp/${tarName}.tgz`;
-          const scpCmd = `scp -i ${SSH_IDENTITY_FILE} -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 '${tarFull}' ${user}@${ip}:'${remoteTmp}'`;
+          const scpCmd = `scp -i ${SSH_IDENTITY_FILE} -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=10 '${tarFull}' ${user}@${ip}:'${remoteTmp}'`;
           const scp = run(scpCmd);
           if (scp.code !== 0) throw new Error('ssh_put_tar_scp_failed');
 
-          const remoteCmd = `ssh -i ${SSH_IDENTITY_FILE} -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${user}@${ip} 'set -euo pipefail; mkdir -p "${remoteDir.replace(/"/g,'\\"')}"; tar -xzf "${remoteTmp}" -C "${remoteDir.replace(/"/g,'\\"')}"; echo ok'`;
+          const remoteCmd = `ssh -i ${SSH_IDENTITY_FILE} -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=10 ${user}@${ip} 'set -euo pipefail; mkdir -p "${remoteDir.replace(/"/g,'\\"')}"; tar -xzf "${remoteTmp}" -C "${remoteDir.replace(/"/g,'\\"')}"; echo ok'`;
           const r2 = run(remoteCmd);
           if (r2.code !== 0) throw new Error('ssh_put_tar_unpack_failed');
 
@@ -1142,12 +1194,14 @@ cur.execute('update instances set meta_json=? where instance_id=?', (json.dumps(
           const reboot = !!act.reboot;
 
           const script = cmds.join(' && ');
-          const remoteCmd = `ssh -i ${SSH_IDENTITY_FILE} -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${user}@${ip} '${script.replace(/'/g, "'\\''")}'`;
+          // NOTE: pool instances are frequently reimaged; host keys will change.
+          // To avoid false negatives (REMOTE HOST IDENTIFICATION HAS CHANGED), ignore known_hosts for automation SSH.
+          const remoteCmd = `ssh -i ${SSH_IDENTITY_FILE} -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=10 ${user}@${ip} '${script.replace(/'/g, "'\\''")}'`;
           const r1 = run(remoteCmd);
           if (r1.code !== 0) throw new Error('ssh_exec_failed');
 
           if (reboot) {
-            const rb = run(`ssh -i ${SSH_IDENTITY_FILE} -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${user}@${ip} 'sudo reboot || true'`);
+            const rb = run(`ssh -i ${SSH_IDENTITY_FILE} -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=10 ${user}@${ip} 'sudo reboot || true'`);
             // reboot may drop connection; don't fail on it
             void rb;
           }
