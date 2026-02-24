@@ -655,8 +655,10 @@ async function runPoolInitJob(job){
     poolSsh(inst, 'sudo systemctl start bothook-postboot-verify.service || true', { timeoutMs: 12000, tty:false, retries:0 });
 
     // Wait DB READY (from push)
+    // Kick postboot verify periodically to self-heal transient failures (e.g. gateway port not yet listening).
     pushJobLog(job, 'wait DB READY');
     const startWait = Date.now();
+    let lastKick = Date.now();
     while (Date.now()-startWait < 10*60*1000) {
       const cur = getInstanceById(db, job.instance_id);
       if (String(cur.health_status||'') === 'READY') {
@@ -665,8 +667,15 @@ async function runPoolInitJob(job){
         pushJobLog(job, 'done: READY');
         return;
       }
+      if (Date.now() - lastKick > 60*1000) {
+        pushJobLog(job, 're-kick postboot verify');
+        poolSsh(inst, 'sudo systemctl start bothook-postboot-verify.service || true', { timeoutMs: 12000, tty:false, retries:0 });
+        lastKick = Date.now();
+      }
       await sleepMs(5000);
     }
+    // One last kick before failing
+    try { poolSsh(inst, 'sudo systemctl start bothook-postboot-verify.service || true', { timeoutMs: 12000, tty:false, retries:0 }); } catch {}
     throw new Error('db_ready_timeout');
 
   } catch (e) {

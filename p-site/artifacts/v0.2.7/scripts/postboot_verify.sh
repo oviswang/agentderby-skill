@@ -21,8 +21,13 @@ port_listen(){ ss -ltn 2>/dev/null | grep -q ":$1"; }
 if ! svc_active openclaw-gateway.service; then ok=false; errs+=("openclaw-gateway.service not active"); fi
 if ! svc_active bothook-provision.service; then ok=false; errs+=("bothook-provision.service not active"); fi
 
-# Check ports
-if ! port_listen 18789; then ok=false; errs+=("port 18789 not listening"); fi
+# Check ports (18789 can be briefly unavailable after reboot; retry a short window)
+port18789_ok=false
+for _ in $(seq 1 12); do
+  if port_listen 18789; then port18789_ok=true; break; fi
+  sleep 5
+done
+if [ "$port18789_ok" != true ]; then ok=false; errs+=("port 18789 not listening"); fi
 
 # Provision healthz
 prov_ok=false
@@ -35,7 +40,7 @@ fi
 # Export checks for JSON build (avoid bash heredoc-in-substitution issues)
 export CHK_GATEWAY=$(svc_active openclaw-gateway.service && echo 1 || echo 0)
 export CHK_PROVISION=$(svc_active bothook-provision.service && echo 1 || echo 0)
-export CHK_PORT18789=$(port_listen 18789 && echo 1 || echo 0)
+export CHK_PORT18789=$([ "$port18789_ok" = true ] && echo 1 || echo 0)
 export CHK_PROV_HEALTHZ=$([ "$prov_ok" = true ] && echo 1 || echo 0)
 
 checks_json=$(python3 - <<'PY'

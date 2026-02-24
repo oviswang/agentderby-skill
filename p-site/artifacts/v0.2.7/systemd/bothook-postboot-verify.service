@@ -6,6 +6,11 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/opt/bothook/bin/postboot_verify.sh
+# Retry transient failures (e.g. gateway port not yet listening right after reboot)
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=6
 
 [Install]
 WantedBy=multi-user.target

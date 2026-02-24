@@ -38,8 +38,8 @@
     },
     {
       "path": "scripts/postboot_verify.sh",
-      "sha256": "081945b698da0c00f7429877506161ce986003de1b4fa00ee5a2f8ea69377f37",
-      "bytes": 3084
+      "sha256": "5b4e6bd2447d19b0112d412948263b2460f822995d3e232baef7ec5335666424",
+      "bytes": 3288
     },
     {
       "path": "scripts/rollback_sendguard_v2_patch.sh",
@@ -48,8 +48,8 @@
     },
     {
       "path": "systemd/bothook-postboot-verify.service",
-      "sha256": "4f98bd2b9fb41f6460dc34bcef23578900302484a2bc050f7ca91b8ce7b3f807",
-      "bytes": 290
+      "sha256": "6e0c2abb58f44ffb121ea1f15b9170c8f7a5309760d528222051cf266c1d4603",
+      "bytes": 451
     },
     {
       "path": "systemd/bothook-provision.service",
