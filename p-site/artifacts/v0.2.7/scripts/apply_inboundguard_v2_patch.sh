@@ -117,7 +117,7 @@ sudo systemctl is-active openclaw-gateway.service
 
 # Reduce probe noise: gateway RPC may take time to become responsive after restart.
 for i in $(seq 1 12); do
-  if openclaw gateway probe --timeout 20000 >/tmp/bothook_gateway_probe.txt 2>&1; then
+  if sudo -u ubuntu openclaw gateway probe --timeout 20000 >/tmp/bothook_gateway_probe.txt 2>&1; then
     cat /tmp/bothook_gateway_probe.txt | head -n 40
     exit 0
   fi
