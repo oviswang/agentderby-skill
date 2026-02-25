@@ -18,7 +18,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "85aa19eaa3dbce2502410d274e046d305c8e5f15ae5f2ba2b9be3c5a995856bf",
+      "sha256": "f1b7e5628abf58c8eaece1153b7510368631b459ce385b37b134c77171d3156a",
       "bytes": 4877
     },
     {
@@ -48,8 +48,8 @@
     },
     {
       "path": "plugins/bothook-wa-loopback/package.json",
-      "sha256": "6309d043718602419093ad92e26210d4cfec4be0987dee6db175d4974c07778d",
-      "bytes": 119
+      "sha256": "5275cd0e61ef9dfe8197f4a93e9f8680f1ab769483bced8638af666ea8628fda",
+      "bytes": 173
     },
     {
       "path": "plugins/bothook-wa-sendguard/index.ts",
@@ -63,8 +63,8 @@
     },
     {
       "path": "plugins/bothook-wa-sendguard/package.json",
-      "sha256": "1af939877bd34b317afebf12fd6f90e8659011128173dad4ac5ced04462c0e97",
-      "bytes": 120
+      "sha256": "76740b6472e37c310c54728bc80ec6bfc8d28ed3acdc6bd708d2289b446e4567",
+      "bytes": 174
     },
     {
       "path": "provision/package.json",
