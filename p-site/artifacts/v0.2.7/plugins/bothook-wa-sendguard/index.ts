@@ -1,5 +1,4 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 
 function shouldCancel(text: string) {
   const t = String(text || "");
@@ -10,20 +9,13 @@ function shouldCancel(text: string) {
   return false;
 }
 
-export default {
-  id: "bothook-wa-sendguard",
-  name: "BOTHook WA Sendguard",
-  description: "Cancel embedded-agent missing-key warnings before they hit WhatsApp",
-  configSchema: emptyPluginConfigSchema(),
-
-  activate(api: OpenClawPluginApi) {
-    api.on("message_sending", async (event, ctx) => {
-      if (ctx?.channelId !== "whatsapp") return;
-      if (shouldCancel((event as any)?.content || "")) {
-        try { api.logger.info("[bothook-wa-sendguard] canceled anthropic missing-key warning"); } catch {}
-        return { cancel: true } as any;
-      }
-    });
-    try { api.logger.info("[bothook-wa-sendguard] activated"); } catch {}
-  },
-};
+export default function register(api: OpenClawPluginApi) {
+  api.on("message_sending", async (event, ctx) => {
+    if (ctx?.channelId !== "whatsapp") return;
+    if (shouldCancel((event as any)?.content || "")) {
+      try { api.logger.info("[bothook-wa-sendguard] canceled anthropic missing-key warning"); } catch {}
+      return { cancel: true } as any;
+    }
+  });
+  try { api.logger.info("[bothook-wa-sendguard] registered"); } catch {}
+}
