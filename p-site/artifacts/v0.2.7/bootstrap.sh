@@ -251,13 +251,13 @@ if os.path.exists(p):
     j=json.load(f)
   pl=j.get('plugins') or {}
   ents=pl.get('entries') or {}
-  for k in ('bothook-wa-loopback','bothook-wa-sendguard'):
+  for k in ('bothook-wa-loopback','bothook-wa-sendguard','bothook-wa-autoreply'):
     ents.pop(k, None)
   pl['entries']=ents
   allow=pl.get('allow')
   if not isinstance(allow,list):
     allow=[]
-  pl['allow']=[x for x in allow if x not in ('bothook-wa-loopback','bothook-wa-sendguard')]
+  pl['allow']=[x for x in allow if x not in ('bothook-wa-loopback','bothook-wa-sendguard','bothook-wa-autoreply')]
   j['plugins']=pl
   bak=p+f'.bak.bootstrap.plugins.{int(time.time())}'
   shutil.copy2(p,bak)
