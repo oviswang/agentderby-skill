@@ -29,6 +29,10 @@ const MIN_MEM_GB = parseInt(process.env.BOTHOOK_POOL_MIN_MEM_GB || '2', 10);
 // Cost guard: by default, do not create bundles larger than 2GB RAM.
 // This prevents accidental 8GB bundles when the cheapest bundle is temporarily unavailable.
 const MAX_MEM_GB = parseInt(process.env.BOTHOOK_POOL_MAX_MEM_GB || '2', 10);
+// Hard cost ceiling (CNY/month, DiscountPrice) for pool instances.
+const MAX_PRICE_CNY = parseFloat(process.env.BOTHOOK_POOL_MAX_PRICE_CNY || '50');
+// Optional allowlist (comma-separated). If set, ONLY these bundles are allowed.
+const BUNDLE_ALLOWLIST = (process.env.BOTHOOK_POOL_BUNDLE_ALLOWLIST || '').split(',').map(s=>s.trim()).filter(Boolean);
 const BUNDLE_CACHE_PATH = process.env.BOTHOOK_POOL_BUNDLE_CACHE_PATH || '/tmp/bothook_bundle_cache.json';
 const BUNDLE_CACHE_TTL_MS = parseInt(process.env.BOTHOOK_POOL_BUNDLE_CACHE_TTL_MS || String(30*60*1000), 10);
 const ZONES = (process.env.BOTHOOK_POOL_ZONES || 'ap-singapore-1,ap-singapore-3').split(',').map(s=>s.trim()).filter(Boolean);
@@ -122,8 +126,12 @@ function pickCheapestBundles() {
     if (cpu < MIN_CPU) continue;
     if (mem < MIN_MEM_GB) continue;
     if (mem > MAX_MEM_GB) continue;
+    const bundleId = String(b.BundleId);
+    if (BUNDLE_ALLOWLIST.length && !BUNDLE_ALLOWLIST.includes(bundleId)) continue;
     const price = Number(b?.Price?.InstancePrice?.DiscountPrice ?? b?.Price?.InstancePrice?.OriginalPrice ?? NaN);
-    cand.push({ bundleId: String(b.BundleId), cpu, mem, price: Number.isFinite(price) ? price : 1e18 });
+    const p = Number.isFinite(price) ? price : 1e18;
+    if (Number.isFinite(MAX_PRICE_CNY) && p > MAX_PRICE_CNY) continue;
+    cand.push({ bundleId, cpu, mem, price: p });
   }
 
   cand.sort((a,b)=> (a.price-b.price) || (a.cpu-b.cpu) || (a.mem-b.mem) || a.bundleId.localeCompare(b.bundleId));
@@ -206,7 +214,9 @@ function main() {
   const clientToken = crypto.randomUUID();
 
   const cheapest = pickCheapestBundles();
-  const bundlesToTry = [DEFAULT_BUNDLE_ID, ...FALLBACK_BUNDLES, ...cheapest].filter(Boolean)
+  // If allowlist is set, only try allowlisted bundles.
+  const baseList = BUNDLE_ALLOWLIST.length ? BUNDLE_ALLOWLIST : [DEFAULT_BUNDLE_ID, ...FALLBACK_BUNDLES, ...cheapest];
+  const bundlesToTry = baseList.filter(Boolean)
     .filter((v, i, a) => a.indexOf(v) === i)
     .slice(0, 8); // avoid huge loops
 
