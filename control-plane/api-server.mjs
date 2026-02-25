@@ -1713,10 +1713,30 @@ app.get('/api/wa/status', async (req, res) => {
                 let cpu='?', ram_gb='?', disk_gb='?';
                 try {
                   const m = jsonMeta(inst2.meta_json) || {};
+                  // cloud_reconcile writes memory as `memory` (GB) for Lighthouse pool instances
                   if (m.cpu) cpu = String(m.cpu);
                   if (m.ram_gb) ram_gb = String(m.ram_gb);
                   if (m.disk_gb) disk_gb = String(m.disk_gb);
+                  if (ram_gb === '?' && m.memory) ram_gb = String(m.memory);
                 } catch {}
+
+                // Fallback: query from the instance directly (fast, best-effort)
+                if (cpu === '?' || ram_gb === '?' || disk_gb === '?') {
+                  try {
+                    const sr = poolSsh(inst2, `set -euo pipefail; `
+                      + `CPU=$(nproc 2>/dev/null || echo '?'); `
+                      + `RAM=$(free -m 2>/dev/null | awk '/Mem:/{printf "%.0f", $2/1024}' || echo '?'); `
+                      + `DISK=$(df -BG / 2>/dev/null | awk 'NR==2{gsub(/G/,"",$2); print $2}' || echo '?'); `
+                      + `echo "${CPU} ${RAM} ${DISK}"`,
+                      { timeoutMs: 6000, tty: false, retries: 0 }
+                    );
+                    const parts = String(sr.stdout||'').trim().split(/\s+/);
+                    if (parts[0] && cpu === '?') cpu = parts[0];
+                    if (parts[1] && ram_gb === '?') ram_gb = parts[1];
+                    if (parts[2] && disk_gb === '?') disk_gb = parts[2];
+                  } catch {}
+                }
+
                 let openclawVersion='';
                 try {
                   const vr = poolSsh(inst2, `openclaw --version 2>/dev/null || true`, { timeoutMs: 6000, tty: false, retries: 0 });
