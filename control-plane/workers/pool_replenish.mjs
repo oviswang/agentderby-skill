@@ -132,6 +132,13 @@ function main() {
   const { db } = openDb();
   const ts = nowIso();
 
+  // Background repair cadence: even when ready>=target, slowly drain NEEDS_VERIFY.
+  // Default: repair at most once per 10 minutes.
+  const REPAIR_EVERY_MS = parseInt(process.env.BOTHOOK_POOL_REPAIR_EVERY_MS || String(10*60*1000), 10);
+  const REPAIR_STATE_PATH = process.env.BOTHOOK_POOL_REPAIR_STATE_PATH || '/tmp/bothook_pool_repair_state.json';
+  let lastRepairAt = 0;
+  try { lastRepairAt = Date.parse(JSON.parse(fs.readFileSync(REPAIR_STATE_PATH,'utf8'))?.lastRepairAt || '') || 0; } catch {}
+
   const total = db.prepare(`SELECT COUNT(*) c FROM instances WHERE lifecycle_status IN ('IN_POOL','ALLOCATED')`).get().c;
   const ready = db.prepare(`SELECT COUNT(*) c FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='READY'`).get().c;
   const needs = db.prepare(`SELECT instance_id FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='NEEDS_VERIFY' ORDER BY last_probe_at ASC NULLS FIRST LIMIT 1`).get();
@@ -141,7 +148,25 @@ function main() {
   }
 
   if (ready >= TARGET_READY) {
-    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient', total, ready }, null, 2));
+    // If READY target is met, we still do a slow background repair of NEEDS_VERIFY.
+    const nowMs = Date.now();
+    const due = (nowMs - lastRepairAt) >= REPAIR_EVERY_MS;
+    if (!due) {
+      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient', total, ready, needs_verify: Boolean(needs?.instance_id), next_repair_in_ms: Math.max(0, REPAIR_EVERY_MS - (nowMs - lastRepairAt)) }, null, 2));
+      return;
+    }
+
+    if (needs?.instance_id) {
+      const instance_id = String(needs.instance_id);
+      const job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
+      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+        .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_BACKGROUND_REPAIR_TRIGGERED', JSON.stringify({ job, cadence_ms: REPAIR_EVERY_MS }));
+      try { fs.writeFileSync(REPAIR_STATE_PATH, JSON.stringify({ lastRepairAt: ts }, null, 2)); } catch {}
+      console.log(JSON.stringify({ ok:true, ts, action:'background_repair', instance_id, job, cadence_ms: REPAIR_EVERY_MS }, null, 2));
+      return;
+    }
+
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient_no_needs_verify', total, ready }, null, 2));
     return;
   }
 
