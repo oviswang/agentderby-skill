@@ -31,19 +31,23 @@ backup_file(){
   fi
 }
 
-write_state(){
+write_delivered_marker(){
   local uuid="${BOTHOOK_UUID:-}";
   local controller="${BOTHOOK_CONTROLLER_E164:-}";
-  cat > "$STATE_DIR/state.json" <<JSON
+  local delivered_at
+  delivered_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  # IMPORTANT: do NOT overwrite /opt/bothook/state.json; it is used by inbound dedupe.
+  cat > "$STATE_DIR/DELIVERED.json" <<JSON
 {
   "delivery_status": "DELIVERED",
-  "delivered_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "delivered_at": "${delivered_at}",
   "uuid": "${uuid}",
   "controller_e164": "${controller}"
 }
 JSON
-  chmod 644 "$STATE_DIR/state.json"
-  log "wrote $STATE_DIR/state.json"
+  chmod 644 "$STATE_DIR/DELIVERED.json"
+  log "wrote $STATE_DIR/DELIVERED.json"
 }
 
 main(){
@@ -64,9 +68,17 @@ main(){
 
   # 2) Mark delivered state (for future services to read)
   mkdir -p "$STATE_DIR"
-  write_state
+  write_delivered_marker
 
-  # 3) Restart gateway to ensure clean runtime (optional but keeps behavior deterministic)
+  # 3) Disable onboarding responders (delivered mode = model-driven self chat, external silent)
+  if command -v openclaw >/dev/null 2>&1; then
+    # Hooks
+    openclaw config set hooks.internal.entries.bothook-onboarding.enabled false >/dev/null 2>&1 || true
+    # Legacy plugin (avoid any more auto prompts)
+    openclaw plugins disable bothook-wa-autoreply >/dev/null 2>&1 || true
+  fi
+
+  # 4) Restart gateway to ensure clean runtime (optional but keeps behavior deterministic)
   if systemctl list-unit-files | grep -q '^openclaw-gateway\.service'; then
     systemctl restart openclaw-gateway.service || true
     log "openclaw-gateway.service restarted"

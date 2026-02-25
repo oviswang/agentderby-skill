@@ -33,6 +33,13 @@ const handler = async (event: any) => {
     const UUID = readUuid();
     if (!UUID) return;
 
+    // Delivered gate (scheme 1): once /opt/bothook/DELIVERED.json exists, exit onboarding mode.
+    // - self-chat: stop sending welcome/guide; let the model-driven assistant reply
+    // - external: stay silent
+    try {
+      if (fs.existsSync('/opt/bothook/DELIVERED.json')) return;
+    } catch {}
+
     const apiBase = process.env.BOTHOOK_API_BASE || 'https://p.bothook.me';
 
     // Load local state (promo once per external sender)
