@@ -1548,13 +1548,29 @@ app.get('/api/wa/status', async (req, res) => {
     let waJid = null;
 
     // Best-effort parse:
-    // - JSON mode: { ok, channels: { whatsapp: { state, jid, ... } } }
+    // - JSON mode (openclaw status): has linkChannel.linked + channelSummary but no self.jid.
+    // - Probe mode (openclaw channels status --probe): has channels.whatsapp.self.jid + connected.
     // - Text mode: contains 'WhatsApp' and 'linked/connected/ready'
     try {
       const j = JSON.parse(text);
-      // openclaw status JSON: treat linked WhatsApp as connected.
+      // openclaw status JSON: treat linked WhatsApp as a prerequisite signal.
       connected = Boolean(j?.linkChannel?.id === 'whatsapp' && j?.linkChannel?.linked);
       waJid = null;
+
+      // If linked, attempt a fast probe to extract self.jid (needed to bind UUID).
+      // NOTE: this is still one SSH roundtrip; keep timeout small.
+      if (connected) {
+        try {
+          const pr = poolSsh(instance, `set -euo pipefail; openclaw channels status --probe --json 2>/dev/null || true`, { timeoutMs: 6000, tty: false, retries: 0 });
+          const ptxt = (pr.stdout || '').trim();
+          if (ptxt) {
+            const pj = JSON.parse(ptxt);
+            const wa = pj?.channels?.whatsapp;
+            if (wa?.self?.jid) waJid = String(wa.self.jid);
+            if (typeof wa?.connected === 'boolean') connected = wa.connected;
+          }
+        } catch {}
+      }
     } catch {
       const lower = text.toLowerCase();
       // Text-mode fallback: treat "linked" as sufficient signal that QR scan succeeded.
