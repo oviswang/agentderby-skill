@@ -10,6 +10,14 @@ function shouldCancel(text: string) {
 }
 
 export default function register(api: OpenClawPluginApi) {
+  api.on('message_received', async (event, ctx) => {
+    // Log once per inbound so we can see what metadata WhatsApp provides (self-chat detection etc).
+    try {
+      const meta = (event as any)?.metadata || {};
+      api.logger.info(`[bothook-wa-sendguard] message_received channel=${String((ctx as any)?.channelId||'')} from=${String((event as any)?.from||'')} len=${String((event as any)?.content||'').length} metaKeys=${Object.keys(meta||{}).slice(0,20).join(',')}`);
+    } catch {}
+  });
+
   api.on("message_sending", async (event, ctx) => {
     const content = String((event as any)?.content || "");
     // Always log a breadcrumb at INFO so we can confirm the hook fires.
