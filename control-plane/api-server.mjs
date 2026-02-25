@@ -170,9 +170,21 @@ function probeInstanceWhatsappClean(db, instance) {
   return { ok: r.code === 0, clean, linked, connected, selfJid, detail: text.slice(0, 400) };
 }
 
-function getOrCreateDeliveryForUuid(db, uuid) {
+function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
   const existing = db.prepare('SELECT * FROM deliveries WHERE provision_uuid = ? LIMIT 1').get(uuid);
-  if (existing) return existing;
+  if (existing) {
+    // Best-effort: persist preferred lang when provided.
+    try {
+      const lang = String(preferredLang || '').trim().toLowerCase();
+      if (lang) {
+        const meta = mergeMeta(existing.meta_json, { preferred_lang: lang });
+        db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?')
+          .run(meta, nowIso(), existing.delivery_id);
+        return { ...existing, meta_json: meta };
+      }
+    } catch {}
+    return existing;
+  }
 
   // A-mode strict allocation: choose only pool instances and reserve exclusively.
   const candidates = db.prepare(`
@@ -228,13 +240,9 @@ function getOrCreateDeliveryForUuid(db, uuid) {
     // NOTE: READY-report tokens are issued during pool init/reimage (instance lifecycle),
     // not during user allocation (delivery lifecycle). Do not couple instance readiness to user UUID.
 
-    // Persist UUID recovery link on the user machine for later relink/support.
-    try {
-      const lang = 'en';
-      const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang)}`;
-      const remote = `set -euo pipefail; sudo mkdir -p /opt/bothook; sudo sh -lc 'cat > /opt/bothook/UUID.txt <<EOF\nuuid=${uuid}\np_link=${pLink}\nEOF'; sudo chmod 644 /opt/bothook/UUID.txt; echo ok`;
-      poolSsh(chosen, remote, { timeoutMs: 12000, tty: false, retries: 1 });
-    } catch {}
+    // Persist UUID recovery link + basic inbound state on the user machine for later relink/support.
+    // This must be present even before WhatsApp linking succeeds.
+    writeUuidStateFilesOnInstance(chosen, { uuid, lang: preferredLang || 'en' });
 
     db.prepare(`
       INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json)
@@ -288,6 +296,29 @@ function writeReadyReportFilesOnInstance(instance, { token, expIso } = {}) {
   const remote = `set -euo pipefail; sudo mkdir -p /opt/bothook; echo '${b64}' | base64 -d | sudo tee /opt/bothook/READY_REPORT.txt >/dev/null; `
     + `sudo chmod 600 /opt/bothook/READY_REPORT.txt; sudo chown root:root /opt/bothook/READY_REPORT.txt; echo ok`;
   try { poolSsh(instance, remote, { timeoutMs: 12000, tty: false, retries: 1 }); } catch {}
+}
+
+function writeUuidStateFilesOnInstance(instance, { uuid, lang } = {}) {
+  try {
+    const safeUuid = String(uuid || '').trim();
+    if (!safeUuid) return;
+    const safeLang = String(lang || 'en').trim().toLowerCase() || 'en';
+    const pLink = `https://p.bothook.me/p/${encodeURIComponent(safeUuid)}?lang=${encodeURIComponent(safeLang)}`;
+
+    const uuidB64 = Buffer.from(`uuid=${safeUuid}\np_link=${pLink}\n`, 'utf8').toString('base64');
+    const stateB64 = Buffer.from(JSON.stringify({ autoreply: { externalReplied: {} } }, null, 2) + "\n", 'utf8').toString('base64');
+
+    const remote = `set -euo pipefail; `
+      + `sudo mkdir -p /opt/bothook; `
+      + `echo '${uuidB64}' | base64 -d | sudo tee /opt/bothook/UUID.txt >/dev/null; `
+      + `sudo chmod 644 /opt/bothook/UUID.txt; `
+      + `if [ ! -f /opt/bothook/state.json ]; then echo '${stateB64}' | base64 -d | sudo tee /opt/bothook/state.json >/dev/null; fi; `
+      + `sudo chown ubuntu:ubuntu /opt/bothook/state.json || true; `
+      + `sudo chmod 664 /opt/bothook/state.json || true; `
+      + `echo ok`;
+
+    poolSsh(instance, remote, { timeoutMs: 12000, tty: false, retries: 1 });
+  } catch {}
 }
 
 function getInstanceById(db, instance_id) {
@@ -1043,7 +1074,8 @@ app.post('/api/wa/start', async (req, res) => {
     if (!uuid) return send(res, 400, { ok: false, error: 'uuid_required' });
 
     const { db } = openDb();
-    const delivery = getOrCreateDeliveryForUuid(db, uuid);
+    const preferredLang = String(req.body?.lang || req.query?.lang || '').trim().toLowerCase() || null;
+    const delivery = getOrCreateDeliveryForUuid(db, uuid, { preferredLang });
     const instance = getInstanceById(db, delivery.instance_id);
     if (!instance?.public_ip) return send(res, 500, { ok: false, error: 'instance_missing_ip' });
 
@@ -1654,7 +1686,12 @@ app.post('/api/ops/qr-generated', (req, res) => {
     if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
 
     const { db } = openDb();
-    const d = getOrCreateDeliveryForUuid(db, uuid);
+    const d = getOrCreateDeliveryForUuid(db, uuid, { preferredLang: lang || null });
+    // Ensure /opt/bothook/UUID.txt + /opt/bothook/state.json exist on the allocated instance.
+    try {
+      const inst = getInstanceById(db, d.instance_id);
+      if (inst?.public_ip) writeUuidStateFilesOnInstance(inst, { uuid, lang: lang || getDeliveryLang(d) || 'en' });
+    } catch {}
     const ts = nowIso();
     const expiresAt = new Date(Date.now() + 5*60*1000).toISOString();
 
