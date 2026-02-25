@@ -1840,6 +1840,72 @@ app.get('/api/wa/status', async (req, res) => {
 
 
 
+// Confirm payment (fallback when Stripe webhooks are delayed/misconfigured)
+// Called by p-site after redirect: /?paid=1&uuid=...
+app.get('/api/pay/confirm', async (req, res) => {
+  try {
+    const uuid = String(req.query?.uuid || '').trim();
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+
+    const secret = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '';
+    if (!secret) return send(res, 500, { ok:false, error:'stripe_not_configured' });
+
+    const { db } = openDb();
+    const delivery = getOrCreateDeliveryForUuid(db, uuid);
+
+    // Find most recent checkout shortlink meta (stores stripe_session_id)
+    const sl = db.prepare(`SELECT code, meta_json FROM shortlinks WHERE provision_uuid=? AND kind='stripe_checkout' ORDER BY created_at DESC LIMIT 1`).get(uuid);
+    let sessionId = null;
+    try { sessionId = sl?.meta_json ? (JSON.parse(sl.meta_json).stripe_session_id || null) : null; } catch { sessionId = null; }
+    if (!sessionId) return send(res, 404, { ok:false, error:'stripe_session_not_found' });
+
+    const url = `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}?expand[]=subscription`;
+    const resp = await fetch(url, { headers: { 'authorization': `Bearer ${secret}` } });
+    const text = await resp.text();
+    let j; try { j = JSON.parse(text); } catch { j = null; }
+    if (!resp.ok) return send(res, 502, { ok:false, error:'stripe_fetch_failed', detail: j || text });
+
+    const paid = String(j?.payment_status || '') === 'paid' || Boolean(j?.status === 'complete');
+    const sub = j?.subscription || null;
+    const subId = typeof sub === 'string' ? sub : (sub?.id || null);
+
+    if (!paid || !subId) {
+      return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, paid:false, stripe_session_id: sessionId });
+    }
+
+    // Upsert subscription snapshot
+    const ts = nowIso();
+    const status = String((typeof sub === 'object' && sub?.status) ? sub.status : 'active');
+    const cpeSec = (typeof sub === 'object' && sub?.current_period_end) ? Number(sub.current_period_end) : 0;
+    const cancelAtSec = (typeof sub === 'object' && sub?.cancel_at) ? Number(sub.cancel_at) : 0;
+    const cpe = cpeSec ? new Date(cpeSec*1000).toISOString() : null;
+    const cancelAt = cancelAtSec ? new Date(cancelAtSec*1000).toISOString() : null;
+
+    db.prepare(`INSERT OR REPLACE INTO subscriptions(provider_sub_id, provider, user_id, plan, status, current_period_end, cancel_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?)`).run(
+      subId, 'stripe', uuid, 'standard', status, cpe, cancelAt, ts
+    );
+
+    // Mark delivery paid (do not jump to DELIVERED; cutover still requires key verified)
+    try {
+      const row = db.prepare('SELECT status, meta_json FROM deliveries WHERE provision_uuid=?').get(uuid);
+      const meta2 = mergeMeta(row?.meta_json || null, { paid_confirmed_at: ts, paid_confirmed_via: 'pay_confirm' });
+      db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE provision_uuid=?').run('PAID', ts, meta2, uuid);
+    } catch {}
+
+    // Funnel event
+    try {
+      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+        crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAYMENT_PAID', JSON.stringify({ uuid, provider_sub_id: subId, via:'pay_confirm' })
+      );
+    } catch {}
+
+    return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, paid:true, provider_sub_id: subId });
+  } catch (e) {
+    return send(res, 500, { ok:false, error: e.message || 'server_error' });
+  }
+});
+
 // Create payment shortlink (Stripe checkout)
 app.post('/api/pay/link', async (req, res) => {
   try {
