@@ -5,20 +5,27 @@ set -euo pipefail
 # Stopgap only; long-term fix should be a supported config toggle.
 
 DIST_DIR=/usr/lib/node_modules/openclaw/dist
-FILES=(
-  web-tbmTLGBn.js
-  web-BHPg4pGj.js
-  web-BCbBlAe7.js
-  plugin-sdk/channel-web-BD3nsk4K.js
-  channel-web-GHPBNjVW.js
+
+# OpenClaw dist filenames are content-hashed and may change across versions.
+# Discover targets dynamically instead of hardcoding exact names.
+mapfile -t FILES < <(
+  cd "$DIST_DIR" 2>/dev/null && {
+    ls -1 web-*.js channel-web-*.js plugin-sdk/channel-web-*.js 2>/dev/null || true;
+  }
 )
+
+if (( ${#FILES[@]} == 0 )); then
+  echo "no target dist files found under $DIST_DIR"
+  exit 2
+fi
 
 STAMP=$(date -Is)
 MARKER="BOTHook: suppress embedded-agent missing-key warning (anthropic)"
 
+echo "targets=${#FILES[@]}"
 for f in "${FILES[@]}"; do
   src="$DIST_DIR/$f"
-  [ -f "$src" ] || { echo "missing: $src"; exit 2; }
+  [ -f "$src" ] || { echo "skip_missing: $src"; continue; }
 
   sudo cp -a "$src" "$src.bak.bothook.sendguardv2.$STAMP"
 
