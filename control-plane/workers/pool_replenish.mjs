@@ -26,6 +26,9 @@ const DEFAULT_BUNDLE_ID = process.env.BOTHOOK_POOL_BUNDLE_ID || 'bundle_rs_nmc_l
 const FALLBACK_BUNDLES = (process.env.BOTHOOK_POOL_BUNDLE_FALLBACKS || '').split(',').map(s=>s.trim()).filter(Boolean);
 const MIN_CPU = parseInt(process.env.BOTHOOK_POOL_MIN_CPU || '2', 10);
 const MIN_MEM_GB = parseInt(process.env.BOTHOOK_POOL_MIN_MEM_GB || '2', 10);
+// Cost guard: by default, do not create bundles larger than 2GB RAM.
+// This prevents accidental 8GB bundles when the cheapest bundle is temporarily unavailable.
+const MAX_MEM_GB = parseInt(process.env.BOTHOOK_POOL_MAX_MEM_GB || '2', 10);
 const BUNDLE_CACHE_PATH = process.env.BOTHOOK_POOL_BUNDLE_CACHE_PATH || '/tmp/bothook_bundle_cache.json';
 const BUNDLE_CACHE_TTL_MS = parseInt(process.env.BOTHOOK_POOL_BUNDLE_CACHE_TTL_MS || String(30*60*1000), 10);
 const ZONES = (process.env.BOTHOOK_POOL_ZONES || 'ap-singapore-1,ap-singapore-3').split(',').map(s=>s.trim()).filter(Boolean);
@@ -118,6 +121,7 @@ function pickCheapestBundles() {
     const mem = Number(b?.Memory || 0);
     if (cpu < MIN_CPU) continue;
     if (mem < MIN_MEM_GB) continue;
+    if (mem > MAX_MEM_GB) continue;
     const price = Number(b?.Price?.InstancePrice?.DiscountPrice ?? b?.Price?.InstancePrice?.OriginalPrice ?? NaN);
     cand.push({ bundleId: String(b.BundleId), cpu, mem, price: Number.isFinite(price) ? price : 1e18 });
   }
