@@ -18,7 +18,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "d330521998e6df1874c213451c0b4519ea3d58cf3b440d3b8d283a1897872548",
+      "sha256": "b29614c736d10d1f6d4bf9592da12a0894c26c4325575776a0f2716c10c43bbe",
       "bytes": 4877
     },
     {
@@ -53,8 +53,8 @@
     },
     {
       "path": "plugins/bothook-wa-sendguard/index.ts",
-      "sha256": "a61a9781be4b8aa86b0719ca5f0a78e38f9b5ccd99a94b102d9df9eca8ca3d70",
-      "bytes": 1679
+      "sha256": "dbb790f5bcd354abadcb2afdc9d6f315fc9230fa24bbf901e66f87cfa081ebc4",
+      "bytes": 2176
     },
     {
       "path": "plugins/bothook-wa-sendguard/openclaw.plugin.json",
