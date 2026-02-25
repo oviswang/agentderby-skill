@@ -1427,47 +1427,50 @@ app.get('/api/wa/status', async (req, res) => {
     // If connected + entitled, self-heal delivered cutover (auth/model/config) and send OpenAI key setup guide.
     try {
       if (claimConnected) {
-        // Self-heal: relink may happen after reimage/reboot; ensure auth/model is present on the user machine.
-        // This is idempotent and safe even if already DELIVERED.
-        if (deliveryEntitled(db, delivery)) {
-          try { tryCutoverDelivered(db, uuid, { reason: 'relink_connected' }); } catch {}
-        }
+        // NOTE: /api/wa/status must be fast. Do not block the HTTP response with SSH-heavy operations.
+        // Do the self-heal + guide send asynchronously (best-effort).
+        setTimeout(() => {
+          try {
+            const { db: db2 } = openDb();
+            const d2 = db2.prepare('SELECT * FROM deliveries WHERE provision_uuid = ? LIMIT 1').get(uuid);
+            if (!d2) return;
+            if (!deliveryEntitled(db2, d2)) return;
 
-        const lang = getDeliveryLang(delivery);
-        const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
-        const guide = prompts.guide_key_paid;
-        const meta = jsonMeta(delivery.meta_json) || {};
-        const lastSentAt = meta.guide_key_sent_at ? Date.parse(meta.guide_key_sent_at) : null;
-        const qrGenAt = meta.qr_generated_at ? Date.parse(meta.qr_generated_at) : null;
+            const inst2 = getInstanceById(db2, d2.instance_id);
+            if (!inst2?.public_ip) return;
 
-        // Only send guide if:
-        // - guide exists
-        // - subscription is active (entitled)
-        // - not already successfully sent for this QR generation
-        if (guide && deliveryEntitled(db, delivery)) {
-          const shouldSend = (!lastSentAt) || (qrGenAt && lastSentAt && qrGenAt > lastSentAt);
-          if (shouldSend) {
-            const ts = nowIso();
-            const msg = renderTpl(guide, { uuid });
-            const rr2 = sendSelfChatOnInstance(instance, msg);
+            // Self-heal delivered cutover (auth/model/config). Idempotent.
+            try { tryCutoverDelivered(db2, uuid, { reason: 'relink_connected' }); } catch {}
 
-            const ok = (rr2.code ?? 1) === 0;
-            // Record success as sent_at; record failures separately so we can retry without user intervention.
-            const patch = ok
-              ? { guide_key_sent_at: ts, guide_key_lang: lang, guide_key_send_ok: true }
-              : { guide_key_last_attempt_at: ts, guide_key_lang: lang, guide_key_send_ok: false };
-            const meta2 = mergeMeta(delivery.meta_json, patch);
-            db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts, delivery.delivery_id);
+            const lang = getDeliveryLang(d2);
+            const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
+            const guide = prompts.guide_key_paid;
+            const meta = jsonMeta(d2.meta_json) || {};
+            const lastSentAt = meta.guide_key_sent_at ? Date.parse(meta.guide_key_sent_at) : null;
+            const qrGenAt = meta.qr_generated_at ? Date.parse(meta.qr_generated_at) : null;
 
-            // Emit an event with coarse diagnostics (no secrets).
-            try {
-              db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-                crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, ok ? 'GUIDE_KEY_SENT' : 'GUIDE_KEY_SEND_FAILED',
-                JSON.stringify({ uuid, instance_id: instance.instance_id, exit_code: rr2.code ?? null })
-              );
-            } catch {}
-          }
-        }
+            if (guide) {
+              const shouldSend = (!lastSentAt) || (qrGenAt && lastSentAt && qrGenAt > lastSentAt);
+              if (shouldSend) {
+                const ts = nowIso();
+                const msg = renderTpl(guide, { uuid });
+                const rr2 = sendSelfChatOnInstance(inst2, msg);
+                const ok = (rr2.code ?? 1) === 0;
+                const patch = ok
+                  ? { guide_key_sent_at: ts, guide_key_lang: lang, guide_key_send_ok: true }
+                  : { guide_key_last_attempt_at: ts, guide_key_lang: lang, guide_key_send_ok: false };
+                const meta2 = mergeMeta(d2.meta_json, patch);
+                db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts, d2.delivery_id);
+                try {
+                  db2.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                    crypto.randomUUID(), ts, 'delivery', d2.delivery_id, ok ? 'GUIDE_KEY_SENT' : 'GUIDE_KEY_SEND_FAILED',
+                    JSON.stringify({ uuid, instance_id: inst2.instance_id, exit_code: rr2.code ?? null })
+                  );
+                } catch {}
+              }
+            }
+          } catch {}
+        }, 0);
       }
     } catch {}
 
