@@ -10,7 +10,7 @@ MARKER_V1="BOTHook: inboundguard v1 (whatsapp)"
 MARKER_V2="BOTHook: inboundguard v2 (whatsapp)"
 MARKER_V21="BOTHook: inboundguard v2.1 (whatsapp)"
 MARKER_V22="BOTHook: inboundguard v2.2 (whatsapp)"
-MARKER_V23="BOTHook: inboundguard v2.12 (whatsapp)"
+MARKER_V23="BOTHook: inboundguard v2.13 (whatsapp)"
 
 if [ ! -d "$DIST_DIR" ]; then
   echo "dist_dir_not_found=$DIST_DIR" >&2
