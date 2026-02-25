@@ -40,6 +40,7 @@ function tgSend(text) {
 const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 const POOL_KEY_ID = process.env.BOTHOOK_POOL_KEY_ID || 'lhkp-q1oc3vdz';
 const POOL_SSH_KEY = process.env.BOTHOOK_POOL_SSH_KEY || '/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519';
+const EXPECT_RENEW_FLAG = process.env.BOTHOOK_POOL_EXPECT_RENEW_FLAG || 'NOTIFY_AND_AUTO_RENEW';
 const MAX_BATCH = parseInt(process.env.BOTHOOK_RECONCILE_BATCH || '20', 10);
 
 function sh(cmd) {
@@ -80,6 +81,21 @@ function associateKey(instance_id) {
     if (msg.includes('KeyPairBindDuplicate')) return { ok: true, duplicate: true };
     if (msg.includes('LatestOperationUnfinished')) return { ok: false, retryable: true };
     return { ok: false, error: 'associate_failed', msg };
+  }
+}
+
+function ensureAutoRenew(instance_id, currentFlag, instanceChargeType) {
+  // Only meaningful for PREPAID instances.
+  if (String(instanceChargeType || '').toUpperCase() !== 'PREPAID') return { ok: true, skipped: true };
+  const cur = String(currentFlag || '').trim();
+  if (!cur) return { ok: true, skipped: true };
+  if (cur === EXPECT_RENEW_FLAG) return { ok: true, already: true };
+  try {
+    tccli(`tccli lighthouse ModifyInstancesRenewFlag --region ${REGION} --InstanceIds '["${instance_id}"]' --RenewFlag ${EXPECT_RENEW_FLAG} --output json`);
+    return { ok: true, changed: true, from: cur, to: EXPECT_RENEW_FLAG };
+  } catch (e) {
+    const msg = String(e?.stderr || e?.message || e);
+    return { ok: false, error: 'modify_renew_flag_failed', msg, from: cur, to: EXPECT_RENEW_FLAG };
   }
 }
 
@@ -126,12 +142,25 @@ function main() {
       const blueprint = it.BlueprintId || null;
       const zone = it.Zone || null;
       let keyIds = ((it.LoginSettings || {}).KeyIds || []).map(String);
+      const renewFlag = it.RenewFlag || null;
+      const instanceChargeType = it.InstanceChargeType || null;
 
       // IN_POOL: enforce SSH key binding + SSH reachability as a READY gate.
       let desiredHealth = null;
       let sshOk = null;
+      let renewFix = null;
 
       if (String(r.lifecycle_status) === 'IN_POOL') {
+        // Ensure PREPAID instances are set to auto-renew (policy).
+        renewFix = ensureAutoRenew(instance_id, renewFlag, instanceChargeType);
+        if (renewFix?.changed) {
+          db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+            .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_AUTORENEW_FIXED', JSON.stringify(renewFix));
+        } else if (renewFix && renewFix.ok === false) {
+          db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+            .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_AUTORENEW_FIX_FAILED', JSON.stringify(renewFix));
+        }
+
         if (!keyIds.includes(POOL_KEY_ID)) {
           const rr = associateKey(instance_id);
           if (rr.ok) {
@@ -159,6 +188,9 @@ function main() {
 
       const meta2 = mergeMeta(r.meta_json, {
         key_ids: keyIds,
+        renew_flag: renewFlag,
+        renew_flag_expected: EXPECT_RENEW_FLAG,
+        renew_flag_fixed: Boolean(renewFix?.changed),
         cloud_refreshed_at: ts,
         ssh_probe_ok: sshOk,
         ssh_probe_at: ts
