@@ -18,7 +18,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "c097a3391d6dd86a9c9babf10ae7131571c0ade82c199afd52de39783a35c16e",
+      "sha256": "85aa19eaa3dbce2502410d274e046d305c8e5f15ae5f2ba2b9be3c5a995856bf",
       "bytes": 4877
     },
     {
@@ -108,8 +108,8 @@
     },
     {
       "path": "scripts/cutover_delivered.sh",
-      "sha256": "47cd4cca6e3eb1041e782a2cc8b9249dbdb501132a74f34adb3630c9c38861f8",
-      "bytes": 5330
+      "sha256": "2e94156fcc8691fe359caceaa1c60136df3b3542b40dee9fb30b544aa4e61f4e",
+      "bytes": 6217
     },
     {
       "path": "scripts/healthcheck.sh",
@@ -123,8 +123,8 @@
     },
     {
       "path": "scripts/postboot_verify.sh",
-      "sha256": "5b4e6bd2447d19b0112d412948263b2460f822995d3e232baef7ec5335666424",
-      "bytes": 3288
+      "sha256": "06dd70c1fc1b500a92d94ac0dc18781354412bd684da4d9cad5612a575096923",
+      "bytes": 4283
     },
     {
       "path": "scripts/rollback_sendguard_v2_patch.sh",
