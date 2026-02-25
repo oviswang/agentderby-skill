@@ -9,6 +9,7 @@ DIST_DIR=${DIST_DIR:-/home/ubuntu/.npm-global/lib/node_modules/openclaw/dist}
 MARKER_V1="BOTHook: inboundguard v1 (whatsapp)"
 MARKER_V2="BOTHook: inboundguard v2 (whatsapp)"
 MARKER_V21="BOTHook: inboundguard v2.1 (whatsapp)"
+MARKER_V22="BOTHook: inboundguard v2.2 (whatsapp)"
 
 if [ ! -d "$DIST_DIR" ]; then
   echo "dist_dir_not_found=$DIST_DIR" >&2
@@ -44,8 +45,8 @@ fi
 patched=0
 for src in "${CAND[@]}"; do
   # Always enforce readable perms; previous patch runs may have left 0600/root.
-  # Only skip if v2.1 is already present (v2 alone is not sufficient).
-  if grep -q "$MARKER_V21" "$src"; then
+  # Only skip if v2.2 is already present.
+  if grep -q "$MARKER_V22" "$src"; then
     sudo chown ubuntu:ubuntu "$src" || true
     sudo chmod 644 "$src" || true
     continue
@@ -62,7 +63,7 @@ import sys,re
 p=sys.argv[1]
 s=open(p,'r',encoding='utf-8').read()
 
-if 'BOTHook: inboundguard v2.1 (whatsapp)' in s:
+if 'BOTHook: inboundguard v2.2 (whatsapp)' in s:
   sys.exit(0)
 
 # Replace the entire v1 try{} block with v2.
@@ -89,12 +90,13 @@ else:
   insert_at = semi + 1
   s2 = s[:insert_at] + v2 + s[insert_at:]
 
-# v2.1: intercept after message body extraction (handleMessagesUpsert)
-if 'BOTHook: inboundguard v2.1 (whatsapp)' not in s2:
+# v2.2: intercept after message body extraction (handleMessagesUpsert)
+if 'BOTHook: inboundguard v2.2 (whatsapp)' not in s2:
   anchor = "\t\t\tconst replyContext = describeReplyContext(msg.message);"
   pos = s2.find(anchor)
   if pos > 0:
-    v21 = "\n\t\t\t// BOTHook: inboundguard v2.1 (whatsapp)\n\t\t\ttry {\n\t\t\t\tif (!group && !Boolean(msg.key?.fromMe)) {\n\t\t\t\t\tconst rawBody = String(body || '').trim();\n\t\t\t\t\tconst isSelf = Boolean(access && access.isSelfChat);\n\t\t\t\t\tlet uuid = null;\n\t\t\t\t\tlet pLink = null;\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst fs = await import('node:fs');\n\t\t\t\t\t\tconst t = fs.readFileSync('/opt/bothook/UUID.txt','utf8');\n\t\t\t\t\t\tconst m = t.match(/uuid=([a-zA-Z0-9-]{8,80})/);\n\t\t\t\t\t\tuuid = m ? m[1] : null;\n\t\t\t\t\t\tconst lm = t.match(/https?:\\/\\/\\S+/);\n\t\t\t\t\t\tpLink = lm ? lm[0] : null;\n\t\t\t\t\t} catch {}\n\t\t\t\t\tconst cpBase = (process.env.BOTHOOK_API_BASE || 'https://p.bothook.me').replace(/\\/$/, '');\n\t\t\t\t\tlet st = {};\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst fs = await import('node:fs');\n\t\t\t\t\t\tst = JSON.parse(fs.readFileSync('/opt/bothook/state.json','utf8'));\n\t\t\t\t\t} catch { st = {}; }\n\t\t\t\t\tst.autoreply = st.autoreply || {};\n\t\t\t\t\tst.autoreply.externalReplied = st.autoreply.externalReplied || {};\n\t\t\t\t\tconst saveState = async () => {\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\tconst fs = await import('node:fs');\n\t\t\t\t\t\t\tfs.mkdirSync('/opt/bothook', { recursive: true });\n\t\t\t\t\t\t\tfs.writeFileSync('/opt/bothook/state.json', JSON.stringify(st, null, 2) + '\\n');\n\t\t\t\t\t\t} catch {}\n\t\t\t\t\t};\n\t\t\t\t\tconst sendText = async (jid, text) => {\n\t\t\t\t\t\tawait sock.sendMessage(jid, { text });\n\t\t\t\t\t};\n\t\t\t\t\tif (isSelf && rawBody && (/^(hi|hello|你好|嗨|h+i+)$/i.test(rawBody))) {\n\t\t\t\t\t\tconst hint = `[bothook] Next: paste your OpenAI API key here as ONE line starting with sk- (self-chat only).\\nLink: ${pLink || (uuid ? `https://p.bothook.me/p/${uuid}` : '')}`;\n\t\t\t\t\t\tawait sendText(remoteJid, hint);\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\tif (isSelf && rawBody.startsWith('sk-') && uuid) {\n\t\t\t\t\t\tconst key = rawBody.split(/\\s+/)[0];\n\t\t\t\t\t\tlet msg2 = '[bothook] Verifying OpenAI key…';\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\tconst r = await fetch(`${cpBase}/api/key/verify`, { method: 'POST', headers: { 'content-type':'application/json' }, body: JSON.stringify({ uuid, provider: 'openai', key }) });\n\t\t\t\t\t\t\tconst j = await r.json().catch(() => ({}));\n\t\t\t\t\t\t\tmsg2 = j.message || (j.verified ? '[bothook] OpenAI Key verified ✅' : `[bothook] OpenAI Key verify failed: ${j.detail || j.error || 'unknown'}`);\n\t\t\t\t\t\t} catch {\n\t\t\t\t\t\t\tmsg2 = '[bothook] OpenAI Key verify failed: network/server error';\n\t\t\t\t\t\t}\n\t\t\t\t\t\tawait sendText(remoteJid, msg2);\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\tif (!isSelf && senderE164) {\n\t\t\t\t\t\tconst k = String(senderE164);\n\t\t\t\t\t\tif (!st.autoreply.externalReplied[k]) {\n\t\t\t\t\t\t\tst.autoreply.externalReplied[k] = new Date().toISOString();\n\t\t\t\t\t\t\tawait saveState();\n\t\t\t\t\t\t\tawait sendText(remoteJid, `[bothook] The owner is activating a private WhatsApp AI assistant (dedicated server).\\n\\nLearn more: https://bothook.me`);\n\t\t\t\t\t\t\tcontinue;\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t} catch {}\n"
+    v21 = "\n\t\t\t// BOTHook: inboundguard v2.2 (whatsapp)\n\t\t\ttry {\n\t\t\t\tif (!group) {\n\t\t\t\t\tconst rawBody = String(body || '').trim();\n\t\t\t\t\tconst isSelf = Boolean(access && access.isSelfChat);\n\t\t\t\t\t// For non-self chats, ignore outbound echoes. For self-chat, we must allow fromMe=true.
+\t\t\t\t\tif (!isSelf && Boolean(msg.key?.fromMe)) {\n\t\t\t\t\t\t// skip\n\t\t\t\t\t} else {\n\t\t\t\t\t\tlet uuid = null;\n\t\t\t\t\t\tlet pLink = null;\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\tconst fs = await import('node:fs');\n\t\t\t\t\t\t\tconst t = fs.readFileSync('/opt/bothook/UUID.txt','utf8');\n\t\t\t\t\t\t\tconst m = t.match(/uuid=([a-zA-Z0-9-]{8,80})/);\n\t\t\t\t\t\t\tuuid = m ? m[1] : null;\n\t\t\t\t\t\t\tconst lm = t.match(/https?:\\/\\/\\S+/);\n\t\t\t\t\t\t\tpLink = lm ? lm[0] : null;\n\t\t\t\t\t\t} catch {}\n\t\t\t\t\t\tconst cpBase = (process.env.BOTHOOK_API_BASE || 'https://p.bothook.me').replace(/\\/$/, '');\n\t\t\t\t\t\tlet st = {};\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\tconst fs = await import('node:fs');\n\t\t\t\t\t\t\tst = JSON.parse(fs.readFileSync('/opt/bothook/state.json','utf8'));\n\t\t\t\t\t\t} catch { st = {}; }\n\t\t\t\t\t\tst.autoreply = st.autoreply || {};\n\t\t\t\t\t\tst.autoreply.externalReplied = st.autoreply.externalReplied || {};\n\t\t\t\t\t\tconst saveState = async () => {\n\t\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t\tconst fs = await import('node:fs');\n\t\t\t\t\t\t\t\tfs.mkdirSync('/opt/bothook', { recursive: true });\n\t\t\t\t\t\t\t\tfs.writeFileSync('/opt/bothook/state.json', JSON.stringify(st, null, 2) + '\\n');\n\t\t\t\t\t\t\t} catch {}\n\t\t\t\t\t\t};\n\t\t\t\t\t\tconst sendText = async (jid, text) => {\n\t\t\t\t\t\t\tawait sock.sendMessage(jid, { text });\n\t\t\t\t\t\t};\n\t\t\t\t\t\tif (isSelf && rawBody && (/^(hi|hello|你好|嗨|h+i+)$/i.test(rawBody))) {\n\t\t\t\t\t\t\tconst hint = `[bothook] Next: paste your OpenAI API key here as ONE line starting with sk- (self-chat only).\\nLink: ${pLink || (uuid ? `https://p.bothook.me/p/${uuid}` : '')}`;\n\t\t\t\t\t\t\tawait sendText(remoteJid, hint);\n\t\t\t\t\t\t\tcontinue;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (isSelf && rawBody.startsWith('sk-') && uuid) {\n\t\t\t\t\t\t\tconst key = rawBody.split(/\\s+/)[0];\n\t\t\t\t\t\t\tlet msg2 = '[bothook] Verifying OpenAI key…';\n\t\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t\tconst r = await fetch(`${cpBase}/api/key/verify`, { method: 'POST', headers: { 'content-type':'application/json' }, body: JSON.stringify({ uuid, provider: 'openai', key }) });\n\t\t\t\t\t\t\t\tconst j = await r.json().catch(() => ({}));\n\t\t\t\t\t\t\t\tmsg2 = j.message || (j.verified ? '[bothook] OpenAI Key verified ✅' : `[bothook] OpenAI Key verify failed: ${j.detail || j.error || 'unknown'}`);\n\t\t\t\t\t\t\t} catch {\n\t\t\t\t\t\t\t\tmsg2 = '[bothook] OpenAI Key verify failed: network/server error';\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tawait sendText(remoteJid, msg2);\n\t\t\t\t\t\t\tcontinue;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (!isSelf && senderE164) {\n\t\t\t\t\t\t\tconst k = String(senderE164);\n\t\t\t\t\t\t\tif (!st.autoreply.externalReplied[k]) {\n\t\t\t\t\t\t\t\tst.autoreply.externalReplied[k] = new Date().toISOString();\n\t\t\t\t\t\t\t\tawait saveState();\n\t\t\t\t\t\t\t\tawait sendText(remoteJid, `[bothook] The owner is activating a private WhatsApp AI assistant (dedicated server).\\n\\nLearn more: https://bothook.me`);\n\t\t\t\t\t\t\t\tcontinue;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t} catch {}\n"
     s2 = s2[:pos] + v21 + s2[pos:]
 
 open(p,'w',encoding='utf-8').write(s2)
