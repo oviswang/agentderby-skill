@@ -75,9 +75,10 @@ function tgSend(text) {
 
 function isPaid(delivery_status, delivery_meta_json) {
   const st = String(delivery_status || '').toUpperCase();
-  if (['PAID','DELIVERED','ACTIVE'].includes(st)) return true;
+  if (['PAID','DELIVERED'].includes(st)) return true;
   const m = parseJson(delivery_meta_json);
-  return Boolean(m?.paid_at);
+  // Backward/forward compatible paid markers
+  return Boolean(m?.paid_at || m?.paid_confirmed_at || m?.payment_paid_at);
 }
 
 function main() {
@@ -121,6 +122,8 @@ function main() {
           reason = 'stale_linking_unpinned';
         }
       } else {
+        // Never clear paid/delivered sessions; keep pinned until explicit reclaim/cancel policy.
+        if (isPaid(st, r.delivery_meta)) continue;
         // bound-but-expired fallback: use meta.bound_unpaid_expires_at if present
         const exp = meta?.bound_unpaid_expires_at ? Date.parse(String(meta.bound_unpaid_expires_at)) : NaN;
         if (Number.isFinite(exp) && Date.now() >= exp) {
