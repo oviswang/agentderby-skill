@@ -176,6 +176,16 @@ function main() {
     return;
   }
 
+  // Suppress cloud creates while pool init jobs are active (maintenance bursts).
+  // During manual/batch init, some READY nodes will temporarily flip to NEEDS_VERIFY; do not overreact by creating new instances.
+  try {
+    const busy = getJson(`${API_BASE}/api/ops/pool/init/busy`);
+    if (busy?.busy || (Number(busy?.active || 0) > 0)) {
+      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'init_busy_suppress_create', total, ready, active_init: Number(busy?.active||0) }, null, 2));
+      return;
+    }
+  } catch {}
+
   // Prefer repairing NEEDS_VERIFY
   if (needs?.instance_id) {
     const instance_id = String(needs.instance_id);

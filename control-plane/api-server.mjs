@@ -1067,6 +1067,16 @@ app.get('/api/ops/pool/init/status', (req, res) => {
   return send(res, 200, { ok:true, job });
 });
 
+// Used by pool_replenish to suppress cloud creates during maintenance/init bursts.
+app.get('/api/ops/pool/init/busy', (req, res) => {
+  let active = 0;
+  for (const j of poolInitJobs.values()) {
+    const st = String(j?.status || '').toUpperCase();
+    if (st === 'QUEUED' || st === 'RUNNING') active++;
+  }
+  return send(res, 200, { ok:true, busy: Boolean(poolInitBusy), active });
+});
+
 
 // Pool READY report (push): called by pool instances after they finish bootstrap + verification.
 // Auth: short-lived instance-scoped token stored in instances.meta_json.ready_report_token.
