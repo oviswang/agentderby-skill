@@ -1510,6 +1510,12 @@ app.get('/api/wa/status', async (req, res) => {
           db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
             crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'UUID_BOUND', JSON.stringify({ uuid, wa_jid: waJid, instance_id: instance.instance_id })
           );
+          // Funnel: record a normalized linked event (once per bound).
+          try {
+            db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+              crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'WA_LINKED', JSON.stringify({ uuid, wa_jid: waJid, instance_id: instance.instance_id })
+            );
+          } catch {}
         } else if (bound && waJid && bound !== waJid) {
           // allow device id change for same number (e.g. :46 -> :47)
           const expectedBase = normalizeWaBase(bound);
@@ -1519,6 +1525,12 @@ app.get('/api/wa/status', async (req, res) => {
             db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
               crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'UUID_BIND_DEVICE_CHANGED', JSON.stringify({ uuid, expected: bound, got: waJid, base: expectedBase, instance_id: instance.instance_id })
             );
+            // Funnel: linked success (device id rotated)
+            try {
+              db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'WA_LINKED', JSON.stringify({ uuid, wa_jid: waJid, instance_id: instance.instance_id, rotated: true })
+              );
+            } catch {}
           } else {
             db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
               crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'UUID_BIND_MISMATCH', JSON.stringify({ uuid, expected: bound, got: waJid, instance_id: instance.instance_id })
