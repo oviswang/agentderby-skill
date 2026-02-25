@@ -18,8 +18,8 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "27f1a6a8d1bbfa333b52af7b07fcff2e8e13470734d65fcf9477de36cf37f68c",
-      "bytes": 3822
+      "sha256": "c097a3391d6dd86a9c9babf10ae7131571c0ade82c199afd52de39783a35c16e",
+      "bytes": 4877
     },
     {
       "path": "plugins/bothook-wa-autoreply/index.ts",
