@@ -1,0 +1,7 @@
+{
+  "name": "bothook-wa-loopback",
+  "version": "0.2.7",
+  "type": "module",
+  "private": true,
+  "dependencies": {}
+}

@@ -108,11 +108,22 @@ main(){
   fetch "$ARTIFACT_BASE_URL/provision/server.mjs" "$INSTALL_DIR/provision/server.mjs"
   fetch "$ARTIFACT_BASE_URL/provision/package.json" "$INSTALL_DIR/provision/package.json"
 
-  # Fetch BOTHook OpenClaw plugins
-  mkdir -p "$INSTALL_DIR/plugins/bothook-wa-autoreply"
-  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-autoreply/openclaw.plugin.json" "$INSTALL_DIR/plugins/bothook-wa-autoreply/openclaw.plugin.json"
-  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-autoreply/package.json" "$INSTALL_DIR/plugins/bothook-wa-autoreply/package.json"
-  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-autoreply/index.ts" "$INSTALL_DIR/plugins/bothook-wa-autoreply/index.ts"
+  # Fetch BOTHook OpenClaw plugins (B-mode: hook responder + loopback send + sendguard)
+  mkdir -p "$INSTALL_DIR/plugins/bothook-wa-loopback"
+  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-loopback/openclaw.plugin.json" "$INSTALL_DIR/plugins/bothook-wa-loopback/openclaw.plugin.json"
+  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-loopback/package.json" "$INSTALL_DIR/plugins/bothook-wa-loopback/package.json"
+  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-loopback/index.ts" "$INSTALL_DIR/plugins/bothook-wa-loopback/index.ts"
+
+  mkdir -p "$INSTALL_DIR/plugins/bothook-wa-sendguard"
+  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-sendguard/openclaw.plugin.json" "$INSTALL_DIR/plugins/bothook-wa-sendguard/openclaw.plugin.json"
+  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-sendguard/package.json" "$INSTALL_DIR/plugins/bothook-wa-sendguard/package.json"
+  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-sendguard/index.ts" "$INSTALL_DIR/plugins/bothook-wa-sendguard/index.ts"
+
+  # Fetch BOTHook internal hook responder
+  mkdir -p /home/ubuntu/.openclaw/workspace/hooks/bothook-onboarding
+  fetch "$ARTIFACT_BASE_URL/hooks/bothook-onboarding/handler.ts" /home/ubuntu/.openclaw/workspace/hooks/bothook-onboarding/handler.ts
+  chown -R ubuntu:ubuntu /home/ubuntu/.openclaw/workspace
+
   # Fetch BOTHook ops scripts (send-guard apply/rollback). Do NOT auto-run here.
   mkdir -p "$INSTALL_DIR/ops-scripts"
   fetch "$ARTIFACT_BASE_URL/scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/apply_sendguard_v2_patch.sh"
@@ -177,9 +188,19 @@ JSON
     chmod 600 /home/ubuntu/.openclaw/openclaw.json
   fi
 
-  # Install + enable BOTHook WhatsApp autoreply plugin (key capture + promo + warning suppression)
-  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins install "$INSTALL_DIR/plugins/bothook-wa-autoreply" >/dev/null 2>&1 || true
-  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-autoreply >/dev/null 2>&1 || true
+  # Install + enable BOTHook WA loopback + sendguard plugins (B-mode)
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins install "$INSTALL_DIR/plugins/bothook-wa-loopback" >/dev/null 2>&1 || true
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-loopback >/dev/null 2>&1 || true
+
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins install "$INSTALL_DIR/plugins/bothook-wa-sendguard" >/dev/null 2>&1 || true
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-sendguard >/dev/null 2>&1 || true
+
+  # Ensure legacy autoreply plugin is disabled (avoid race/conflicts)
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins disable bothook-wa-autoreply >/dev/null 2>&1 || true
+
+  # Enable internal onboarding hook responder
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set hooks.internal.enabled true >/dev/null 2>&1 || true
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set hooks.internal.entries.bothook-onboarding.enabled true >/dev/null 2>&1 || true
 
   # Enable + start gateway to persist across reboot/idle.
   systemctl enable --now openclaw-gateway.service || true
