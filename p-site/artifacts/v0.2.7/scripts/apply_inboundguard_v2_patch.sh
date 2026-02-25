@@ -44,7 +44,8 @@ fi
 patched=0
 for src in "${CAND[@]}"; do
   # Always enforce readable perms; previous patch runs may have left 0600/root.
-  if grep -q "$MARKER_V2" "$src"; then
+  # Only skip if v2.1 is already present (v2 alone is not sufficient).
+  if grep -q "$MARKER_V21" "$src"; then
     sudo chown ubuntu:ubuntu "$src" || true
     sudo chmod 644 "$src" || true
     continue
