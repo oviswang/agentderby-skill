@@ -1328,7 +1328,7 @@ app.get('/api/wa/status', async (req, res) => {
     const instance = getInstanceById(db, delivery.instance_id);
 
     // SINGLE-CHANNEL model: status is from `openclaw channels status`.
-    const rr = poolSsh(instance, `set -euo pipefail; openclaw channels status --json 2>/dev/null || openclaw channels status`, { timeoutMs: 12000, tty: false });
+    const rr = poolSsh(instance, `set -euo pipefail; openclaw channels status --probe --json 2>/dev/null || openclaw channels status --probe`, { timeoutMs: 15000, tty: false });
     const text = (rr.stdout || rr.stderr || '').trim();
 
     let connected = false;
