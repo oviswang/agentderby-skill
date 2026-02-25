@@ -1597,7 +1597,113 @@ app.post('/api/stripe/webhook', async (req, res) => {
       }
     }
 
-    // TODO: handle subscription lifecycle events (invoice.paid, customer.subscription.*)
+    // Subscription lifecycle events (minimal)
+    try {
+      const upsertSub = db.prepare(
+        `INSERT INTO subscriptions(provider_sub_id, provider, user_id, plan, status, current_period_end, cancel_at, canceled_at, ended_at, cancel_at_period_end, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(provider_sub_id) DO UPDATE SET
+           status=excluded.status,
+           current_period_end=excluded.current_period_end,
+           cancel_at=excluded.cancel_at,
+           canceled_at=excluded.canceled_at,
+           ended_at=excluded.ended_at,
+           cancel_at_period_end=excluded.cancel_at_period_end,
+           updated_at=excluded.updated_at`
+      );
+
+      const unixToIso = (u) => {
+        if (!u) return null;
+        const n = Number(u);
+        if (!Number.isFinite(n) || n <= 0) return null;
+        return new Date(n * 1000).toISOString();
+      };
+
+      // Helpers: map subscription id -> uuid (user_id)
+      const findUuidBySubId = (subId) => {
+        try {
+          const row = db.prepare('SELECT user_id FROM subscriptions WHERE provider_sub_id=? AND provider=? LIMIT 1').get(String(subId||''), 'stripe');
+          return row?.user_id || null;
+        } catch { return null; }
+      };
+
+      const type2 = String(type || '');
+      if (type2 === 'invoice.paid' || type2 === 'invoice.payment_failed') {
+        const subId = obj?.subscription || null;
+        if (subId) {
+          const uid = findUuidBySubId(subId);
+          // Best-effort pull subscription from Stripe to refresh timestamps.
+          try {
+            const secret = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '';
+            if (secret) {
+              const subResp = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subId)}`, { headers: { authorization: `Bearer ${secret}` } });
+              const subJson = await subResp.json().catch(()=>null);
+              if (subResp.ok && subJson) {
+                const user_id = uid || subJson?.metadata?.provision_uuid || subJson?.metadata?.uuid || null;
+                if (user_id) {
+                  upsertSub.run(
+                    String(subJson.id || subId),
+                    'stripe',
+                    String(user_id),
+                    'standard',
+                    String(subJson.status || ''),
+                    unixToIso(subJson.current_period_end),
+                    unixToIso(subJson.cancel_at),
+                    unixToIso(subJson.canceled_at),
+                    unixToIso(subJson.ended_at),
+                    subJson.cancel_at_period_end ? 1 : 0,
+                    ts,
+                    ts
+                  );
+
+                  // Clear grace marker when recovered
+                  if (type2 === 'invoice.paid') {
+                    try {
+                      const d = getDeliveryByUuid(db, String(user_id));
+                      if (d) {
+                        const meta = mergeMeta(d.meta_json, { payment_failed_since: null });
+                        db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta, ts, d.delivery_id);
+                      }
+                    } catch {}
+
+                    // If key already verified + linked, cutover now.
+                    try { tryCutoverDelivered(db, String(user_id), { reason: 'invoice_paid' }); } catch {}
+                  }
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+
+      if (type2 === 'customer.subscription.updated' || type2 === 'customer.subscription.deleted') {
+        const sub = obj || null;
+        const subId = sub?.id || null;
+        if (subId) {
+          const user_id = findUuidBySubId(subId) || sub?.metadata?.provision_uuid || sub?.metadata?.uuid || null;
+          if (user_id) {
+            upsertSub.run(
+              String(subId),
+              'stripe',
+              String(user_id),
+              'standard',
+              String(sub?.status || ''),
+              unixToIso(sub?.current_period_end),
+              unixToIso(sub?.cancel_at),
+              unixToIso(sub?.canceled_at),
+              unixToIso(sub?.ended_at),
+              sub?.cancel_at_period_end ? 1 : 0,
+              ts,
+              ts
+            );
+
+            if (String(sub?.status || '').toLowerCase() in { active:1, trialing:1 }) {
+              try { tryCutoverDelivered(db, String(user_id), { reason: 'subscription_updated' }); } catch {}
+            }
+          }
+        }
+      }
+    } catch {}
 
     return res.status(200).type('text/plain').send('ok');
   } catch (e) {
