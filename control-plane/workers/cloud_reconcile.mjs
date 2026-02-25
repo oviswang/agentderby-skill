@@ -39,6 +39,7 @@ function tgSend(text) {
 
 const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 const POOL_KEY_ID = process.env.BOTHOOK_POOL_KEY_ID || 'lhkp-q1oc3vdz';
+const POOL_SSH_KEY = process.env.BOTHOOK_POOL_SSH_KEY || '/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519';
 const MAX_BATCH = parseInt(process.env.BOTHOOK_RECONCILE_BATCH || '20', 10);
 
 function sh(cmd) {
@@ -82,6 +83,23 @@ function associateKey(instance_id) {
   }
 }
 
+function sshProbe(ip) {
+  try {
+    const host = String(ip || '').trim();
+    if (!host) return { ok: false, error: 'missing_ip' };
+    // Cheap probe: connect + run echo.
+    sh2(
+      `ssh -i ${JSON.stringify(POOL_SSH_KEY)} `
+      + `-o BatchMode=yes -o StrictHostKeyChecking=no `
+      + `-o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null `
+      + `-o ConnectTimeout=5 ubuntu@${host} 'echo ok'`
+    );
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
 function main() {
   const { db } = openDb();
   const ts = nowIso();
@@ -107,21 +125,11 @@ function main() {
       const bundle = it.BundleId || null;
       const blueprint = it.BlueprintId || null;
       const zone = it.Zone || null;
-      const keyIds = ((it.LoginSettings || {}).KeyIds || []).map(String);
+      let keyIds = ((it.LoginSettings || {}).KeyIds || []).map(String);
 
-      const meta2 = mergeMeta(r.meta_json, { key_ids: keyIds, cloud_refreshed_at: ts });
-      db.prepare(
-        `UPDATE instances
-            SET public_ip=COALESCE(?,public_ip),
-                private_ip=COALESCE(?,private_ip),
-                bundle_id=COALESCE(?,bundle_id),
-                blueprint_id=COALESCE(?,blueprint_id),
-                zone=COALESCE(?,zone),
-                last_probe_at=?,
-                meta_json=?
-          WHERE instance_id=?`
-      ).run(pub, priv, bundle, blueprint, zone, ts, meta2, instance_id);
-      refreshed++;
+      // IN_POOL: enforce SSH key binding + SSH reachability as a READY gate.
+      let desiredHealth = null;
+      let sshOk = null;
 
       if (String(r.lifecycle_status) === 'IN_POOL') {
         if (!keyIds.includes(POOL_KEY_ID)) {
@@ -130,9 +138,45 @@ function main() {
             keyfix++;
             db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
               .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_KEYPAIR_REBOUND', JSON.stringify({ pool_key_id: POOL_KEY_ID }));
+
+            // Refresh keyIds after bind (best-effort).
+            try {
+              const it2 = describe(instance_id);
+              keyIds = (((it2.LoginSettings || {}).KeyIds || []).map(String)) || keyIds;
+            } catch {}
           }
         }
+
+        // Probe SSH if we have a public IP and key is bound.
+        if (pub && keyIds.includes(POOL_KEY_ID)) {
+          const pr = sshProbe(pub);
+          sshOk = Boolean(pr.ok);
+          desiredHealth = sshOk ? 'READY' : 'NEEDS_VERIFY';
+        } else {
+          desiredHealth = 'NEEDS_VERIFY';
+        }
       }
+
+      const meta2 = mergeMeta(r.meta_json, {
+        key_ids: keyIds,
+        cloud_refreshed_at: ts,
+        ssh_probe_ok: sshOk,
+        ssh_probe_at: ts
+      });
+
+      db.prepare(
+        `UPDATE instances
+            SET public_ip=COALESCE(?,public_ip),
+                private_ip=COALESCE(?,private_ip),
+                bundle_id=COALESCE(?,bundle_id),
+                blueprint_id=COALESCE(?,blueprint_id),
+                zone=COALESCE(?,zone),
+                last_probe_at=?,
+                health_status=COALESCE(?, health_status),
+                meta_json=?
+          WHERE instance_id=?`
+      ).run(pub, priv, bundle, blueprint, zone, ts, desiredHealth, meta2, instance_id);
+      refreshed++;
     } catch (e) {
       fail++;
       db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
