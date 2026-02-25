@@ -8,11 +8,18 @@
     },
     {
       "path": "bootstrap.sh",
-      "sha256": "52904667d0f9c4b530c48b6630afa5d31e4471a030c84ad2527061c994fa6d21",
-      "bytes": 8293
+      "sha256": "166153c7c0e8992832b6b9b028c518ee1897ac37b9dbc6e3107d1bb5e7e38d1c",
+      "bytes": 12359
     },
     {
-      "path": "hooks/bothook-onboarding/handler.ts"
+      "path": "hooks/bothook-onboarding/handler.ts",
+      "sha256": "4aa542e2d863e91a34a3c1c24facb7b4052b364ed6724a8f520e715339a1bf4a",
+      "bytes": 8906
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "27f1a6a8d1bbfa333b52af7b07fcff2e8e13470734d65fcf9477de36cf37f68c",
+      "bytes": 3822
     },
     {
       "path": "plugins/bothook-wa-autoreply/index.ts",
@@ -30,22 +37,34 @@
       "bytes": 184
     },
     {
-      "path": "plugins/bothook-wa-loopback/index.ts"
+      "path": "plugins/bothook-wa-loopback/index.ts",
+      "sha256": "4dde88aeac2f991275271f8ccfb0ce115420c7fc0f266ce3987c086b30c0ae23",
+      "bytes": 2825
     },
     {
-      "path": "plugins/bothook-wa-loopback/openclaw.plugin.json"
+      "path": "plugins/bothook-wa-loopback/openclaw.plugin.json",
+      "sha256": "4ec37fff0a45ec24b0f7b0e2dc4a555c5b3ecb44b0e651a1a276ff10d205e246",
+      "bytes": 254
     },
     {
-      "path": "plugins/bothook-wa-loopback/package.json"
+      "path": "plugins/bothook-wa-loopback/package.json",
+      "sha256": "6309d043718602419093ad92e26210d4cfec4be0987dee6db175d4974c07778d",
+      "bytes": 119
     },
     {
-      "path": "plugins/bothook-wa-sendguard/index.ts"
+      "path": "plugins/bothook-wa-sendguard/index.ts",
+      "sha256": "996bc55b765bafcce2864bcd1c1e438feb99133311bbe8eae411a4b988978609",
+      "bytes": 1195
     },
     {
-      "path": "plugins/bothook-wa-sendguard/openclaw.plugin.json"
+      "path": "plugins/bothook-wa-sendguard/openclaw.plugin.json",
+      "sha256": "4ec25d9f24116fdf13c6338c8e9b7f31c62c8f2d48012b12ff68b83f831425dc",
+      "bytes": 152
     },
     {
-      "path": "plugins/bothook-wa-sendguard/package.json"
+      "path": "plugins/bothook-wa-sendguard/package.json",
+      "sha256": "1af939877bd34b317afebf12fd6f90e8659011128173dad4ac5ced04462c0e97",
+      "bytes": 120
     },
     {
       "path": "provision/package.json",
@@ -68,6 +87,11 @@
       "bytes": 6018
     },
     {
+      "path": "scripts/apply_inboundguard_v2_patch.sh",
+      "sha256": "65d36772c9d4493f66842f57e6294d776377177726c329233f5802ff976c58af",
+      "bytes": 15027
+    },
+    {
       "path": "scripts/apply_sendguard_v2_patch.sh",
       "sha256": "204932b2ec8a09dd871269c02a0a575cc21a0eab5cdcfcb47caac10aa4501d9c",
       "bytes": 1872
@@ -84,8 +108,8 @@
     },
     {
       "path": "scripts/cutover_delivered.sh",
-      "sha256": "1c5eb703eba1726f80fc9dc5bfc487beb5b1d7765d5428735307a88ee124790c",
-      "bytes": 2225
+      "sha256": "47cd4cca6e3eb1041e782a2cc8b9249dbdb501132a74f34adb3630c9c38861f8",
+      "bytes": 5330
     },
     {
       "path": "scripts/healthcheck.sh",
@@ -114,8 +138,8 @@
     },
     {
       "path": "systemd/bothook-provision.service",
-      "sha256": "38aa719711a0a8889fc6ed576dfd2d5dc792335a21138228fb6055d6509fa9bc",
-      "bytes": 636
+      "sha256": "59c05c56fadd754bb24ce8a33feb8e10d5382b05646f453ffc06f1d18f83ac71",
+      "bytes": 794
     },
     {
       "path": "systemd/openclaw-gateway.service",
