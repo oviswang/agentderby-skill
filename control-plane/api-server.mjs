@@ -1360,7 +1360,7 @@ app.get('/api/wa/status', async (req, res) => {
     const instance = getInstanceById(db, delivery.instance_id);
 
     // SINGLE-CHANNEL model: status is from `openclaw channels status`.
-    const rr = poolSsh(instance, `set -euo pipefail; openclaw channels status --probe --json 2>/dev/null || openclaw channels status --probe`, { timeoutMs: 15000, tty: false });
+    const rr = poolSsh(instance, `set -euo pipefail; openclaw status --json 2>/dev/null || openclaw status`, { timeoutMs: 15000, tty: false });
     const text = (rr.stdout || rr.stderr || '').trim();
 
     let connected = false;
@@ -1371,12 +1371,9 @@ app.get('/api/wa/status', async (req, res) => {
     // - Text mode: contains 'WhatsApp' and 'linked/connected/ready'
     try {
       const j = JSON.parse(text);
-      const w = j?.channels?.whatsapp || j?.whatsapp || null;
-      const state = String(w?.state || w?.status || '').toLowerCase();
-      connected = Boolean(w?.connected) || ['ok', 'ready', 'connected', 'linked'].includes(state);
-      // Authoritative identity is the WhatsApp self JID
-      waJid = w?.self?.jid || w?.jid || w?.wa_jid || w?.id || null;
-      if (waJid) waJid = String(waJid);
+      // openclaw status JSON: treat linked WhatsApp as connected.
+      connected = Boolean(j?.linkChannel?.id === 'whatsapp' && j?.linkChannel?.linked);
+      waJid = null;
     } catch {
       const lower = text.toLowerCase();
       // Text-mode fallback: treat "linked" as sufficient signal that QR scan succeeded.
