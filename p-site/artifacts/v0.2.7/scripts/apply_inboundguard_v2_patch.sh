@@ -64,7 +64,7 @@ import sys,re
 p=sys.argv[1]
 s=open(p,'r',encoding='utf-8').read()
 
-if 'BOTHook: inboundguard v2.12 (whatsapp)' in s:
+if 'BOTHook: inboundguard v2.13 (whatsapp)' in s:
   sys.exit(0)
 
 # Replace the entire v1 try{} block with v2.
@@ -91,8 +91,9 @@ else:
   insert_at = semi + 1
   s2 = s[:insert_at] + v2 + s[insert_at:]
 
-# v2.7: intercept after message body extraction (handleMessagesUpsert)
-if 'BOTHook: inboundguard v2.12 (whatsapp)' not in s2:
+# v2.7+: intercept after message body extraction (handleMessagesUpsert)
+# Only insert if v2.13 is not already present.
+if 'BOTHook: inboundguard v2.13 (whatsapp)' not in s2:
   anchor = "\t\t\tconst replyContext = describeReplyContext(msg.message);"
   pos = s2.find(anchor)
   if pos > 0:
