@@ -1667,16 +1667,90 @@ app.get('/api/wa/status', async (req, res) => {
       if (claimConnected) {
         // NOTE: /api/wa/status must be fast. Do not block the HTTP response with SSH-heavy operations.
         // Do the self-heal + guide send asynchronously (best-effort).
-        setTimeout(() => {
+        setTimeout(async () => {
           try {
             const { db: db2 } = openDb();
             const d2 = db2.prepare('SELECT * FROM deliveries WHERE provision_uuid = ? LIMIT 1').get(uuid);
             if (!d2) return;
-            if (!deliveryEntitled(db2, d2)) return;
-
             const inst2 = getInstanceById(db2, d2.instance_id);
             if (!inst2?.public_ip) return;
 
+            const lang = getDeliveryLang(d2);
+            const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
+            const meta = jsonMeta(d2.meta_json) || {};
+            const qrGenAt = meta.qr_generated_at ? Date.parse(meta.qr_generated_at) : null;
+
+            // Branch by entitlement:
+            // - New user (unpaid): send welcome + Stripe pay shortlink
+            // - Paid/relink: self-heal + (only if key missing/invalid) send key guide
+            if (!deliveryEntitled(db2, d2)) {
+              const welcome = prompts.welcome_unpaid;
+              const lastSentAt = meta.welcome_unpaid_sent_at ? Date.parse(meta.welcome_unpaid_sent_at) : null;
+              const lastAttemptAt = meta.welcome_unpaid_last_attempt_at ? Date.parse(meta.welcome_unpaid_last_attempt_at) : null;
+
+              const shouldSend = (!lastSentAt) || (qrGenAt && lastSentAt && qrGenAt > lastSentAt);
+              const shouldRetry = (!lastSentAt) && (!lastAttemptAt || (Date.now() - lastAttemptAt) > 60_000);
+
+              if (welcome && (shouldSend || shouldRetry)) {
+                const ts = nowIso();
+                let payShortLink = '';
+                try {
+                  const r = await fetch('http://127.0.0.1:18998/api/pay/link', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ uuid })
+                  });
+                  const t = await r.text();
+                  const j = JSON.parse(t);
+                  if (j?.ok && j?.payUrl) payShortLink = String(j.payUrl);
+                } catch {}
+
+                const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
+                // Best-effort instance specs (avoid leaving {{vars}} unreplaced)
+                let cpu='?', ram_gb='?', disk_gb='?';
+                try {
+                  const m = jsonMeta(inst2.meta_json) || {};
+                  if (m.cpu) cpu = String(m.cpu);
+                  if (m.ram_gb) ram_gb = String(m.ram_gb);
+                  if (m.disk_gb) disk_gb = String(m.disk_gb);
+                } catch {}
+                let openclawVersion='';
+                try {
+                  const vr = poolSsh(inst2, `openclaw --version 2>/dev/null || true`, { timeoutMs: 6000, tty: false, retries: 0 });
+                  openclawVersion = String(vr.stdout||'').trim();
+                } catch {}
+
+                const msg = renderTpl(welcome, {
+                  uuid,
+                  region: inst2.region || '',
+                  public_ip: inst2.public_ip || '',
+                  cpu,
+                  ram_gb,
+                  disk_gb,
+                  openclaw_version: openclawVersion,
+                  p_link: pLink,
+                  pay_countdown_minutes: 15,
+                  pay_short_link: payShortLink
+                });
+
+                const rr2 = sendSelfChatOnInstance(inst2, msg);
+                const ok = (rr2.code ?? 1) === 0;
+                const patch = ok
+                  ? { welcome_unpaid_sent_at: ts, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: true }
+                  : { welcome_unpaid_last_attempt_at: ts, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: false };
+                const meta2 = mergeMeta(d2.meta_json, patch);
+                db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts, d2.delivery_id);
+                try {
+                  db2.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                    crypto.randomUUID(), ts, 'delivery', d2.delivery_id, ok ? 'WELCOME_UNPAID_SENT' : 'WELCOME_UNPAID_SEND_FAILED',
+                    JSON.stringify({ uuid, instance_id: inst2.instance_id, exit_code: rr2.code ?? null })
+                  );
+                } catch {}
+              }
+              return;
+            }
+
+            // Paid entitlement branch
             // Self-heal delivered cutover (auth/model/config). Idempotent.
             // Also forces a fresh key re-check (avoids stale last_check_ok=false from prior transient failures).
             try { tryCutoverDelivered(db2, uuid, { reason: 'relink_connected' }); } catch {}
@@ -1702,13 +1776,9 @@ app.get('/api/wa/status', async (req, res) => {
               }
             } catch { keyOk = false; }
 
-            const lang = getDeliveryLang(d2);
-            const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
             const guide = prompts.guide_key_paid;
-            const meta = jsonMeta(d2.meta_json) || {};
             const lastSentAt = meta.guide_key_sent_at ? Date.parse(meta.guide_key_sent_at) : null;
             const lastAttemptAt = meta.guide_key_last_attempt_at ? Date.parse(meta.guide_key_last_attempt_at) : null;
-            const qrGenAt = meta.qr_generated_at ? Date.parse(meta.qr_generated_at) : null;
 
             if (guide && !keyOk) {
               // Send at most once per QR generation, but retry if previous attempts failed.
