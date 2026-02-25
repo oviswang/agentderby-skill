@@ -75,29 +75,37 @@ main(){
   # - Restrict WhatsApp inbound DMs to controller only (dm allowlist)
   # - Disable groups
   if command -v openclaw >/dev/null 2>&1; then
+    # IMPORTANT: OpenClaw config must be written as ubuntu.
+    # If run as root, openclaw.json becomes root-owned (0600) and breaks subsequent CLI/gateway operations.
+    OC="/home/ubuntu/.npm-global/bin/openclaw"
+
     # Hooks
-    openclaw config set hooks.internal.entries.bothook-onboarding.enabled false >/dev/null 2>&1 || true
+    sudo -u ubuntu "$OC" config set hooks.internal.entries.bothook-onboarding.enabled false >/dev/null 2>&1 || true
     # Legacy plugin (avoid any more auto prompts)
-    openclaw plugins disable bothook-wa-autoreply >/dev/null 2>&1 || true
+    sudo -u ubuntu "$OC" plugins disable bothook-wa-autoreply >/dev/null 2>&1 || true
 
     # Enforce OpenClaw auto-update config (idempotent)
-    openclaw config set update.channel stable >/dev/null 2>&1 || true
-    openclaw config set update.checkOnStart false >/dev/null 2>&1 || true
-    openclaw config set update.auto.enabled true >/dev/null 2>&1 || true
-    openclaw config set update.auto.stableDelayHours 6 >/dev/null 2>&1 || true
-    openclaw config set update.auto.stableJitterHours 12 >/dev/null 2>&1 || true
-    openclaw config set update.auto.betaCheckIntervalHours 1 >/dev/null 2>&1 || true
+    sudo -u ubuntu "$OC" config set update.channel stable >/dev/null 2>&1 || true
+    sudo -u ubuntu "$OC" config set update.checkOnStart false >/dev/null 2>&1 || true
+    sudo -u ubuntu "$OC" config set update.auto.enabled true >/dev/null 2>&1 || true
+    sudo -u ubuntu "$OC" config set update.auto.stableDelayHours 6 >/dev/null 2>&1 || true
+    sudo -u ubuntu "$OC" config set update.auto.stableJitterHours 12 >/dev/null 2>&1 || true
+    sudo -u ubuntu "$OC" config set update.auto.betaCheckIntervalHours 1 >/dev/null 2>&1 || true
 
     # WhatsApp inbound policy (controller-only)
     controller="${BOTHOOK_CONTROLLER_E164:-}"
     if [[ -n "$controller" ]]; then
-      openclaw config set channels.whatsapp.dmPolicy allowlist >/dev/null 2>&1 || true
-      openclaw config set channels.whatsapp.allowFrom "[\"$controller\"]" >/dev/null 2>&1 || true
-      openclaw config set channels.whatsapp.groupPolicy disabled >/dev/null 2>&1 || true
+      sudo -u ubuntu "$OC" config set channels.whatsapp.dmPolicy allowlist >/dev/null 2>&1 || true
+      sudo -u ubuntu "$OC" config set channels.whatsapp.allowFrom "[\"$controller\"]" >/dev/null 2>&1 || true
+      sudo -u ubuntu "$OC" config set channels.whatsapp.groupPolicy disabled >/dev/null 2>&1 || true
       log "whatsapp inbound restricted to controller: $controller"
     else
       log "BOTHOOK_CONTROLLER_E164 missing; skip whatsapp allowlist"
     fi
+
+    # Ensure config ownership
+    chown ubuntu:ubuntu /home/ubuntu/.openclaw/openclaw.json 2>/dev/null || true
+    chmod 600 /home/ubuntu/.openclaw/openclaw.json 2>/dev/null || true
   fi
 
   # 4) Restart gateway to apply config changes
