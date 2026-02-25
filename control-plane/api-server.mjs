@@ -81,7 +81,48 @@ function sendSelfChatOnInstance(instance, text){
     + `openclaw message send --channel whatsapp --target "$SELF" --message ${JSON.stringify(String(text||''))} --json`;
   return poolSsh(instance, cmd, { timeoutMs: 15000, tty:false, retries: 1 });
 }
-import { encryptAesGcm } from './lib/crypto.mjs';
+
+function writeOpenAiAuthOnInstance(db, instance, { uuid } = {}) {
+  try {
+    const safeUuid = String(uuid || '').trim();
+    if (!safeUuid) return { ok:false, error:'uuid_required' };
+
+    const row = db.prepare('SELECT ciphertext, iv, tag, alg FROM delivery_secrets WHERE provision_uuid=? AND kind=? LIMIT 1').get(safeUuid, 'openai_api_key');
+    if (!row?.ciphertext || !row?.iv || !row?.tag) return { ok:false, error:'missing_secret' };
+
+    // Fields are stored as blobs by better-sqlite3; normalize to Buffer.
+    const ciphertext = Buffer.isBuffer(row.ciphertext) ? row.ciphertext : Buffer.from(row.ciphertext);
+    const iv = Buffer.isBuffer(row.iv) ? row.iv : Buffer.from(row.iv);
+    const tag = Buffer.isBuffer(row.tag) ? row.tag : Buffer.from(row.tag);
+
+    const key = decryptAesGcm({ iv, tag, ciphertext }).toString('utf8').trim();
+    if (!key) return { ok:false, error:'decrypt_failed' };
+
+    const authStore = {
+      version: 1,
+      profiles: {
+        'openai:manual': { type: 'api_key', provider: 'openai', key }
+      },
+      order: { openai: ['openai:manual'] }
+    };
+
+    const b64 = Buffer.from(JSON.stringify(authStore, null, 2) + '\n', 'utf8').toString('base64');
+    const remote = `set -euo pipefail; `
+      + `AGENT_DIR=/home/ubuntu/.openclaw/agents/main/agent; `
+      + `mkdir -p "$AGENT_DIR"; `
+      + `echo '${b64}' | base64 -d > /tmp/auth-profiles.json; `
+      + `sudo install -o ubuntu -g ubuntu -m 600 /tmp/auth-profiles.json "$AGENT_DIR/auth-profiles.json"; `
+      + `rm -f /tmp/auth-profiles.json; `
+      + `openclaw models set gpt >/dev/null 2>&1 || true; `
+      + `echo ok`;
+
+    const r = poolSsh(instance, remote, { timeoutMs: 20000, tty: false, retries: 1 });
+    return { ok: (r.code ?? 1) == 0, ssh_code: r.code ?? 1, stderr: (r.stderr||'').slice(0,200) };
+  } catch (e) {
+    return { ok:false, error: e?.message || String(e) };
+  }
+}
+import { encryptAesGcm, decryptAesGcm } from './lib/crypto.mjs';
 import { verifyOpenAiKey } from './lib/openai_verify.mjs';
 
 const PORT = parseInt(process.env.BOTHOOK_API_PORT || '18998', 10);
@@ -475,7 +516,14 @@ function tryCutoverDelivered(db, uuid, { reason } = {}) {
   const controller = waJidToE164(d.wa_jid);
   const ts = nowIso();
 
-  // Trigger cutover script on the user machine (idempotent).
+  // 0) Sync verified OpenAI key onto the user machine's OpenClaw auth store (auth-profiles.json)
+  // This is required for the model-driven assistant to work post-delivery.
+  const authSync = writeOpenAiAuthOnInstance(db, inst, { uuid });
+  if (!authSync.ok) {
+    return { ok:false, delivered:false, skip:'auth_sync_failed', detail: authSync };
+  }
+
+  // 1) Trigger cutover script on the user machine (idempotent).
   const remote = `set -euo pipefail; sudo -n true; `
     + `BOTHOOK_UUID='${uuid}' BOTHOOK_CONTROLLER_E164='${controller || ''}' sudo -E /opt/bothook/bin/cutover_delivered.sh`;
 
