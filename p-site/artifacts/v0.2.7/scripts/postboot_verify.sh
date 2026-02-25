@@ -17,6 +17,31 @@ errs=()
 svc_active(){ systemctl is-active --quiet "$1"; }
 port_listen(){ ss -ltn 2>/dev/null | grep -q ":$1"; }
 
+# Config sanity gate (prevents gateway from getting stuck in "Config invalid. Waiting...")
+# Common cause: user/agent writes openclaw.json containing ${VAR} which triggers env substitution.
+fix_config_if_needed(){
+  local p="/home/ubuntu/.openclaw/openclaw.json"
+  # Ensure readable by ubuntu
+  chown ubuntu:ubuntu "$p" 2>/dev/null || true
+  chmod 600 "$p" 2>/dev/null || true
+
+  if grep -Eq '\$\{[A-Za-z_][A-Za-z0-9_]*\}' "$p" 2>/dev/null; then
+    errs+=("openclaw.json contains env-style \${VAR} placeholders; auto-rollback")
+    local bak
+    bak=$(ls -t /home/ubuntu/.openclaw/openclaw.json.bak.* 2>/dev/null | head -n1 || true)
+    if [[ -n "$bak" ]]; then
+      cp -a "$bak" "$p" 2>/dev/null || true
+      chown ubuntu:ubuntu "$p" 2>/dev/null || true
+      chmod 600 "$p" 2>/dev/null || true
+    fi
+  fi
+
+  # Apply doctor fixes (best-effort) to keep schema-valid config.
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw doctor --fix >/dev/null 2>&1 || true
+}
+
+fix_config_if_needed
+
 # Check services
 if ! svc_active openclaw-gateway.service; then ok=false; errs+=("openclaw-gateway.service not active"); fi
 if ! svc_active bothook-provision.service; then ok=false; errs+=("bothook-provision.service not active"); fi

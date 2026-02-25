@@ -108,7 +108,23 @@ main(){
     chmod 600 /home/ubuntu/.openclaw/openclaw.json 2>/dev/null || true
   fi
 
-  # 4) Restart gateway to apply config changes
+  # 4) Config sanity gate + restart gateway to apply config changes
+  # Prevent gateway from getting stuck in "Config invalid. Waiting..." due to env placeholders like ${VAR}.
+  if [[ -f /home/ubuntu/.openclaw/openclaw.json ]]; then
+    if grep -Eq '\$\{[A-Za-z_][A-Za-z0-9_]*\}' /home/ubuntu/.openclaw/openclaw.json 2>/dev/null; then
+      log "WARN: openclaw.json contains env-style placeholders; attempting rollback"
+      bak=$(ls -t /home/ubuntu/.openclaw/openclaw.json.bak.* 2>/dev/null | head -n1 || true)
+      if [[ -n "$bak" ]]; then
+        cp -a "$bak" /home/ubuntu/.openclaw/openclaw.json 2>/dev/null || true
+        chown ubuntu:ubuntu /home/ubuntu/.openclaw/openclaw.json 2>/dev/null || true
+        chmod 600 /home/ubuntu/.openclaw/openclaw.json 2>/dev/null || true
+      fi
+    fi
+  fi
+
+  # Apply doctor fixes (best-effort)
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw doctor --fix >/dev/null 2>&1 || true
+
   if systemctl list-unit-files | grep -q '^openclaw-gateway\.service'; then
     systemctl restart openclaw-gateway.service || true
     log "openclaw-gateway.service restarted"
