@@ -725,6 +725,68 @@ app.use(express.json({ limit: '256kb', verify: (req, res, buf) => { req.rawBody 
 
 app.get('/healthz', (req, res) => res.type('text/plain').send('ok'));
 
+// Web analytics tracking (first-party, minimal)
+// Used for hourly funnel reports and future ads attribution.
+app.post('/api/track', (req, res) => {
+  try {
+    const { db } = openDb();
+    const ts = nowIso();
+
+    const ev = String(req.body?.event_type || '').trim().toUpperCase();
+    const allow = new Set([
+      'WEB_VISIT','WEB_CTA_CLICK',
+      'P_VISIT','P_RELINK_CLICK'
+    ]);
+    if (!allow.has(ev)) return send(res, 400, { ok:false, error:'event_type_not_allowed' });
+
+    const uuid = req.body?.uuid ? String(req.body.uuid).trim() : '';
+    const vid = req.body?.vid ? String(req.body.vid).trim() : '';
+    const lang = req.body?.lang ? String(req.body.lang).trim().toLowerCase() : '';
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').trim();
+
+    const payload = {
+      event_type: ev,
+      ts,
+      host,
+      uuid: uuid || null,
+      vid: vid || null,
+      lang: lang || null,
+      path: req.body?.path ? String(req.body.path).slice(0,300) : null,
+      referrer: req.body?.referrer ? String(req.body.referrer).slice(0,500) : null,
+      utm: req.body?.utm && typeof req.body.utm === 'object' ? req.body.utm : null,
+      click: req.body?.click && typeof req.body.click === 'object' ? req.body.click : null,
+      tz: req.body?.tz ? String(req.body.tz).slice(0,80) : null,
+      ua: req.body?.ua ? String(req.body.ua).slice(0,300) : null,
+      dedupe_key: req.body?.dedupe_key ? String(req.body.dedupe_key).slice(0,200) : null
+    };
+
+    // Persistent dedupe (best-effort)
+    // If dedupe_key present, ignore duplicates within 30 minutes.
+    if (payload.dedupe_key) {
+      db.exec(`CREATE TABLE IF NOT EXISTS track_dedupe (
+        dedupe_key TEXT PRIMARY KEY,
+        event_type TEXT,
+        created_at TEXT
+      )`);
+      const cutoff = new Date(Date.now() - 30*60*1000).toISOString();
+      try { db.prepare('DELETE FROM track_dedupe WHERE created_at < ?').run(cutoff); } catch {}
+      const dk = `${ev}:${payload.dedupe_key}`;
+      const ex = db.prepare('SELECT dedupe_key FROM track_dedupe WHERE dedupe_key=? LIMIT 1').get(dk);
+      if (ex?.dedupe_key) return send(res, 200, { ok:true, deduped:true });
+      db.prepare('INSERT OR IGNORE INTO track_dedupe(dedupe_key,event_type,created_at) VALUES (?,?,?)').run(dk, ev, ts);
+    }
+
+    const entity_type = uuid ? 'delivery' : 'web';
+    const entity_id = uuid || vid || '';
+    db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+      .run(crypto.randomUUID(), ts, entity_type, entity_id, ev, JSON.stringify(payload));
+
+    return send(res, 200, { ok:true });
+  } catch (e) {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 // Ops: pool init job runner (no autonomous tasks; explicit ops call only)
 const poolInitJobs = new Map(); // job_id -> { status, startedAt, endedAt, instance_id, mode, log:[] }
 let poolInitBusy = false;
