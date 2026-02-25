@@ -73,6 +73,22 @@ function deliveryEntitled(db, delivery){
   }
 }
 
+function getAttributionForUuid(db, uuid){
+  try {
+    const u = String(uuid || '').trim();
+    if (!u) return null;
+    // uuid attribution
+    const r = db.prepare('SELECT payload_json FROM attributions WHERE uuid=? LIMIT 1').get(u);
+    if (r?.payload_json) return JSON.parse(r.payload_json);
+    // uuid->vid->vid attribution
+    const m = db.prepare('SELECT vid FROM uuid_vid_map WHERE uuid=? LIMIT 1').get(u);
+    const vid = m?.vid ? String(m.vid) : '';
+    if (!vid) return null;
+    const v = db.prepare('SELECT payload_json FROM vid_attributions WHERE vid=? LIMIT 1').get(vid);
+    return v?.payload_json ? JSON.parse(v.payload_json) : null;
+  } catch { return null; }
+}
+
 function sendSelfChatOnInstance(instance, text){
   // Derive self e164 from channel status JSON, then send via gateway.
   const cmd = `set -euo pipefail; `
@@ -1739,7 +1755,7 @@ app.post('/api/pay/link', async (req, res) => {
         // Funnel: pay link opened/served
         try {
           db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-            crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'reused', attr: getAttr(uuid) })
+            crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'reused', attr: getAttributionForUuid(db, uuid) })
           );
         } catch {}
         return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, payUrl: baseUrlForShortlinks()+lockedCode, expiresAt: (row && row.expires_at) ? row.expires_at : expiresAt });
@@ -1756,7 +1772,7 @@ app.post('/api/pay/link', async (req, res) => {
       // Funnel: pay link opened/served
       try {
         db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-          crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'reused_existing', attr: getAttr(uuid) })
+          crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'reused_existing', attr: getAttributionForUuid(db, uuid) })
         );
       } catch {}
       return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, payUrl: baseUrlForShortlinks()+existing.code, expiresAt: existing.expires_at || expiresAt });
@@ -1794,7 +1810,7 @@ app.post('/api/pay/link', async (req, res) => {
     // Funnel: pay link opened/served
     try {
       db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-        crypto.randomUUID(), ts2, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'created', attr: getAttr(uuid) })
+        crypto.randomUUID(), ts2, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'created', attr: getAttributionForUuid(db, uuid) })
       );
     } catch {}
 
