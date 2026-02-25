@@ -1478,13 +1478,14 @@ app.get('/api/wa/status', async (req, res) => {
             if (!inst2?.public_ip) return;
 
             // Self-heal delivered cutover (auth/model/config). Idempotent.
+            // Also forces a fresh key re-check (avoids stale last_check_ok=false from prior transient failures).
             try { tryCutoverDelivered(db2, uuid, { reason: 'relink_connected' }); } catch {}
+            try { writeOpenAiAuthOnInstance(db2, inst2, { uuid }); } catch {}
 
             // Decide whether we need to proactively ask for key.
             // Rule:
             // - If key missing OR last_check_ok=false -> send guide_key_paid.
             // - If last_check_ok=true -> do NOT send guide.
-            // The cutover self-heal above updates delivery_secrets.meta_json.last_check_ok.
             let keyOk = false;
             try {
               const ks = db2.prepare('SELECT meta_json FROM delivery_secrets WHERE provision_uuid=? AND kind=? LIMIT 1').get(uuid, 'openai_api_key');
