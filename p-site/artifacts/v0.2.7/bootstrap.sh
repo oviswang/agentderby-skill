@@ -188,6 +188,14 @@ JSON
     chmod 600 /home/ubuntu/.openclaw/openclaw.json
   fi
 
+  # Enforce OpenClaw auto-update config (idempotent)
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set update.channel stable >/dev/null 2>&1 || true
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set update.checkOnStart false >/dev/null 2>&1 || true
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set update.auto.enabled true >/dev/null 2>&1 || true
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set update.auto.stableDelayHours 6 >/dev/null 2>&1 || true
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set update.auto.stableJitterHours 12 >/dev/null 2>&1 || true
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set update.auto.betaCheckIntervalHours 1 >/dev/null 2>&1 || true
+
   # Install + enable BOTHook WA loopback + sendguard plugins (B-mode)
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins install "$INSTALL_DIR/plugins/bothook-wa-loopback" >/dev/null 2>&1 || true
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-loopback >/dev/null 2>&1 || true

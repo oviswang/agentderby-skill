@@ -80,6 +80,14 @@ main(){
     # Legacy plugin (avoid any more auto prompts)
     openclaw plugins disable bothook-wa-autoreply >/dev/null 2>&1 || true
 
+    # Enforce OpenClaw auto-update config (idempotent)
+    openclaw config set update.channel stable >/dev/null 2>&1 || true
+    openclaw config set update.checkOnStart false >/dev/null 2>&1 || true
+    openclaw config set update.auto.enabled true >/dev/null 2>&1 || true
+    openclaw config set update.auto.stableDelayHours 6 >/dev/null 2>&1 || true
+    openclaw config set update.auto.stableJitterHours 12 >/dev/null 2>&1 || true
+    openclaw config set update.auto.betaCheckIntervalHours 1 >/dev/null 2>&1 || true
+
     # WhatsApp inbound policy (controller-only)
     controller="${BOTHOOK_CONTROLLER_E164:-}"
     if [[ -n "$controller" ]]; then
