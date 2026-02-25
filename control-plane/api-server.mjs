@@ -564,6 +564,24 @@ function tryCutoverDelivered(db, uuid, { reason } = {}) {
     return { ok:true, skip:'already_delivered' };
   }
 
+  // Reconcile: if user machine already has DELIVERED.json, but DB status isn't DELIVERED, fix DB.
+  try {
+    const inst0 = getInstanceById(db, d.instance_id);
+    if (inst0?.public_ip) {
+      const rr = poolSsh(inst0, `set -euo pipefail; test -f /opt/bothook/DELIVERED.json && cat /opt/bothook/DELIVERED.json`, { timeoutMs: 12000, tty: false, retries: 0 });
+      if ((rr.code ?? 1) === 0 && String(rr.stdout||'').includes('"delivery_status"')) {
+        const ts = nowIso();
+        const row = db.prepare('SELECT meta_json FROM deliveries WHERE provision_uuid=?').get(uuid);
+        const meta2 = mergeMeta(row?.meta_json || null, { delivered_at: ts, cutover_reason: reason || 'reconcile_marker' });
+        db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE provision_uuid=?').run('DELIVERED', ts, meta2, uuid);
+        db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)').run(
+          crypto.randomUUID(), ts, 'delivery', uuid, 'CUTOVER_DELIVERED_RECONCILED', JSON.stringify({ uuid, instance_id: d.instance_id, reason: reason || null })
+        );
+        // Continue below to ensure auth sync etc.
+      }
+    }
+  } catch {}
+
   const linked = Boolean(d.wa_jid);
   const paid = isPaid(db, uuid);
   const verified = isKeyVerified(db, uuid);
