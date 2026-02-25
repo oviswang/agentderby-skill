@@ -70,9 +70,18 @@ ensure_openclaw(){
   local uhome="/home/ubuntu"
   local prefix="$uhome/.npm-global"
 
+  local pinned_ver="2026.2.24"
+  local tarball_url="https://p.bothook.me/artifacts/openclaw/openclaw-${pinned_ver}.tgz"
+
+  # If already pinned, keep.
   if command -v openclaw >/dev/null 2>&1; then
-    log "openclaw already installed: $(openclaw --version 2>/dev/null || true)"
-    return 0
+    local have=""
+    have="$(openclaw --version 2>/dev/null || true)"
+    if [[ "$have" == "$pinned_ver" ]]; then
+      log "openclaw already installed (pinned): $have"
+      return 0
+    fi
+    log "openclaw present but not pinned (have=$have want=$pinned_ver); upgrading"
   fi
 
   log "Configuring npm prefix for ubuntu: $prefix"
@@ -82,15 +91,24 @@ ensure_openclaw(){
   # Ensure future `npm i -g` by ubuntu installs into ~/.npm-global.
   sudo -u ubuntu npm config set prefix "$prefix" >/dev/null
 
-  log "Installing OpenClaw via npm (as ubuntu): $OPENCLAW_NPM_VERSION"
-  sudo -u ubuntu npm install -g "$OPENCLAW_NPM_VERSION"
+  # 1) Prefer npm registry pinned version.
+  log "Installing OpenClaw pinned via npm (as ubuntu): openclaw@$pinned_ver"
+  if sudo -u ubuntu npm install -g "openclaw@${pinned_ver}"; then
+    :
+  else
+    # 2) Fallback to our hosted tarball.
+    log "npm registry install failed; fallback to tarball: $tarball_url"
+    local tmp=/tmp/openclaw.tgz
+    curl -fsSL "$tarball_url" -o "$tmp"
+    sudo -u ubuntu npm install -g "$tmp"
+  fi
 
   # Ensure the binary is reachable.
   if [[ -x "$prefix/bin/openclaw" ]]; then
     ln -sf "$prefix/bin/openclaw" /usr/local/bin/openclaw || true
   fi
 
-  log "openclaw installed: $prefix/bin/openclaw"
+  log "openclaw installed: $prefix/bin/openclaw ($(sudo -u ubuntu $prefix/bin/openclaw --version 2>/dev/null || true))"
 }
 
 main(){
