@@ -105,12 +105,21 @@ function writeOpenAiAuthOnInstance(db, instance, { uuid } = {}) {
     let verifyOk = false;
     let verifyErr = null;
     try {
-      // Keep key out of argv by passing via env.
-      const r = sh(`set -euo pipefail; OPENAI_API_KEY=${JSON.stringify(key)} curl -sS -o /dev/null -w "%{http_code}" --max-time 10 https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"`, { timeoutMs: 12000 });
-      const http = String(r.stdout || '').trim();
-      verifyOk = http === '200';
-      if (!verifyOk) verifyErr = `http_${http || 'unknown'}`;
-    } catch (e) {
+      // Keep key out of argv by passing via env. Verify via a node helper (more robust than parsing curl output).
+      const envKey = JSON.stringify(key);
+      const r = sh(
+        `set -euo pipefail; OPENAI_API_KEY=${envKey} node - <<'NODE'\
+import { verifyOpenAiKey } from './lib/openai_verify.mjs';\
+const key = process.env.OPENAI_API_KEY || '';\
+const out = await verifyOpenAiKey(key, { timeoutMs: 10000 });\
+console.log(JSON.stringify(out));\
+NODE`,
+        { timeoutMs: 15000 }
+      );
+      const j = JSON.parse(String(r.stdout || '{}'));
+      verifyOk = Boolean(j?.ok);
+      verifyErr = verifyOk ? null : (j?.error || 'key_invalid');
+    } catch {
       verifyOk = false;
       verifyErr = 'verify_failed';
     }
