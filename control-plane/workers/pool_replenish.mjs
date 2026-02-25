@@ -65,8 +65,13 @@ function tccli(cmd) {
 
 function postJson(url, body) {
   const payload = JSON.stringify(body);
-  const out = sh(`curl -s -X POST ${JSON.stringify(url)} -H 'content-type: application/json' --data-binary ${JSON.stringify(payload)}`);
+  const out = sh(`curl -s --max-time 8 -X POST ${JSON.stringify(url)} -H 'content-type: application/json' --data-binary ${JSON.stringify(payload)}`);
   return JSON.parse(out);
+}
+
+function getJson(url) {
+  const out = sh(`curl -s --max-time 2 ${JSON.stringify(url)}`);
+  return JSON.parse(out || '{}');
 }
 
 function loadEnvFile(p) {
@@ -196,7 +201,12 @@ function main() {
       console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'init_busy_suppress_create', total, ready, active_init: Number(busy?.active||0) }, null, 2));
       return;
     }
-  } catch {}
+  } catch {
+    // Fail-closed: if busy signal is unreachable (e.g. API server blocked by a long init),
+    // suppress create to avoid over-provision.
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'init_busy_suppress_create_unreachable', total, ready }, null, 2));
+    return;
+  }
 
   // Prefer repairing NEEDS_VERIFY
   if (needs?.instance_id) {
