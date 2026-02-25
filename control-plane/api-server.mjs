@@ -1640,6 +1640,12 @@ app.post('/api/stripe/webhook', async (req, res) => {
               const subJson = await subResp.json().catch(()=>null);
               if (subResp.ok && subJson) {
                 const user_id = uid || subJson?.metadata?.provision_uuid || subJson?.metadata?.uuid || null;
+                if (!user_id) {
+                  try {
+                    db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+                      .run(crypto.randomUUID(), ts, 'stripe', String(subId), 'STRIPE_SUB_UUID_MISSING', JSON.stringify({ type: type2, subId: String(subId) }));
+                  } catch {}
+                }
                 if (user_id) {
                   upsertSub.run(
                     String(subJson.id || subId),
@@ -1655,6 +1661,24 @@ app.post('/api/stripe/webhook', async (req, res) => {
                     ts,
                     ts
                   );
+
+                  // On payment failure: start grace window immediately (best-effort)
+                  if (type2 === 'invoice.payment_failed') {
+                    try {
+                      const d = getDeliveryByUuid(db, String(user_id));
+                      if (d) {
+                        // Only set if missing to preserve the first observation timestamp.
+                        let meta0 = {};
+                        try { meta0 = d.meta_json ? JSON.parse(d.meta_json) : {}; } catch { meta0 = {}; }
+                        if (!meta0.payment_failed_since) {
+                          const meta = mergeMeta(d.meta_json, { payment_failed_since: ts, payment_failed_provider_sub_id: String(subId) });
+                          db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta, ts, d.delivery_id);
+                          db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+                            .run(crypto.randomUUID(), ts, 'delivery', d.delivery_id, 'PAYMENT_FAILED_GRACE_START', JSON.stringify({ provider_sub_id: String(subId), status: String(subJson.status || '') }));
+                        }
+                      }
+                    } catch {}
+                  }
 
                   // Clear grace marker when recovered
                   if (type2 === 'invoice.paid') {
@@ -1681,6 +1705,12 @@ app.post('/api/stripe/webhook', async (req, res) => {
         const subId = sub?.id || null;
         if (subId) {
           const user_id = findUuidBySubId(subId) || sub?.metadata?.provision_uuid || sub?.metadata?.uuid || null;
+          if (!user_id) {
+            try {
+              db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+                .run(crypto.randomUUID(), ts, 'stripe', String(subId), 'STRIPE_SUB_UUID_MISSING', JSON.stringify({ type: type2, subId: String(subId) }));
+            } catch {}
+          }
           if (user_id) {
             upsertSub.run(
               String(subId),
