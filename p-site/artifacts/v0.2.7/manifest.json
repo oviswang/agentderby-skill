@@ -8,8 +8,8 @@
     },
     {
       "path": "bootstrap.sh",
-      "sha256": "166153c7c0e8992832b6b9b028c518ee1897ac37b9dbc6e3107d1bb5e7e38d1c",
-      "bytes": 12359
+      "sha256": "eb2515bb3be35d4df4e83a376e79459aa4549e1b8c02a82dfb67880945d21144",
+      "bytes": 13066
     },
     {
       "path": "hooks/bothook-onboarding/handler.ts",
@@ -18,8 +18,8 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "5a443061d091ed7dd8592caf258a0d32a08ecc7c523553be3fd58cec074d79d9",
-      "bytes": 4876
+      "sha256": "3a5f0d12a5797ca1af6f4e45cdc3a6077ce7a594eff2c19e0bb9c2c9e3e02837",
+      "bytes": 4877
     },
     {
       "path": "plugins/bothook-wa-autoreply/index.ts",
