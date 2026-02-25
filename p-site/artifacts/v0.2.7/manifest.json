@@ -8,8 +8,8 @@
     },
     {
       "path": "bootstrap.sh",
-      "sha256": "256d3780c2dcbf97f33755f5e39813c06b7f8637ec23a315465381b9c1b8ab57",
-      "bytes": 14702
+      "sha256": "1edf97cb77f07f0195315bd769b3261ff37af367651aa0c28f3aa36ef9f94514",
+      "bytes": 14748
     },
     {
       "path": "hooks/bothook-onboarding/handler.ts",
@@ -18,7 +18,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "d7b7f76bd025750695eec434bbc786633ff207449ba76ba52438e1d28c6dde8f",
+      "sha256": "d330521998e6df1874c213451c0b4519ea3d58cf3b440d3b8d283a1897872548",
       "bytes": 4877
     },
     {
