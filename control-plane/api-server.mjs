@@ -760,6 +760,22 @@ app.post('/api/track', (req, res) => {
       dedupe_key: req.body?.dedupe_key ? String(req.body.dedupe_key).slice(0,200) : null
     };
 
+    // Persist attribution snapshot for this UUID (first-touch + last-touch), used by payment/cancel events.
+    if (uuid) {
+      try {
+        db.exec(`CREATE TABLE IF NOT EXISTS attributions (
+          uuid TEXT PRIMARY KEY,
+          first_ts TEXT,
+          last_ts TEXT,
+          payload_json TEXT
+        )`);
+        const existing = db.prepare('SELECT first_ts FROM attributions WHERE uuid=? LIMIT 1').get(uuid);
+        const firstTs = existing?.first_ts || ts;
+        db.prepare('INSERT OR REPLACE INTO attributions(uuid, first_ts, last_ts, payload_json) VALUES (?,?,?,?)')
+          .run(uuid, firstTs, ts, JSON.stringify(payload));
+      } catch {}
+    }
+
     // Persistent dedupe (best-effort)
     // If dedupe_key present, ignore duplicates within 30 minutes.
     if (payload.dedupe_key) {
@@ -1783,6 +1799,25 @@ app.post('/api/stripe/webhook', async (req, res) => {
       eventId, ts, 'stripe', eventId, type, JSON.stringify({ uuid, delivery_id, object: obj })
     );
 
+    // Attribution snapshot (best-effort): join by uuid when available.
+    // Ensure table exists (created lazily to avoid schema migrations).
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS attributions (
+        uuid TEXT PRIMARY KEY,
+        first_ts TEXT,
+        last_ts TEXT,
+        payload_json TEXT
+      )`);
+    } catch {}
+
+    const getAttr = (u) => {
+      try {
+        if (!u) return null;
+        const r = db.prepare('SELECT payload_json FROM attributions WHERE uuid=? LIMIT 1').get(String(u));
+        return r?.payload_json ? JSON.parse(r.payload_json) : null;
+      } catch { return null; }
+    };
+
     // Minimal state transitions
     if (type === 'checkout.session.completed') {
       // Mark delivery paid (MVP)
@@ -1793,6 +1828,10 @@ app.post('/api/stripe/webhook', async (req, res) => {
         db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?').run('PAID', ts, meta2, delivery_id);
         db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
           crypto.randomUUID(), ts, 'delivery', delivery_id, 'PAYMENT_CONFIRMED', JSON.stringify({ uuid, stripe_event_id: eventId })
+        );
+        // Normalized funnel event
+        db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+          crypto.randomUUID(), ts, 'delivery', delivery_id, 'PAYMENT_PAID', JSON.stringify({ uuid, delivery_id, stripe_event_id: eventId, attr: getAttr(uuid) })
         );
         // If key already verified + linked, cutover now.
         try { tryCutoverDelivered(db, uuid, { reason: 'payment_confirmed' }); } catch {}
@@ -1877,6 +1916,9 @@ app.post('/api/stripe/webhook', async (req, res) => {
                           db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta, ts, d.delivery_id);
                           db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
                             .run(crypto.randomUUID(), ts, 'delivery', d.delivery_id, 'PAYMENT_FAILED_GRACE_START', JSON.stringify({ provider_sub_id: String(subId), status: String(subJson.status || '') }));
+                          // Normalized funnel event
+                          db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+                            .run(crypto.randomUUID(), ts, 'delivery', d.delivery_id, 'PAYMENT_FAILED', JSON.stringify({ uuid: String(user_id), provider_sub_id: String(subId), status: String(subJson.status || ''), attr: getAttr(String(user_id)) }));
                         }
                       }
                     } catch {}
@@ -1890,6 +1932,12 @@ app.post('/api/stripe/webhook', async (req, res) => {
                         const meta = mergeMeta(d.meta_json, { payment_failed_since: null });
                         db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta, ts, d.delivery_id);
                       }
+                    } catch {}
+
+                    // Normalized funnel event
+                    try {
+                      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+                        .run(crypto.randomUUID(), ts, 'delivery', String(user_id), 'PAYMENT_PAID', JSON.stringify({ uuid: String(user_id), provider_sub_id: String(subId), attr: getAttr(String(user_id)) }));
                     } catch {}
 
                     // If key already verified + linked, cutover now.
@@ -1928,6 +1976,14 @@ app.post('/api/stripe/webhook', async (req, res) => {
               ts,
               ts
             );
+
+            // Normalize cancel signal
+            if (type2 === 'customer.subscription.deleted' || String(sub?.status || '').toLowerCase() === 'canceled') {
+              try {
+                db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+                  .run(crypto.randomUUID(), ts, 'delivery', String(user_id), 'SUB_CANCELED', JSON.stringify({ uuid: String(user_id), provider_sub_id: String(subId), status: String(sub?.status || ''), attr: getAttr(String(user_id)) }));
+              } catch {}
+            }
 
             if (String(sub?.status || '').toLowerCase() in { active:1, trialing:1 }) {
               try { tryCutoverDelivered(db, String(user_id), { reason: 'subscription_updated' }); } catch {}
