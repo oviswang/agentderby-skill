@@ -20,7 +20,7 @@ if (( ${#FILES[@]} == 0 )); then
 fi
 
 STAMP=$(date -Is)
-MARKER="BOTHook: suppress embedded-agent missing-key warning (anthropic)"
+MARKER="BOTHook: suppress embedded-agent missing-key warning (missing-key) v3"
 
 echo "targets=${#FILES[@]}"
 for f in "${FILES[@]}"; do
@@ -47,18 +47,33 @@ needles=[
   "\t\t\t\tawait deliverWebReply\\(\\{",
   "\t\t\t\tawait deliverWebReply\(\{",
 ]
-marker="\t\t\t\t// BOTHook: suppress embedded-agent missing-key warning (anthropic) before WhatsApp send\n"
+marker="\t\t\t\t// BOTHook: suppress embedded-agent missing-key warning (missing-key) v3 before WhatsApp send\n"
 block=(
 "\t\t\t\ttry {\n"
-"\t\t\t\t\tconst t = payload?.text != null ? String(payload.text) : \"\";\n"
-"\t\t\t\t\tif (/No API key found for provider \\\"anthropic\\\"/i.test(t) && /Agent failed before reply/i.test(t)) {\n"
+"\t\t\t\t\tconst t = (payload?.text != null ? String(payload.text)\n"
+"\t\t\t\t\t  : payload?.content != null ? String(payload.content)\n"
+"\t\t\t\t\t  : payload?.message?.text != null ? String(payload.message.text)\n"
+"\t\t\t\t\t  : (() => { try { return JSON.stringify(payload); } catch { return \"\"; } })());\n"
+"\t\t\t\t\tif ((/No API key found for provider\\s+\\\"anthropic\\\"/i.test(t) || /No API key found for provider\\s+\\\"/i.test(t))\n"
+"\t\t\t\t\t    && (/Agent failed before reply/i.test(t) || /Auth store:/i.test(t))) {\n"
 "\t\t\t\t\t\treturn;\n"
 "\t\t\t\t\t}\n"
 "\t\t\t\t} catch {}\n"
 )
-if "BOTHook: suppress embedded-agent missing-key warning (anthropic)" in s:
-  print('already')
-  sys.exit(0)
+
+# If already patched with older marker, replace the injected block.
+if "BOTHook: suppress embedded-agent missing-key warning" in s:
+  for needle in needles:
+    if needle in s:
+      i=s.find("// BOTHook: suppress embedded-agent missing-key warning")
+      if i>=0:
+        j=s.find(needle, i)
+        if j>i:
+          s2=s[:i] + marker + block + s[j:]
+          open(p,'w',encoding='utf-8').write(s2)
+          print('repatched')
+          sys.exit(0)
+
 for needle in needles:
   if needle in s:
     s2=s.replace(needle, marker+block+needle, 1)
