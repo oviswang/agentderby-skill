@@ -1,13 +1,21 @@
 # Localhost policy (owner rule)
 
-## Hard rule: do not touch local OpenClaw config without explicit consent
+## Hard rule: do not touch *localhost* OpenClaw config without explicit consent
 
-- **Strictly forbidden**: any operation that reads/writes/patches/overwrites local OpenClaw config file `~/.openclaw/openclaw.json` **unless the owner explicitly agrees in chat**.
+**Scope clarification (important):**
+- **Localhost** = this control-plane/master host where the agent is running.
+- **User machine** = any provisioned/allocated instance (e.g. `43.160.238.29`) accessed over SSH.
+
+### Localhost rule
+- **Strictly forbidden**: any operation that reads/writes/patches/overwrites localhost OpenClaw config file `~/.openclaw/openclaw.json` **unless the owner explicitly agrees in chat**.
 - This includes commands/tools that implicitly overwrite the config:
   - `openclaw doctor --fix`
   - `openclaw config set ...`
   - `openclaw configure`
   - any command that prints `Config overwrite: ~/.openclaw/openclaw.json ...`
+
+### User machine rule
+- On user machines, the agent **may operate with full admin rights as needed** (including editing `/home/ubuntu/.openclaw/openclaw.json`), unless the owner sets a machine-specific restriction.
 
 ## Allowed without consent (read-only)
 
