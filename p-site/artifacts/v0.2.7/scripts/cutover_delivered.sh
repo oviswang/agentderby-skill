@@ -106,7 +106,31 @@ main(){
     log "openclaw-gateway.service restarted"
   fi
 
-  # 4) Evidence snapshot
+  # 5) Post-cutover readiness wait + verification (best-effort, non-fatal)
+  # Goal: avoid "config written but process not yet synced" confusion after updates/restarts.
+  if command -v openclaw >/dev/null 2>&1; then
+    for i in $(seq 1 18); do
+      if openclaw channels status --probe >/tmp/bothook_cutover_probe.txt 2>&1; then
+        if grep -qi "whatsapp.*connected" /tmp/bothook_cutover_probe.txt; then
+          log "whatsapp connected (probe ok)"
+          break
+        fi
+      fi
+      sleep 5
+    done
+
+    # Capture probe output for evidence
+    {
+      echo "--- channels status --probe ---"
+      cat /tmp/bothook_cutover_probe.txt 2>/dev/null || true
+      echo "--- gateway probe (timeout=20000) ---"
+      openclaw gateway probe --timeout 20000 2>&1 | head -n 80 || true
+      echo "--- models status ---"
+      openclaw models status --plain 2>&1 | head -n 40 || true
+    } >> "$LOG" 2>&1
+  fi
+
+  # 6) Evidence snapshot
   {
     echo "--- systemctl ---"
     systemctl is-active openclaw-gateway.service 2>/dev/null || true
