@@ -760,20 +760,57 @@ app.post('/api/track', (req, res) => {
       dedupe_key: req.body?.dedupe_key ? String(req.body.dedupe_key).slice(0,200) : null
     };
 
-    // Persist attribution snapshot for this UUID (first-touch + last-touch), used by payment/cancel events.
+    // Persist attribution snapshot:
+    // - uuid-level (when uuid exists)
+    // - vid-level (always when vid exists)
+    // Also persist uuid<->vid binding when both present.
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS attributions (
+        uuid TEXT PRIMARY KEY,
+        first_ts TEXT,
+        last_ts TEXT,
+        payload_json TEXT
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS vid_attributions (
+        vid TEXT PRIMARY KEY,
+        first_ts TEXT,
+        last_ts TEXT,
+        payload_json TEXT
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS uuid_vid_map (
+        uuid TEXT PRIMARY KEY,
+        vid TEXT,
+        first_ts TEXT,
+        last_ts TEXT,
+        payload_json TEXT
+      )`);
+    } catch {}
+
+    if (vid) {
+      try {
+        const ex = db.prepare('SELECT first_ts FROM vid_attributions WHERE vid=? LIMIT 1').get(vid);
+        const firstTs = ex?.first_ts || ts;
+        db.prepare('INSERT OR REPLACE INTO vid_attributions(vid, first_ts, last_ts, payload_json) VALUES (?,?,?,?)')
+          .run(vid, firstTs, ts, JSON.stringify(payload));
+      } catch {}
+    }
+
     if (uuid) {
       try {
-        db.exec(`CREATE TABLE IF NOT EXISTS attributions (
-          uuid TEXT PRIMARY KEY,
-          first_ts TEXT,
-          last_ts TEXT,
-          payload_json TEXT
-        )`);
         const existing = db.prepare('SELECT first_ts FROM attributions WHERE uuid=? LIMIT 1').get(uuid);
         const firstTs = existing?.first_ts || ts;
         db.prepare('INSERT OR REPLACE INTO attributions(uuid, first_ts, last_ts, payload_json) VALUES (?,?,?,?)')
           .run(uuid, firstTs, ts, JSON.stringify(payload));
       } catch {}
+
+      if (vid) {
+        try {
+          const ex = db.prepare('SELECT first_ts FROM uuid_vid_map WHERE uuid=? LIMIT 1').get(uuid);
+          const firstTs = ex?.first_ts || ts;
+          db.prepare('INSERT OR REPLACE INTO uuid_vid_map(uuid, vid, first_ts, last_ts, payload_json) VALUES (?,?,?,?,?)')
+            .run(uuid, vid, firstTs, ts, JSON.stringify(payload));
+        } catch {}
+      }
     }
 
     // Persistent dedupe (best-effort)
@@ -1699,6 +1736,12 @@ app.post('/api/pay/link', async (req, res) => {
         db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
           crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_LINK_REUSED', JSON.stringify({ uuid, code: lockedCode })
         );
+        // Funnel: pay link opened/served
+        try {
+          db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+            crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'reused', attr: getAttr(uuid) })
+          );
+        } catch {}
         return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, payUrl: baseUrlForShortlinks()+lockedCode, expiresAt: (row && row.expires_at) ? row.expires_at : expiresAt });
       }
     }
@@ -1710,6 +1753,12 @@ app.post('/api/pay/link', async (req, res) => {
       db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
         crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_LINK_REUSED', JSON.stringify({ uuid, code: existing.code })
       );
+      // Funnel: pay link opened/served
+      try {
+        db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+          crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'reused_existing', attr: getAttr(uuid) })
+        );
+      } catch {}
       return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, payUrl: baseUrlForShortlinks()+existing.code, expiresAt: existing.expires_at || expiresAt });
     }
 
@@ -1742,6 +1791,12 @@ app.post('/api/pay/link', async (req, res) => {
     db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
       crypto.randomUUID(), ts2, 'delivery', delivery.delivery_id, 'PAY_LINK_CREATED', JSON.stringify({ uuid, code, expires_at: expiresAt })
     );
+    // Funnel: pay link opened/served
+    try {
+      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+        crypto.randomUUID(), ts2, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'created', attr: getAttr(uuid) })
+      );
+    } catch {}
 
     return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, payUrl: baseUrlForShortlinks()+code, expiresAt });
   } catch (e) {
@@ -1813,8 +1868,15 @@ app.post('/api/stripe/webhook', async (req, res) => {
     const getAttr = (u) => {
       try {
         if (!u) return null;
+        // 1) uuid-level attribution
         const r = db.prepare('SELECT payload_json FROM attributions WHERE uuid=? LIMIT 1').get(String(u));
-        return r?.payload_json ? JSON.parse(r.payload_json) : null;
+        if (r?.payload_json) return JSON.parse(r.payload_json);
+        // 2) fallback: uuid -> vid mapping -> vid attribution (captures main-site first touch)
+        const m = db.prepare('SELECT vid FROM uuid_vid_map WHERE uuid=? LIMIT 1').get(String(u));
+        const vid = m?.vid ? String(m.vid) : '';
+        if (!vid) return null;
+        const v = db.prepare('SELECT payload_json FROM vid_attributions WHERE vid=? LIMIT 1').get(vid);
+        return v?.payload_json ? JSON.parse(v.payload_json) : null;
       } catch { return null; }
     };
 
