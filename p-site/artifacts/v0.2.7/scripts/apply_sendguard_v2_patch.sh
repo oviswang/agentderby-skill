@@ -37,6 +37,7 @@ for f in "${FILES[@]}"; do
   tmp=$(mktemp)
   sudo cat "$src" > "$tmp"
 
+  set +e
   python3 - "$tmp" <<'PY'
 import sys
 p=sys.argv[1]
@@ -64,12 +65,23 @@ for needle in needles:
     open(p,'w',encoding='utf-8').write(s2)
     print('patched')
     sys.exit(0)
-raise SystemExit('needle_not_found')
+print('needle_not_found')
+sys.exit(3)
 PY
+  rc=$?
+  set -e
 
-  sudo cp -a "$tmp" "$src"
-  rm -f "$tmp"
-  echo "patched: $f"
+  if [[ $rc -eq 0 ]]; then
+    sudo cp -a "$tmp" "$src"
+    rm -f "$tmp"
+    echo "patched: $f"
+  elif [[ $rc -eq 3 ]]; then
+    rm -f "$tmp"
+    echo "skip (needle_not_found): $f"
+  else
+    rm -f "$tmp"
+    echo "patch_failed(rc=$rc): $f"
+  fi
 done
 
 echo "Restarting gateway..."
