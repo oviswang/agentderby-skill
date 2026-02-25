@@ -84,55 +84,80 @@ function main() {
   const { db } = openDb();
   const ts = nowIso();
 
-  // 0) Cleanup stale LINKING deliveries that still reference pool instances.
-  // Criteria:
-  // - delivery.status='LINKING'
-  // - not bound (wa_jid empty AND bound_at null)
-  // - older than STALE_LINKING_MS by updated_at
-  // - instance is currently IN_POOL (or instance record missing)
-  // Action:
-  // - set delivery.status='QR_EXPIRED' (keeps audit)
-  // - set delivery.instance_id=NULL (unpin)
-  // - write event
-  // Safety: clear at most 3 per run.
+  // 0) Cleanup stale deliveries that still reference IN_POOL instances.
+  // a) Stale LINKING: status='LINKING', not bound, older than STALE_LINKING_MS -> mark QR_EXPIRED + unpin instance_id.
+  // b) Stale ACTIVE/PAID/DELIVERED bound-but-expired: if bound_unpaid_expires_at is past and still pinned to an IN_POOL instance -> mark QR_EXPIRED + unpin.
+  // Safety: clear at most 5 per run.
   try {
     const stale = db.prepare(
-      `SELECT d.delivery_id, d.instance_id, d.updated_at, d.meta_json AS delivery_meta,
+      `SELECT d.delivery_id, d.instance_id, d.status, d.updated_at, d.meta_json AS delivery_meta,
               COALESCE(i.lifecycle_status,'') AS lifecycle_status
          FROM deliveries d
          LEFT JOIN instances i ON i.instance_id = d.instance_id
-        WHERE d.status='LINKING'
-          AND (d.wa_jid IS NULL OR d.wa_jid='')
-          AND d.bound_at IS NULL
-          AND d.instance_id IS NOT NULL AND d.instance_id != ''
+        WHERE d.instance_id IS NOT NULL AND d.instance_id != ''
+          AND (
+            (d.status='LINKING' AND (d.wa_jid IS NULL OR d.wa_jid='') AND d.bound_at IS NULL)
+            OR (d.status IN ('ACTIVE','PAID','DELIVERED') AND d.bound_at IS NOT NULL)
+          )
         ORDER BY d.updated_at ASC
-        LIMIT 50`
+        LIMIT 80`
     ).all();
 
     let cleared = 0;
     for (const r of stale) {
-      const t0 = Date.parse(String(r.updated_at || ''));
-      if (!Number.isFinite(t0) || (Date.now() - t0 < STALE_LINKING_MS)) continue;
       const lc = String(r.lifecycle_status || '');
       if (lc && lc !== 'IN_POOL' && lc !== 'WORKSTATION_MASTER') continue;
+
+      const st = String(r.status || '');
+      const meta = parseJson(r.delivery_meta);
+
+      let shouldClear = false;
+      let reason = '';
+
+      if (st === 'LINKING') {
+        const t0 = Date.parse(String(r.updated_at || ''));
+        if (Number.isFinite(t0) && (Date.now() - t0 >= STALE_LINKING_MS)) {
+          shouldClear = true;
+          reason = 'stale_linking_unpinned';
+        }
+      } else {
+        // bound-but-expired fallback: use meta.bound_unpaid_expires_at if present
+        const exp = meta?.bound_unpaid_expires_at ? Date.parse(String(meta.bound_unpaid_expires_at)) : NaN;
+        if (Number.isFinite(exp) && Date.now() >= exp) {
+          shouldClear = true;
+          reason = 'stale_bound_expired_unpinned';
+        }
+      }
+
+      if (!shouldClear) continue;
 
       db.exec('BEGIN IMMEDIATE');
       try {
         db.prepare('UPDATE deliveries SET status=?, instance_id=NULL, updated_at=?, meta_json=? WHERE delivery_id=?')
-          .run('QR_EXPIRED', ts, mergeMeta(r.delivery_meta, { cleared_by: 'delivery_watchdog', cleared_at: ts, cleared_reason: 'stale_linking_unpinned' }), String(r.delivery_id));
+          .run('QR_EXPIRED', ts, mergeMeta(r.delivery_meta, { cleared_by: 'delivery_watchdog', cleared_at: ts, cleared_reason: reason, prev_status: st }), String(r.delivery_id));
         db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-          .run(crypto.randomUUID(), ts, 'delivery', String(r.delivery_id), 'DELIVERY_STALE_LINKING_CLEARED', JSON.stringify({ instance_id: String(r.instance_id || ''), prev_status: 'LINKING' }));
+          .run(crypto.randomUUID(), ts, 'delivery', String(r.delivery_id), 'DELIVERY_STALE_PIN_CLEARED', JSON.stringify({ instance_id: String(r.instance_id || ''), prev_status: st, reason }));
+
+        // Best-effort: if instance is IN_POOL but was actually linked, force it back to NEEDS_VERIFY.
+        // (We avoid touching lifecycle_status here; pool ops decide if reimage is needed.)
+        try {
+          if (r.instance_id) {
+            db.prepare("UPDATE instances SET health_status='NEEDS_VERIFY' WHERE instance_id=? AND lifecycle_status='IN_POOL'")
+              .run(String(r.instance_id));
+          }
+        } catch {}
+
         db.exec('COMMIT');
         cleared++;
       } catch (e) {
         try { db.exec('ROLLBACK'); } catch {}
       }
 
-      if (cleared >= 3) break;
+      if (cleared >= 5) break;
     }
 
     if (cleared) {
-      tgSend(`[bothook][watchdog] cleared stale LINKING deliveries: count=${cleared}`);
+      tgSend(`[bothook][watchdog] cleared stale pinned deliveries: count=${cleared}`);
     }
   } catch {}
 
