@@ -1181,6 +1181,13 @@ app.post('/api/wa/start', async (req, res) => {
     // - QR is only display (tmux capture), success judged by `openclaw channels status`
     const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
 
+    // Relink hygiene:
+    // - For force relink, proactively logout any existing WhatsApp session to avoid QR scan hanging/spinning.
+    // - Always kill any previous tmux login session before starting.
+    const relinkLogout = force
+      ? `openclaw channels logout --channel whatsapp 2>/dev/null || true; `
+      : '';
+
     const remoteCmd = `set -euo pipefail; `
       + `sudo mkdir -p /opt/bothook 2>/dev/null || true; `
       + `sudo touch /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true; `
@@ -1188,7 +1195,8 @@ app.post('/api/wa/start', async (req, res) => {
       + `sudo systemctl stop openclaw-gateway.service 2>/dev/null || true; `
       + `sudo systemctl stop bothook-provision.service 2>/dev/null || true; `
       + `sudo systemctl disable bothook-provision.service 2>/dev/null || true; `
-      + `tmux has-session -t '${tmuxSession}' 2>/dev/null && { echo already_running; exit 0; } || true; `
+      + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
+      + relinkLogout
       + `tmux new-session -d -s '${tmuxSession}' "bash -lc 'stty cols 220 rows 80 2>/dev/null || true; export COLUMNS=220 LINES=80; openclaw channels login --channel whatsapp'"; `
       + `echo started`;
 
