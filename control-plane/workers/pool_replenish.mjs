@@ -209,7 +209,8 @@ function main() {
       const payload = {
         BundleId: bundleId,
         BlueprintId: BLUEPRINT_ID,
-        InstanceChargePrepaid: { Period: 1, RenewFlag: 'NOTIFY_AND_MANUAL_RENEW' },
+        // Pool policy: default auto-renew ON (monthly) to avoid cloud-expiry vs subscription mismatch.
+        InstanceChargePrepaid: { Period: 1, RenewFlag: 'NOTIFY_AND_AUTO_RENEW' },
         InstanceName: name,
         InstanceCount: 1,
         Zones: z ? [z] : undefined,
