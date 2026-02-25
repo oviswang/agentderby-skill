@@ -3,5 +3,8 @@
   "version": "0.2.7",
   "type": "module",
   "private": true,
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  },
   "dependencies": {}
 }
