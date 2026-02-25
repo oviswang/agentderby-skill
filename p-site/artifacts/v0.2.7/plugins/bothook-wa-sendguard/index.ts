@@ -12,7 +12,13 @@ function shouldCancel(text: string) {
 export default function register(api: OpenClawPluginApi) {
   api.on("message_sending", async (event, ctx) => {
     if (ctx?.channelId !== "whatsapp") return;
-    if (shouldCancel((event as any)?.content || "")) {
+    const content = String((event as any)?.content || "");
+    // Debug breadcrumb (truncate to avoid log bloat)
+    try {
+      api.logger.debug?.(`[bothook-wa-sendguard] message_sending to=${String((event as any)?.to || '').slice(0,40)} len=${content.length} head=${JSON.stringify(content.slice(0,120))}`);
+    } catch {}
+
+    if (shouldCancel(content)) {
       try { api.logger.info("[bothook-wa-sendguard] canceled anthropic missing-key warning"); } catch {}
       return { cancel: true } as any;
     }
