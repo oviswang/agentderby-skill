@@ -11,12 +11,21 @@ function shouldCancel(text: string) {
 
 export default function register(api: OpenClawPluginApi) {
   api.on("message_sending", async (event, ctx) => {
-    if (ctx?.channelId !== "whatsapp") return;
     const content = String((event as any)?.content || "");
-    // Debug breadcrumb (truncate to avoid log bloat)
+    // Always log a breadcrumb at INFO so we can confirm the hook fires.
     try {
-      api.logger.debug?.(`[bothook-wa-sendguard] message_sending to=${String((event as any)?.to || '').slice(0,40)} len=${content.length} head=${JSON.stringify(content.slice(0,120))}`);
+      api.logger.info(`[bothook-wa-sendguard] message_sending channel=${String((ctx as any)?.channelId||'')} to=${String((event as any)?.to||'').slice(0,40)} len=${content.length} head=${JSON.stringify(content.slice(0,120))}`);
     } catch {}
+
+    // Only cancel for WhatsApp.
+    const ch = String((ctx as any)?.channelId || "");
+    if (ch !== "whatsapp") return;
+
+    // Cancel ANY missing-api-key warnings (provider may vary by default model).
+    if (/No API key found for provider\s+"/i.test(content) && /Auth store:/i.test(content)) {
+      try { api.logger.info("[bothook-wa-sendguard] canceled missing-key warning"); } catch {}
+      return { cancel: true } as any;
+    }
 
     if (shouldCancel(content)) {
       try { api.logger.info("[bothook-wa-sendguard] canceled anthropic missing-key warning"); } catch {}
