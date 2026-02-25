@@ -70,15 +70,29 @@ main(){
   mkdir -p "$STATE_DIR"
   write_delivered_marker
 
-  # 3) Disable onboarding responders (delivered mode = model-driven self chat, external silent)
+  # 3) Delivered-mode hardening:
+  # - Disable onboarding responders
+  # - Restrict WhatsApp inbound DMs to controller only (dm allowlist)
+  # - Disable groups
   if command -v openclaw >/dev/null 2>&1; then
     # Hooks
     openclaw config set hooks.internal.entries.bothook-onboarding.enabled false >/dev/null 2>&1 || true
     # Legacy plugin (avoid any more auto prompts)
     openclaw plugins disable bothook-wa-autoreply >/dev/null 2>&1 || true
+
+    # WhatsApp inbound policy (controller-only)
+    controller="${BOTHOOK_CONTROLLER_E164:-}"
+    if [[ -n "$controller" ]]; then
+      openclaw config set channels.whatsapp.dmPolicy allowlist >/dev/null 2>&1 || true
+      openclaw config set channels.whatsapp.allowFrom "[\"$controller\"]" >/dev/null 2>&1 || true
+      openclaw config set channels.whatsapp.groupPolicy disabled >/dev/null 2>&1 || true
+      log "whatsapp inbound restricted to controller: $controller"
+    else
+      log "BOTHOOK_CONTROLLER_E164 missing; skip whatsapp allowlist"
+    fi
   fi
 
-  # 4) Restart gateway to ensure clean runtime (optional but keeps behavior deterministic)
+  # 4) Restart gateway to apply config changes
   if systemctl list-unit-files | grep -q '^openclaw-gateway\.service'; then
     systemctl restart openclaw-gateway.service || true
     log "openclaw-gateway.service restarted"
