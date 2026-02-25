@@ -88,7 +88,9 @@ open(p,'w',encoding='utf-8').write(s2)
 print('patched')
 PY
 
-  sudo cp -a "$tmp" "$src"
+  # IMPORTANT: do NOT preserve mktemp perms/owner (mktemp defaults to 0600 root when copied with sudo).
+  # If we accidentally leave bundles as 0600/root, whatsapp provider will die with EACCES.
+  sudo install -o ubuntu -g ubuntu -m 0644 "$tmp" "$src"
   rm -f "$tmp"
   patched=$((patched+1))
 done
