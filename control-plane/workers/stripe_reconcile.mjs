@@ -11,6 +11,8 @@
  */
 
 import { execSync } from 'node:child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { openDb, nowIso } from '../lib/db.mjs';
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET;
@@ -70,6 +72,12 @@ async function main() {
   const { db, dbPath } = openDb();
   const ts = nowIso();
 
+  // Alert state (dedupe across timer runs)
+  const ALERT_STATE_PATH = '/home/ubuntu/.openclaw/workspace/control-plane/data/stripe_missing_uuid_alert_state.json';
+  let alertState = { lastEventTs: null, lastHash: null };
+  try { alertState = JSON.parse(fs.readFileSync(ALERT_STATE_PATH, 'utf8')); } catch {}
+  const lastEventTs = alertState?.lastEventTs ? String(alertState.lastEventTs) : null;
+
   // Process a small batch each run.
   const rows = db.prepare(
     `SELECT provider_sub_id
@@ -115,6 +123,32 @@ async function main() {
       console.error('[stripe_reconcile] fail', id, String(e?.message || e));
     }
   }
+
+  // Alert: Stripe subscription events with missing uuid mapping
+  try {
+    const q = lastEventTs
+      ? `SELECT ts, entity_id, payload_json FROM events WHERE event_type='STRIPE_SUB_UUID_MISSING' AND ts > ? ORDER BY ts ASC LIMIT 50`
+      : `SELECT ts, entity_id, payload_json FROM events WHERE event_type='STRIPE_SUB_UUID_MISSING' ORDER BY ts DESC LIMIT 50`;
+    const evs = lastEventTs ? db.prepare(q).all(lastEventTs) : db.prepare(q).all();
+    if (evs && evs.length) {
+      // Deduplicate message content
+      const newestTs = evs[evs.length - 1].ts;
+      const sample = evs.slice(-10).map(e => {
+        let payload = {};
+        try { payload = e.payload_json ? JSON.parse(e.payload_json) : {}; } catch {}
+        return `${e.ts} subId=${e.entity_id} type=${payload.type || ''}`;
+      }).join('\n');
+
+      const msg = `[bothook] ALERT: STRIPE_SUB_UUID_MISSING (count=${evs.length})\n` + sample;
+      const h = crypto.createHash('sha256').update(msg).digest('hex');
+      if (h != alertState.lastHash) {
+        tgSend(msg);
+        alertState.lastHash = h;
+      }
+      alertState.lastEventTs = newestTs;
+      try { fs.writeFileSync(ALERT_STATE_PATH, JSON.stringify(alertState, null, 2) + '\n'); } catch {}
+    }
+  } catch {}
 
   const summary = { ok: true, ts, dbPath, scanned: rows.length, updated: ok, failed: fail };
   console.log(JSON.stringify(summary, null, 2));
