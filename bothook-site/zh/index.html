@@ -149,6 +149,66 @@
   "url": "https://bothook.me/zh/"
 }
   </script>
+<script>
+(function(){
+  function getOrCreateVid(){
+    try{
+      var k='bothook_vid';
+      var v=localStorage.getItem(k);
+      if(v && v.length>=8) return v;
+      v=(crypto && crypto.randomUUID)? crypto.randomUUID() : (Date.now().toString(36)+Math.random().toString(36).slice(2));
+      localStorage.setItem(k,v);
+      return v;
+    }catch(e){
+      return 'no_vid';
+    }
+  }
+  function pickLang(){
+    var l=(document.documentElement && document.documentElement.lang || '').toLowerCase();
+    if(!l){
+      var p=location.pathname||'';
+      if(p.startsWith('/zh-tw')) l='zh-tw';
+      else if(p.startsWith('/zh')) l='zh';
+      else l='en';
+    }
+    return l;
+  }
+  function qs(name){ try{ return (new URLSearchParams(location.search)).get(name) || ''; }catch(e){ return ''; } }
+  function utm(){
+    var o={};
+    ['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(function(k){ var v=qs(k); if(v) o[k]=v; });
+    return Object.keys(o).length? o:null;
+  }
+  function click(){
+    var o={};
+    ['gclid','gbraid','wbraid','fbclid'].forEach(function(k){ var v=qs(k); if(v) o[k]=v; });
+    return Object.keys(o).length? o:null;
+  }
+  function send(ev, extra){
+    try{
+      var vid=getOrCreateVid();
+      var lang=pickLang();
+      var body={
+        event_type: ev,
+        vid: vid,
+        lang: lang,
+        path: location.pathname,
+        referrer: document.referrer || '',
+        utm: utm(),
+        click: click(),
+        tz: (Intl && Intl.DateTimeFormat)? Intl.DateTimeFormat().resolvedOptions().timeZone : '',
+        ua: navigator.userAgent || ''
+      };
+      if(extra) for(var k in extra) body[k]=extra[k];
+      // dedupe key: vid+path+utm+click (per 30m on server)
+      body.dedupe_key=[vid,ev,location.pathname,JSON.stringify(body.utm||{}),JSON.stringify(body.click||{})].join('|');
+      fetch('https://api.bothook.me/api/track',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),keepalive:true}).catch(function(){});
+    }catch(e){}
+  }
+  // Track visit
+  send('WEB_VISIT');
+})();
+</script>
 </head>
 <body>
   <div class="banner" id="langBanner" aria-live="polite">

@@ -30,6 +30,64 @@
     .kv .k{color:rgba(169,182,214,.85);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
     .kv .v{color:rgba(232,238,252,.95);font-size:13px;overflow-wrap:anywhere;word-break:normal}
   </style>
+<script>
+(function(){
+  function getOrCreateVid(){
+    try{
+      var k='bothook_vid';
+      var v=localStorage.getItem(k);
+      if(v && v.length>=8) return v;
+      v=(crypto && crypto.randomUUID)? crypto.randomUUID() : (Date.now().toString(36)+Math.random().toString(36).slice(2));
+      localStorage.setItem(k,v);
+      return v;
+    }catch(e){
+      return 'no_vid';
+    }
+  }
+  function qs(name){ try{ return (new URLSearchParams(location.search)).get(name) || ''; }catch(e){ return ''; } }
+  function utm(){
+    var o={};
+    ['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(function(k){ var v=qs(k); if(v) o[k]=v; });
+    return Object.keys(o).length? o:null;
+  }
+  function click(){
+    var o={};
+    ['gclid','gbraid','wbraid','fbclid'].forEach(function(k){ var v=qs(k); if(v) o[k]=v; });
+    return Object.keys(o).length? o:null;
+  }
+  function guessUuid(){
+    try{
+      var m=(location.pathname||'').match(/\/p\/([0-9a-fA-F-]{10,})/);
+      if(m && m[1]) return m[1];
+    }catch(e){}
+    return '';
+  }
+  function send(ev, extra){
+    try{
+      var vid=getOrCreateVid();
+      var lang=(qs('lang')||'').trim().toLowerCase() || (location.pathname.startsWith('/zh-tw')?'zh-tw':(location.pathname.startsWith('/zh')?'zh':'en'));
+      var uuid=extra && extra.uuid ? extra.uuid : (qs('uuid')||guessUuid()||'');
+      var body={
+        event_type: ev,
+        vid: vid,
+        uuid: uuid||undefined,
+        lang: lang,
+        path: location.pathname,
+        referrer: document.referrer || '',
+        utm: utm(),
+        click: click(),
+        tz: (Intl && Intl.DateTimeFormat)? Intl.DateTimeFormat().resolvedOptions().timeZone : '',
+        ua: navigator.userAgent || ''
+      };
+      if(extra) for(var k in extra) body[k]=extra[k];
+      body.dedupe_key=[vid,ev,uuid||'',location.pathname,JSON.stringify(body.utm||{}),JSON.stringify(body.click||{})].join('|');
+      fetch('/api/track',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),keepalive:true}).catch(function(){});
+    }catch(e){}
+  }
+  send('P_VISIT');
+  window.__bothook_track = send;
+})();
+</script>
 </head>
 <body>
   <div class="wrap">
