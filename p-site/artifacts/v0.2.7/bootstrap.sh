@@ -242,11 +242,57 @@ JSON
   chmod -R u+rwX,go-rwx /home/ubuntu/.openclaw/credentials/whatsapp 2>/dev/null || true
 
   # Install + enable BOTHook WA loopback + sendguard plugins (B-mode)
+  # Clean stale plugin references first; otherwise openclaw CLI may refuse to run due to invalid config.
+  python3 - <<'PY'
+import json, os, shutil, time
+p='/home/ubuntu/.openclaw/openclaw.json'
+if os.path.exists(p):
+  with open(p,'r',encoding='utf-8') as f:
+    j=json.load(f)
+  pl=j.get('plugins') or {}
+  ents=pl.get('entries') or {}
+  for k in ('bothook-wa-loopback','bothook-wa-sendguard'):
+    ents.pop(k, None)
+  pl['entries']=ents
+  allow=pl.get('allow')
+  if not isinstance(allow,list):
+    allow=[]
+  pl['allow']=[x for x in allow if x not in ('bothook-wa-loopback','bothook-wa-sendguard')]
+  j['plugins']=pl
+  bak=p+f'.bak.bootstrap.plugins.{int(time.time())}'
+  shutil.copy2(p,bak)
+  with open(p,'w',encoding='utf-8') as f:
+    json.dump(j,f,ensure_ascii=False,indent=2)
+    f.write('\n')
+  print('bothook plugin refs cleaned:', bak)
+PY
+
+  # Remove existing extension dirs so install is deterministic
+  rm -rf /home/ubuntu/.openclaw/extensions/bothook-wa-loopback /home/ubuntu/.openclaw/extensions/bothook-wa-sendguard 2>/dev/null || true
+
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins install "$INSTALL_DIR/plugins/bothook-wa-loopback" >/dev/null 2>&1 || true
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-loopback >/dev/null 2>&1 || true
 
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins install "$INSTALL_DIR/plugins/bothook-wa-sendguard" >/dev/null 2>&1 || true
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-sendguard >/dev/null 2>&1 || true
+
+  # Pin plugin trust allowlist (prevents "untracked local code" warnings)
+  python3 - <<'PY'
+import json, os, shutil, time
+p='/home/ubuntu/.openclaw/openclaw.json'
+if os.path.exists(p):
+  with open(p,'r',encoding='utf-8') as f:
+    j=json.load(f)
+  pl=j.get('plugins') or {}
+  pl['allow']=['bothook-wa-loopback','bothook-wa-sendguard']
+  j['plugins']=pl
+  bak=p+f'.bak.bootstrap.allow.{int(time.time())}'
+  shutil.copy2(p,bak)
+  with open(p,'w',encoding='utf-8') as f:
+    json.dump(j,f,ensure_ascii=False,indent=2)
+    f.write('\n')
+  print('bothook plugins allow pinned:', bak)
+PY
 
   # Ensure legacy autoreply plugin is disabled (avoid race/conflicts)
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins disable bothook-wa-autoreply >/dev/null 2>&1 || true
