@@ -27,6 +27,27 @@ fetch(){
   curl -fsSL "$url" -o "$out"
 }
 
+verify_sha(){
+  local rel="$1" out="$2" sums="$3"
+  local expected actual
+  expected="$(awk -v r="$rel" '$2==r{print $1}' "$sums" | head -n 1)"
+  if [[ -z "$expected" ]]; then
+    echo "missing_checksum:$rel" >&2
+    exit 9
+  fi
+  actual="$(sha256sum "$out" | awk '{print $1}')"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "checksum_mismatch:$rel expected=$expected actual=$actual" >&2
+    exit 10
+  fi
+}
+
+fetch_verified(){
+  local rel="$1" out="$2" sums="$3"
+  fetch "$ARTIFACT_BASE_URL/$rel" "$out"
+  verify_sha "$rel" "$out" "$sums"
+}
+
 ensure_node(){
   if command -v node >/dev/null 2>&1; then
     log "node already installed: $(node -v)"
@@ -91,51 +112,51 @@ main(){
   # Ensure WhatsApp channel plugin is enabled (required for QR login flows)
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable whatsapp >/dev/null 2>&1 || true
 
-  # Fetch manifest + checksums
-  fetch "$ARTIFACT_BASE_URL/manifest.json" "$INSTALL_DIR/artifacts/manifest.json"
+  # Fetch manifest + checksums (and verify integrity)
   fetch "$ARTIFACT_BASE_URL/sha256sums.txt" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "manifest.json" "$INSTALL_DIR/artifacts/manifest.json" "$INSTALL_DIR/artifacts/sha256sums.txt"
 
-  # Fetch scripts
-  fetch "$ARTIFACT_BASE_URL/scripts/healthcheck.sh" "$INSTALL_DIR/healthcheck.sh"
+  # Fetch scripts (verified)
+  fetch_verified "scripts/healthcheck.sh" "$INSTALL_DIR/healthcheck.sh" "$INSTALL_DIR/artifacts/sha256sums.txt"
   chmod +x "$INSTALL_DIR/healthcheck.sh"
 
-  fetch "$ARTIFACT_BASE_URL/scripts/openclaw-gateway-start.sh" "$INSTALL_DIR/bin/openclaw-gateway-start.sh"
-  fetch "$ARTIFACT_BASE_URL/scripts/postboot_verify.sh" "$INSTALL_DIR/bin/postboot_verify.sh"
-  fetch "$ARTIFACT_BASE_URL/scripts/cutover_delivered.sh" "$INSTALL_DIR/bin/cutover_delivered.sh"
+  fetch_verified "scripts/openclaw-gateway-start.sh" "$INSTALL_DIR/bin/openclaw-gateway-start.sh" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "scripts/postboot_verify.sh" "$INSTALL_DIR/bin/postboot_verify.sh" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "scripts/cutover_delivered.sh" "$INSTALL_DIR/bin/cutover_delivered.sh" "$INSTALL_DIR/artifacts/sha256sums.txt"
 
-  # Fetch provisioning server (Baileys) source bundle
+  # Fetch provisioning server (Baileys) source bundle (verified)
   mkdir -p "$INSTALL_DIR/provision"
-  fetch "$ARTIFACT_BASE_URL/provision/server.mjs" "$INSTALL_DIR/provision/server.mjs"
-  fetch "$ARTIFACT_BASE_URL/provision/package.json" "$INSTALL_DIR/provision/package.json"
+  fetch_verified "provision/server.mjs" "$INSTALL_DIR/provision/server.mjs" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "provision/package.json" "$INSTALL_DIR/provision/package.json" "$INSTALL_DIR/artifacts/sha256sums.txt"
 
-  # Fetch BOTHook OpenClaw plugins (B-mode: hook responder + loopback send + sendguard)
+  # Fetch BOTHook OpenClaw plugins (verified; B-mode: hook responder + loopback send + sendguard)
   mkdir -p "$INSTALL_DIR/plugins/bothook-wa-loopback"
-  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-loopback/openclaw.plugin.json" "$INSTALL_DIR/plugins/bothook-wa-loopback/openclaw.plugin.json"
-  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-loopback/package.json" "$INSTALL_DIR/plugins/bothook-wa-loopback/package.json"
-  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-loopback/index.ts" "$INSTALL_DIR/plugins/bothook-wa-loopback/index.ts"
+  fetch_verified "plugins/bothook-wa-loopback/openclaw.plugin.json" "$INSTALL_DIR/plugins/bothook-wa-loopback/openclaw.plugin.json" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "plugins/bothook-wa-loopback/package.json" "$INSTALL_DIR/plugins/bothook-wa-loopback/package.json" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "plugins/bothook-wa-loopback/index.ts" "$INSTALL_DIR/plugins/bothook-wa-loopback/index.ts" "$INSTALL_DIR/artifacts/sha256sums.txt"
 
   mkdir -p "$INSTALL_DIR/plugins/bothook-wa-sendguard"
-  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-sendguard/openclaw.plugin.json" "$INSTALL_DIR/plugins/bothook-wa-sendguard/openclaw.plugin.json"
-  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-sendguard/package.json" "$INSTALL_DIR/plugins/bothook-wa-sendguard/package.json"
-  fetch "$ARTIFACT_BASE_URL/plugins/bothook-wa-sendguard/index.ts" "$INSTALL_DIR/plugins/bothook-wa-sendguard/index.ts"
+  fetch_verified "plugins/bothook-wa-sendguard/openclaw.plugin.json" "$INSTALL_DIR/plugins/bothook-wa-sendguard/openclaw.plugin.json" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "plugins/bothook-wa-sendguard/package.json" "$INSTALL_DIR/plugins/bothook-wa-sendguard/package.json" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "plugins/bothook-wa-sendguard/index.ts" "$INSTALL_DIR/plugins/bothook-wa-sendguard/index.ts" "$INSTALL_DIR/artifacts/sha256sums.txt"
 
-  # Fetch BOTHook internal hook responder
+  # Fetch BOTHook internal hook responder (verified)
   mkdir -p /home/ubuntu/.openclaw/workspace/hooks/bothook-onboarding
-  fetch "$ARTIFACT_BASE_URL/hooks/bothook-onboarding/handler.ts" /home/ubuntu/.openclaw/workspace/hooks/bothook-onboarding/handler.ts
+  fetch_verified "hooks/bothook-onboarding/handler.ts" /home/ubuntu/.openclaw/workspace/hooks/bothook-onboarding/handler.ts "$INSTALL_DIR/artifacts/sha256sums.txt"
   chown -R ubuntu:ubuntu /home/ubuntu/.openclaw/workspace
 
-  # Fetch BOTHook ops scripts (send-guard apply/rollback). Do NOT auto-run here.
+  # Fetch BOTHook ops scripts (verified; do NOT auto-run here.)
   mkdir -p "$INSTALL_DIR/ops-scripts"
-  fetch "$ARTIFACT_BASE_URL/scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/apply_sendguard_v2_patch.sh"
-  fetch "$ARTIFACT_BASE_URL/scripts/rollback_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/rollback_sendguard_v2_patch.sh"
+  fetch_verified "scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "scripts/rollback_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/rollback_sendguard_v2_patch.sh" "$INSTALL_DIR/artifacts/sha256sums.txt"
   chmod +x "$INSTALL_DIR/ops-scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/rollback_sendguard_v2_patch.sh"
 
   chmod +x "$INSTALL_DIR/bin/openclaw-gateway-start.sh" "$INSTALL_DIR/bin/postboot_verify.sh" "$INSTALL_DIR/bin/cutover_delivered.sh"
 
-  # Fetch units
-  fetch "$ARTIFACT_BASE_URL/systemd/openclaw-gateway.service" "$INSTALL_DIR/artifacts/openclaw-gateway.service"
-  fetch "$ARTIFACT_BASE_URL/systemd/bothook-provision.service" "$INSTALL_DIR/artifacts/bothook-provision.service"
-  fetch "$ARTIFACT_BASE_URL/systemd/bothook-postboot-verify.service" "$INSTALL_DIR/artifacts/bothook-postboot-verify.service"
+  # Fetch units (verified)
+  fetch_verified "systemd/openclaw-gateway.service" "$INSTALL_DIR/artifacts/openclaw-gateway.service" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "systemd/bothook-provision.service" "$INSTALL_DIR/artifacts/bothook-provision.service" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "systemd/bothook-postboot-verify.service" "$INSTALL_DIR/artifacts/bothook-postboot-verify.service" "$INSTALL_DIR/artifacts/sha256sums.txt"
 
   # Install units
   install -m 0644 "$INSTALL_DIR/artifacts/openclaw-gateway.service" "$SYSTEMD_DIR/openclaw-gateway.service"
@@ -215,6 +236,9 @@ JSON
 
   # If the service was already running and waiting, restart to pick up the new config.
   systemctl restart openclaw-gateway.service || true
+
+  # Ensure local login authority (pool stage). If control-plane takeover marker exists, remove it.
+  rm -f /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true
 
   # Install provisioning deps + enable service
   # NOTE: install as ubuntu so node_modules is readable by ubuntu and does not require root to update.

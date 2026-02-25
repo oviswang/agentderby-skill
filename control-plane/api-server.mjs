@@ -1182,6 +1182,8 @@ app.post('/api/wa/start', async (req, res) => {
     const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
 
     const remoteCmd = `set -euo pipefail; `
+      + `sudo mkdir -p /opt/bothook 2>/dev/null || true; `
+      + `sudo touch /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true; `
       + `systemctl --user stop openclaw-gateway.service 2>/dev/null || true; `
       + `sudo systemctl stop openclaw-gateway.service 2>/dev/null || true; `
       + `sudo systemctl stop bothook-provision.service 2>/dev/null || true; `
