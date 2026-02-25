@@ -18,7 +18,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "52d8d98b879f734311d85af33a6fd01258f6b92dc1bb25e56d7760c5803f4fdf",
+      "sha256": "b13698fb8cdb8df6cd246f1462100c093e6f6d9470ede4b471fa1ff3b72ce5d8",
       "bytes": 4877
     },
     {
@@ -93,8 +93,8 @@
     },
     {
       "path": "scripts/apply_sendguard_v2_patch.sh",
-      "sha256": "a31a7f1d021ba9a691c99f41e79a1993bf926aa4d2e8b4f1d1505c245b2ec352",
-      "bytes": 2169
+      "sha256": "9415b39dc2e75ed3e97c7defc0e99eaf7e8a3ed0e4c9858471afe840a7400047",
+      "bytes": 2379
     },
     {
       "path": "scripts/apply_sendguard_v3_patch.sh",
