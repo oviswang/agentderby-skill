@@ -1195,6 +1195,10 @@ app.post('/api/wa/start', async (req, res) => {
       + `sudo systemctl stop openclaw-gateway.service 2>/dev/null || true; `
       + `sudo systemctl stop bothook-provision.service 2>/dev/null || true; `
       + `sudo systemctl disable bothook-provision.service 2>/dev/null || true; `
+      // Ensure WhatsApp credential dir is writable by ubuntu (prevents QR scan spinning due to EACCES).
+      + `sudo mkdir -p /home/ubuntu/.openclaw/credentials/whatsapp/default 2>/dev/null || true; `
+      + `sudo chown -R ubuntu:ubuntu /home/ubuntu/.openclaw/credentials/whatsapp 2>/dev/null || true; `
+      + `sudo chmod -R u+rwX,go-rwx /home/ubuntu/.openclaw/credentials/whatsapp 2>/dev/null || true; `
       + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
       + relinkLogout
       + `tmux new-session -d -s '${tmuxSession}' "bash -lc 'stty cols 220 rows 80 2>/dev/null || true; export COLUMNS=220 LINES=80; openclaw channels login --channel whatsapp'"; `
