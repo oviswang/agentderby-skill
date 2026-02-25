@@ -113,7 +113,7 @@ function writeOpenAiAuthOnInstance(db, instance, { uuid } = {}) {
       + `echo '${b64}' | base64 -d > /tmp/auth-profiles.json; `
       + `sudo install -o ubuntu -g ubuntu -m 600 /tmp/auth-profiles.json "$AGENT_DIR/auth-profiles.json"; `
       + `rm -f /tmp/auth-profiles.json; `
-      + `openclaw models set gpt >/dev/null 2>&1 || true; `
+      + `openclaw models set openai/gpt-5.2 >/dev/null 2>&1 || true; `
       + `echo ok`;
 
     const r = poolSsh(instance, remote, { timeoutMs: 20000, tty: false, retries: 1 });
@@ -501,7 +501,14 @@ function tryCutoverDelivered(db, uuid, { reason } = {}) {
   const d = getDeliveryByUuid(db, uuid);
   if(!d) return { ok:false, skip:'no_delivery' };
 
-  if(String(d.status||'') === 'DELIVERED') return { ok:true, skip:'already_delivered' };
+  if(String(d.status||'') === 'DELIVERED') {
+    // Still ensure the user machine has the verified OpenAI key + model configured.
+    const inst2 = getInstanceById(db, d.instance_id);
+    if (inst2?.public_ip) {
+      try { writeOpenAiAuthOnInstance(db, inst2, { uuid }); } catch {}
+    }
+    return { ok:true, skip:'already_delivered' };
+  }
 
   const linked = Boolean(d.wa_jid);
   const paid = isPaid(db, uuid);
