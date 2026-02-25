@@ -209,6 +209,15 @@
   }
   // Track visit
   send('WEB_VISIT');
+  // Track primary CTA click
+  try{
+    var c=document.getElementById('ctaPrimary');
+    if(c){
+      c.addEventListener('click', function(){
+        send('WEB_CTA_CLICK',{ cta_id:'ctaPrimary', cta_text:(c.textContent||'').trim(), cta_href:c.getAttribute('href')||'' });
+      });
+    }
+  }catch(e){}
 })();
 </script>
 </head>

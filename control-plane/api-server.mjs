@@ -735,7 +735,7 @@ app.post('/api/track', (req, res) => {
     const ev = String(req.body?.event_type || '').trim().toUpperCase();
     const allow = new Set([
       'WEB_VISIT','WEB_CTA_CLICK',
-      'P_VISIT','P_RELINK_CLICK'
+      'P_VISIT','P_RELINK_CLICK','P_QR_CLICK'
     ]);
     if (!allow.has(ev)) return send(res, 400, { ok:false, error:'event_type_not_allowed' });
 

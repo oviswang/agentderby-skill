@@ -86,6 +86,21 @@
   }
   send('P_VISIT');
   window.__bothook_track = send;
+  // Track key funnel clicks
+  try{
+    var rel=document.getElementById('paidRelinkBtn');
+    if(rel){
+      rel.addEventListener('click', function(){
+        send('P_RELINK_CLICK',{ cta_id:'paidRelinkBtn', cta_text:(rel.textContent||'').trim() });
+      });
+    }
+    var qr=document.getElementById('getQrBtn');
+    if(qr){
+      qr.addEventListener('click', function(){
+        send('P_QR_CLICK',{ cta_id:'getQrBtn', cta_text:(qr.textContent||'').trim() });
+      });
+    }
+  }catch(e){}
 })();
 </script>
 </head>
