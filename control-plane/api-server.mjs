@@ -104,8 +104,9 @@ function writeOpenAiAuthOnInstance(db, instance, { uuid } = {}) {
     const metaOld = row?.meta_json ? (()=>{ try{return JSON.parse(row.meta_json)}catch{return {}} })() : {};
     let verifyOk = false;
     let verifyErr = null;
+    let verifyStatus = 0;
     try {
-      // Keep key out of argv by passing via env. Verify via a node helper (more robust than parsing curl output).
+      // Keep key out of argv by passing via env. Verify via a node helper.
       const envKey = JSON.stringify(key);
       const r = sh(
         `set -euo pipefail; OPENAI_API_KEY=${envKey} node - <<'NODE'\
@@ -118,25 +119,37 @@ NODE`,
       );
       const j = JSON.parse(String(r.stdout || '{}'));
       verifyOk = Boolean(j?.ok);
-      verifyErr = verifyOk ? null : (j?.error || 'key_invalid');
+      verifyStatus = Number(j?.status || 0);
+      verifyErr = verifyOk ? null : (j?.error || 'verify_failed');
     } catch {
       verifyOk = false;
+      verifyStatus = 0;
       verifyErr = 'verify_failed';
     }
+
+    // Only mark as INVALID when we have a strong signal (401/403).
+    // For transient failures (timeouts, 429, 5xx, network), record inconclusive and DO NOT prompt the user.
+    const strongInvalid = !verifyOk && (verifyStatus === 401 || verifyStatus === 403);
 
     try {
       const metaNew = JSON.stringify({
         ...metaOld,
         last_checked_at: tsCheck,
-        last_check_ok: Boolean(verifyOk),
-        ...(verifyOk ? { verified_at: metaOld.verified_at || tsCheck } : { invalid_at: tsCheck, invalid_reason: verifyErr || 'key_invalid' })
+        last_check_ok: verifyOk ? true : (strongInvalid ? false : null),
+        ...(verifyOk
+          ? { verified_at: metaOld.verified_at || tsCheck }
+          : (strongInvalid
+              ? { invalid_at: tsCheck, invalid_reason: verifyErr || 'key_invalid' }
+              : { last_check_error: verifyErr || 'verify_failed' }
+            )
+        )
       });
       db.prepare('UPDATE delivery_secrets SET meta_json=?, updated_at=? WHERE provision_uuid=? AND kind=?')
         .run(metaNew, tsCheck, safeUuid, 'openai_api_key');
     } catch {}
 
     if (!verifyOk) {
-      return { ok:false, error:'key_invalid' };
+      return { ok:false, error: strongInvalid ? 'key_invalid' : 'key_verify_inconclusive' };
     }
 
     const authStore = {
@@ -1491,7 +1504,12 @@ app.get('/api/wa/status', async (req, res) => {
               const ks = db2.prepare('SELECT meta_json FROM delivery_secrets WHERE provision_uuid=? AND kind=? LIMIT 1').get(uuid, 'openai_api_key');
               if (ks?.meta_json) {
                 const km = JSON.parse(ks.meta_json);
-                keyOk = km?.last_check_ok === true;
+                // Treat as OK when:
+                // - explicitly ok, OR
+                // - check is inconclusive (null) but we have a previous verified_at and no invalid_at.
+                if (km?.last_check_ok === true) keyOk = true;
+                else if (km?.last_check_ok === null && km?.verified_at && !km?.invalid_at) keyOk = true;
+                else keyOk = false;
               } else {
                 keyOk = false;
               }
