@@ -98,6 +98,38 @@ function writeOpenAiAuthOnInstance(db, instance, { uuid } = {}) {
     const key = decryptAesGcm({ iv, tag, ciphertext }).toString('utf8').trim();
     if (!key) return { ok:false, error:'decrypt_failed' };
 
+    // Re-verify key before writing to user machine (key may have been revoked or billing may have changed).
+    // Sync check (no async) to keep cutover paths simple.
+    const tsCheck = nowIso();
+    const metaOld = row?.meta_json ? (()=>{ try{return JSON.parse(row.meta_json)}catch{return {}} })() : {};
+    let verifyOk = false;
+    let verifyErr = null;
+    try {
+      // Keep key out of argv by passing via env.
+      const r = sh(`set -euo pipefail; OPENAI_API_KEY=${JSON.stringify(key)} curl -sS -o /dev/null -w "%{http_code}" --max-time 10 https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"`, { timeoutMs: 12000 });
+      const http = String(r.stdout || '').trim();
+      verifyOk = http === '200';
+      if (!verifyOk) verifyErr = `http_${http || 'unknown'}`;
+    } catch (e) {
+      verifyOk = false;
+      verifyErr = 'verify_failed';
+    }
+
+    try {
+      const metaNew = JSON.stringify({
+        ...metaOld,
+        last_checked_at: tsCheck,
+        last_check_ok: Boolean(verifyOk),
+        ...(verifyOk ? { verified_at: metaOld.verified_at || tsCheck } : { invalid_at: tsCheck, invalid_reason: verifyErr || 'key_invalid' })
+      });
+      db.prepare('UPDATE delivery_secrets SET meta_json=?, updated_at=? WHERE provision_uuid=? AND kind=?')
+        .run(metaNew, tsCheck, safeUuid, 'openai_api_key');
+    } catch {}
+
+    if (!verifyOk) {
+      return { ok:false, error:'key_invalid' };
+    }
+
     const authStore = {
       version: 1,
       profiles: {
@@ -1442,16 +1474,35 @@ app.get('/api/wa/status', async (req, res) => {
             // Self-heal delivered cutover (auth/model/config). Idempotent.
             try { tryCutoverDelivered(db2, uuid, { reason: 'relink_connected' }); } catch {}
 
+            // Decide whether we need to proactively ask for key.
+            // Rule:
+            // - If key missing OR last_check_ok=false -> send guide_key_paid.
+            // - If last_check_ok=true -> do NOT send guide.
+            // The cutover self-heal above updates delivery_secrets.meta_json.last_check_ok.
+            let keyOk = false;
+            try {
+              const ks = db2.prepare('SELECT meta_json FROM delivery_secrets WHERE provision_uuid=? AND kind=? LIMIT 1').get(uuid, 'openai_api_key');
+              if (ks?.meta_json) {
+                const km = JSON.parse(ks.meta_json);
+                keyOk = km?.last_check_ok === true;
+              } else {
+                keyOk = false;
+              }
+            } catch { keyOk = false; }
+
             const lang = getDeliveryLang(d2);
             const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
             const guide = prompts.guide_key_paid;
             const meta = jsonMeta(d2.meta_json) || {};
             const lastSentAt = meta.guide_key_sent_at ? Date.parse(meta.guide_key_sent_at) : null;
+            const lastAttemptAt = meta.guide_key_last_attempt_at ? Date.parse(meta.guide_key_last_attempt_at) : null;
             const qrGenAt = meta.qr_generated_at ? Date.parse(meta.qr_generated_at) : null;
 
-            if (guide) {
+            if (guide && !keyOk) {
+              // Send at most once per QR generation, but retry if previous attempts failed.
               const shouldSend = (!lastSentAt) || (qrGenAt && lastSentAt && qrGenAt > lastSentAt);
-              if (shouldSend) {
+              const shouldRetry = (!lastSentAt) && (!lastAttemptAt || (Date.now() - lastAttemptAt) > 60_000);
+              if (shouldSend || shouldRetry) {
                 const ts = nowIso();
                 const msg = renderTpl(guide, { uuid });
                 const rr2 = sendSelfChatOnInstance(inst2, msg);
