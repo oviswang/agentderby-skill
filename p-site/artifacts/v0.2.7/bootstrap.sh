@@ -217,6 +217,12 @@ JSON
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set update.auto.stableJitterHours 12 >/dev/null 2>&1 || true
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set update.auto.betaCheckIntervalHours 1 >/dev/null 2>&1 || true
 
+  # WhatsApp auth store must be writable by ubuntu.
+  # If any step previously ran OpenClaw as root, credentials may become root-owned and break linking (QR scan spins).
+  mkdir -p /home/ubuntu/.openclaw/credentials/whatsapp/default 2>/dev/null || true
+  chown -R ubuntu:ubuntu /home/ubuntu/.openclaw/credentials/whatsapp 2>/dev/null || true
+  chmod -R u+rwX,go-rwx /home/ubuntu/.openclaw/credentials/whatsapp 2>/dev/null || true
+
   # Install + enable BOTHook WA loopback + sendguard plugins (B-mode)
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins install "$INSTALL_DIR/plugins/bothook-wa-loopback" >/dev/null 2>&1 || true
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-loopback >/dev/null 2>&1 || true
