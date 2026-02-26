@@ -44,12 +44,17 @@ place_assets(){
   log "placing /opt/bothook assets"
   mkdir -p /opt/bothook/bin /opt/bothook/evidence
   install -m 755 /home/ubuntu/.openclaw/workspace/pool/postboot_verify.sh /opt/bothook/bin/postboot_verify.sh
+  install -m 755 /home/ubuntu/.openclaw/workspace/pool/openclaw-gateway-start.sh /opt/bothook/bin/openclaw-gateway-start.sh
 }
 
 install_units(){
-  log "installing systemd units (expected to be baked/templated elsewhere)"
-  # In current setup, these unit files already exist on pool machines.
-  # This script only ensures postboot verify is enabled.
+  log "installing systemd units"
+  install -m 644 /home/ubuntu/.openclaw/workspace/pool/openclaw-gateway.service /etc/systemd/system/openclaw-gateway.service
+  install -m 644 /home/ubuntu/.openclaw/workspace/pool/bothook-provision.service /etc/systemd/system/bothook-provision.service
+  install -m 644 /home/ubuntu/.openclaw/workspace/pool/bothook-postboot-verify.service /etc/systemd/system/bothook-postboot-verify.service
+
+  systemctl daemon-reload
+  systemctl enable --now openclaw-gateway.service bothook-provision.service >/dev/null 2>&1 || true
   systemctl enable --now bothook-postboot-verify.service >/dev/null 2>&1 || true
 }
 
