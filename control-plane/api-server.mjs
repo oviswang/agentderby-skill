@@ -2656,6 +2656,19 @@ app.post('/api/ops/qr-generated', (req, res) => {
       }
 
       d = db.prepare('SELECT * FROM deliveries WHERE delivery_id=?').get(d.delivery_id);
+
+      // HARD FAIL: if still not allocated, surface error (do not emit QR_GENERATED with null instance_id)
+      if (!d?.instance_id) {
+        const tsF = nowIso();
+        try {
+          db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json)
+                      VALUES (?,?,?,?,?,?)`).run(
+            crypto.randomUUID(), tsF, 'delivery', d.delivery_id, 'QR_ALLOCATE_FAILED',
+            JSON.stringify({ uuid, via: 'ops/qr-generated', error: 'instance_id_still_null_after_allocate' })
+          );
+        } catch {}
+        return send(res, 503, { ok:false, error:'allocate_failed', uuid });
+      }
     }
 
     // Ensure /opt/bothook/UUID.txt + /opt/bothook/state.json exist on the allocated instance.
