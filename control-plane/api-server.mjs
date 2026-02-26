@@ -1464,6 +1464,8 @@ app.post('/api/wa/start', async (req, res) => {
     // Self-heal: if watchdog cleared instance_id (QR_EXPIRED) or the delivery has no instance,
     // allocate a fresh clean pool machine here (this is the concrete user action: start linking).
     if (!delivery.instance_id) {
+      // DEBUG: surface allocation path execution
+      console.log('[bothook-api] wa/start needs allocation for uuid', uuid, 'delivery_id', delivery.delivery_id, 'status', delivery.status);
       const ts = nowIso();
 
       const candidates = db.prepare(`
