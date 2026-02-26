@@ -304,6 +304,7 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
     const st = String(updated.status || '');
     const needsAlloc = !updated.instance_id && ['QR_EXPIRED','CANCELED','LINKING_TIMEOUT','LINKING'].includes(st);
     if (needsAlloc) {
+      console.log('[bothook-api] reallocating instance for uuid', uuid, 'status', st, 'delivery_id', updated.delivery_id);
       // Re-enter allocation path by treating as non-existing.
       // (We allocate a clean instance and move status back to LINKING.)
       // NOTE: we keep the same delivery_id and provision_uuid.
