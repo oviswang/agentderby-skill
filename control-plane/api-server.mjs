@@ -1450,7 +1450,6 @@ app.post('/api/wa/start', async (req, res) => {
       + `systemctl --user stop openclaw-gateway.service 2>/dev/null || true; `
       + `sudo systemctl stop openclaw-gateway.service 2>/dev/null || true; `
       + `sudo systemctl stop bothook-provision.service 2>/dev/null || true; `
-      + `sudo systemctl disable bothook-provision.service 2>/dev/null || true; `
       // Ensure WhatsApp credential dir is writable by ubuntu (prevents QR scan spinning due to EACCES).
       + `sudo mkdir -p /home/ubuntu/.openclaw/credentials/whatsapp/default 2>/dev/null || true; `
       + `sudo chown -R ubuntu:ubuntu /home/ubuntu/.openclaw/credentials/whatsapp 2>/dev/null || true; `
@@ -1583,55 +1582,68 @@ app.get('/api/wa/status', async (req, res) => {
 
     const instance = getInstanceById(db, delivery.instance_id);
 
-    // SINGLE-CHANNEL model: status is from `openclaw channels status`.
-    const rr = poolSsh(instance, `set -euo pipefail; openclaw status --json 2>/dev/null || openclaw status`, { timeoutMs: 15000, tty: false });
+    // Linking flow stops the gateway and runs `openclaw channels login` in tmux.
+    // So /api/wa/status MUST NOT depend on the gateway being up.
+    // Use `openclaw channels status --probe --json` (provider-level probe) as the primary source of truth.
+    const rr = poolSsh(
+      instance,
+      `set -euo pipefail; openclaw channels status --probe --json 2>/dev/null || true`,
+      { timeoutMs: 12000, tty: false }
+    );
     const text = (rr.stdout || rr.stderr || '').trim();
 
     let connected = false;
     let waJid = null;
 
-    // Best-effort parse:
-    // - JSON mode (openclaw status): has linkChannel.linked + channelSummary but no self.jid.
-    // - Probe mode (openclaw channels status --probe): has channels.whatsapp.self.jid + connected.
-    // - Text mode: contains 'WhatsApp' and 'linked/connected/ready'
     try {
-      const j = JSON.parse(text);
-      // openclaw status JSON: treat linked WhatsApp as a prerequisite signal.
-      connected = Boolean(j?.linkChannel?.id === 'whatsapp' && j?.linkChannel?.linked);
-      waJid = null;
-
-      // If linked, attempt a fast probe to extract self.jid (needed to bind UUID).
-      // NOTE: this is still one SSH roundtrip; keep timeout small.
-      if (connected) {
-        try {
-          const pr = poolSsh(instance, `set -euo pipefail; openclaw channels status --probe --json 2>/dev/null || true`, { timeoutMs: 6000, tty: false, retries: 0 });
-          const ptxt = (pr.stdout || '').trim();
-          if (ptxt) {
-            const pj = JSON.parse(ptxt);
-            const wa = pj?.channels?.whatsapp;
-            if (wa?.self?.jid) waJid = String(wa.self.jid);
-            if (typeof wa?.connected === 'boolean') connected = wa.connected;
-          }
-        } catch {}
-      }
+      const pj = text ? JSON.parse(text) : null;
+      const wa = pj?.channels?.whatsapp;
+      if (typeof wa?.connected === 'boolean') connected = wa.connected;
+      if (wa?.self?.jid) waJid = String(wa.self.jid);
     } catch {
-      const lower = text.toLowerCase();
-      // Text-mode fallback: treat "linked" as sufficient signal that QR scan succeeded.
-      connected = lower.includes('whatsapp') && (lower.includes('connected') || lower.includes('ready') || lower.includes('linked'));
+      connected = false;
       waJid = null;
-
-      // If we detect linked but gateway is not running, try starting it (best-effort).
-      if (connected && (lower.includes('gateway not reachable') || lower.includes('gateway closed'))) {
-        try { poolSsh(instance, 'sudo systemctl start openclaw-gateway.service || true', { timeoutMs: 12000, tty: false, retries: 0 }); } catch {}
-      }
     }
 
-    if (rr.code !== 0 && !text) {
-      return send(res, 502, { ok: false, error: 'pool_status_failed', detail: (rr.stderr || rr.stdout || '').trim() });
+    // Fallback: if probe JSON isn't available, look at the tmux login session output.
+    // This catches the "✅ Linked" marker from openclaw login even before the gateway is restarted.
+    if (!connected) {
+      try {
+        const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
+        const cap = poolSsh(instance, `set -euo pipefail; tmux has-session -t '${tmuxSession}' 2>/dev/null || exit 0; tmux capture-pane -t '${tmuxSession}' -p -S - | tail -n 200`, { timeoutMs: 8000, tty: false, retries: 0 });
+        const raw = String(cap.stdout || cap.stderr || '').toLowerCase();
+        if (raw.includes('linked') && raw.includes('credentials saved')) connected = true;
+        if (raw.includes('linked after restart')) connected = true;
+      } catch {}
+    }
+
+    // If probe failed and we have nothing, still return a valid response.
+
+    // If we detected a successful QR scan but couldn't extract self JID, try reading it from creds.json.
+    // This allows DB binding to complete even while the gateway is intentionally stopped during linking.
+    if (connected && !waJid) {
+      try {
+        const pr = poolSsh(
+          instance,
+          `set -euo pipefail; python3 - <<'PY'
+import json
+p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'
+try:
+  j=json.load(open(p))
+except Exception:
+  j={}
+me=j.get('me') or {}
+print(me.get('id') or me.get('jid') or '')
+PY`,
+          { timeoutMs: 6000, tty: false, retries: 0 }
+        );
+        const jid = String(pr.stdout || '').trim();
+        if (jid) waJid = jid;
+      } catch {}
     }
 
     // If connected: bind UUID to WhatsApp identity (prevents relink takeover)
-    // IMPORTANT: Only bind when we can read the self JID from status.
+    // IMPORTANT: Only bind when we can read the self JID from status/creds.
     if (connected && waJid) {
       const ts = nowIso();
 
@@ -1642,7 +1654,8 @@ app.get('/api/wa/status', async (req, res) => {
 
         if (!bound && waJid) {
           const boundUnpaidExpiresAt = new Date(Date.parse(ts) + 15*60*1000).toISOString();
-          const meta2 = mergeMeta(delivery.meta_json, { bound_unpaid_expires_at: boundUnpaidExpiresAt });
+          // Mark QR as completed for UI; client should hide/close QR once bound.
+          const meta2 = mergeMeta(delivery.meta_json, { bound_unpaid_expires_at: boundUnpaidExpiresAt, qr_done_at: ts });
           db.prepare('UPDATE deliveries SET status=?, wa_jid=?, bound_at=?, updated_at=?, meta_json=? WHERE delivery_id=?')
             .run('BOUND_UNPAID', waJid, ts, ts, meta2, delivery.delivery_id);
           db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
@@ -1705,6 +1718,24 @@ app.get('/api/wa/status', async (req, res) => {
     // If waJid is unavailable (e.g. gateway not yet reachable), but we have a boundJid and status indicates linked,
     // treat it as connected for UI purposes.
     const claimConnected = Boolean(connected && boundJid && (!waJid || normalizeWaBase(boundJid) === normalizeWaBase(waJid)));
+
+    // If linked, restart services (gateway + provision) and close the tmux login session.
+    // This is required for the UI to reflect bound status and for welcome/onboarding messages to be delivered.
+    if (claimConnected) {
+      try {
+        const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
+        poolSsh(
+          instance,
+          `set -euo pipefail; `
+          + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
+          + `sudo systemctl enable bothook-provision.service 2>/dev/null || true; `
+          + `sudo systemctl start bothook-provision.service 2>/dev/null || true; `
+          + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
+          + `echo services_restarted`,
+          { timeoutMs: 20000, tty: false, retries: 0 }
+        );
+      } catch {}
+    }
     // If connected + entitled, self-heal delivered cutover (auth/model/config) and send OpenAI key setup guide.
     try {
       if (claimConnected) {
