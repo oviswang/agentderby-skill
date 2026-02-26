@@ -1459,7 +1459,69 @@ app.post('/api/wa/start', async (req, res) => {
 
     const { db } = openDb();
     const preferredLang = String(req.body?.lang || req.query?.lang || '').trim().toLowerCase() || null;
-    const delivery = getOrCreateDeliveryForUuid(db, uuid, { preferredLang });
+    let delivery = getOrCreateDeliveryForUuid(db, uuid, { preferredLang });
+
+    // Self-heal: if watchdog cleared instance_id (QR_EXPIRED) or the delivery has no instance,
+    // allocate a fresh clean pool machine here (this is the concrete user action: start linking).
+    if (!delivery.instance_id) {
+      const ts = nowIso();
+
+      const candidates = db.prepare(`
+        SELECT instance_id, public_ip, lifecycle_status, health_status, meta_json, created_at
+        FROM instances
+        WHERE public_ip IS NOT NULL AND public_ip != ''
+          AND lifecycle_status='IN_POOL'
+        ORDER BY created_at ASC
+        LIMIT 50
+      `).all();
+
+      const provisionReady = candidates.filter((i) => (jsonMeta(i.meta_json) || {}).provision_ready === true);
+      if (!provisionReady.length) {
+        return send(res, 503, { ok:false, error:'no_provision_ready_instances' });
+      }
+
+      let chosen = null;
+      for (const c of provisionReady) {
+        const inst = getInstanceById(db, c.instance_id);
+        const probe = probeInstanceWhatsappClean(db, inst);
+        if (probe.clean) { chosen = inst; break; }
+      }
+      if (!chosen) {
+        return send(res, 503, { ok:false, error:'no_clean_instances_available' });
+      }
+
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const row = db.prepare('SELECT status, meta_json FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+        const meta2 = mergeMeta(row?.meta_json || delivery.meta_json, {
+          reallocated_at: ts,
+          prev_instance_id: null,
+          prev_status: row?.status || delivery.status || null
+        });
+
+        db.prepare('UPDATE deliveries SET instance_id=?, status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
+          .run(chosen.instance_id, 'LINKING', ts, meta2, delivery.delivery_id);
+
+        db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=?, assigned_at=? WHERE instance_id=?')
+          .run('ALLOCATED', uuid, ts, chosen.instance_id);
+
+        writeUuidStateFilesOnInstance(chosen, { uuid, lang: preferredLang || 'en' });
+
+        db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json)
+                    VALUES (?,?,?,?,?,?)`).run(
+          crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PROVISION_REALLOCATED',
+          JSON.stringify({ uuid, instance_id: chosen.instance_id, from_status: row?.status || delivery.status || null })
+        );
+
+        db.exec('COMMIT');
+      } catch (e) {
+        try { db.exec('ROLLBACK'); } catch {}
+        throw e;
+      }
+
+      delivery = db.prepare('SELECT * FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+    }
+
     const instance = getInstanceById(db, delivery.instance_id);
     if (!instance?.public_ip) return send(res, 500, { ok: false, error: 'instance_missing_ip' });
 
