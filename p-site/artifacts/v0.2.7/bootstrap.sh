@@ -103,10 +103,19 @@ ensure_openclaw(){
     sudo -u ubuntu npm install -g "$tmp"
   fi
 
-  # Ensure the binary is reachable.
-  if [[ -x "$prefix/bin/openclaw" ]]; then
-    ln -sf "$prefix/bin/openclaw" /usr/local/bin/openclaw || true
+  # Hard-validate install completed (npm global install can leave partial dirs on interruption).
+  # If this fails, stop bootstrap early so pool init marks NEEDS_VERIFY instead of silently producing a broken READY.
+  if [[ ! -x "$prefix/bin/openclaw" ]]; then
+    log "FATAL: openclaw binary missing at $prefix/bin/openclaw after install"
+    exit 21
   fi
+  if ! sudo -u ubuntu "$prefix/bin/openclaw" --version >/dev/null 2>&1; then
+    log "FATAL: openclaw --version failed after install"
+    exit 22
+  fi
+
+  # Ensure the binary is reachable.
+  ln -sf "$prefix/bin/openclaw" /usr/local/bin/openclaw || true
 
   log "openclaw installed: $prefix/bin/openclaw ($(sudo -u ubuntu $prefix/bin/openclaw --version 2>/dev/null || true))"
 }
@@ -322,7 +331,18 @@ PY
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins install "$INSTALL_DIR/plugins/bothook-wa-sendguard" >/dev/null 2>&1 || true
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-sendguard >/dev/null 2>&1 || true
 
+  # Hard-validate BOTHook plugins installed (avoid leaving config invalid with allowlist pointing to missing plugins).
+  if [[ ! -f /home/ubuntu/.openclaw/extensions/bothook-wa-loopback/openclaw.plugin.json ]]; then
+    log "FATAL: bothook-wa-loopback not installed into extensions"
+    exit 31
+  fi
+  if [[ ! -f /home/ubuntu/.openclaw/extensions/bothook-wa-sendguard/openclaw.plugin.json ]]; then
+    log "FATAL: bothook-wa-sendguard not installed into extensions"
+    exit 32
+  fi
+
   # Pin plugin trust allowlist (prevents "untracked local code" warnings)
+  # NOTE: do this AFTER hard-validating plugins exist in extensions.
   python3 - <<'PY'
 import json, os, shutil, time
 p='/home/ubuntu/.openclaw/openclaw.json'
