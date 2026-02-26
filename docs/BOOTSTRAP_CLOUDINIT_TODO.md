@@ -17,7 +17,8 @@ Goal: cloud-init as primary. No control-plane bottleneck. User provides OpenAI k
 ### Phase 1 — Fix LLM auth/key behavior on user machine (no more anthropic error)
 - [~] Ensure agent never defaults to anthropic on fresh machine.
   - note: on test machine, `openclaw models set openai/gpt-5.2` works and models list now includes openai.
-- [ ] Ensure /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json exists.
+- [~] Ensure /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json exists.
+  - implemented in pool/postboot_verify.sh (self-heal)
 - [ ] If OpenAI key missing:
   - [ ] Agent should NOT crash; should send a short guide asking user to provide OpenAI key.
   - [ ] Do not send provider error messages.
