@@ -73,7 +73,28 @@ function tgSend(text) {
   } catch { return false; }
 }
 
-function isPaid(delivery_status, delivery_meta_json) {
+function hasActiveSubscription(db, user_id) {
+  try {
+    const uid = String(user_id || '').trim();
+    if (!uid) return false;
+    const row = db.prepare(
+      `SELECT status
+         FROM subscriptions
+        WHERE user_id=? AND provider='stripe'
+        ORDER BY datetime(updated_at) DESC
+        LIMIT 1`
+    ).get(uid);
+    const st = String(row?.status || '').toLowerCase();
+    return st === 'active' || st === 'trialing' || st === 'paid';
+  } catch {
+    return false;
+  }
+}
+
+function isPaid(db, delivery_status, delivery_meta_json, user_id) {
+  // Treat an ACTIVE subscription as paid, regardless of delivery.status drift.
+  if (hasActiveSubscription(db, user_id)) return true;
+
   const st = String(delivery_status || '').toUpperCase();
   if (['PAID','DELIVERED'].includes(st)) return true;
   const m = parseJson(delivery_meta_json);
@@ -122,8 +143,8 @@ function main() {
           reason = 'stale_linking_unpinned';
         }
       } else {
-        // Never clear paid/delivered sessions; keep pinned until explicit reclaim/cancel policy.
-        if (isPaid(st, r.delivery_meta)) continue;
+        // Never clear sessions for paid users (active subscription), keep pinned until explicit reclaim/cancel policy.
+        if (isPaid(db, st, r.delivery_meta, r.user_id)) continue;
         // bound-but-expired fallback: use meta.bound_unpaid_expires_at if present
         const exp = meta?.bound_unpaid_expires_at ? Date.parse(String(meta.bound_unpaid_expires_at)) : NaN;
         if (Number.isFinite(exp) && Date.now() >= exp) {
@@ -181,7 +202,7 @@ function main() {
   let stage = null;
 
   for (const r of rows) {
-    if (isPaid(r.delivery_status, r.delivery_meta)) continue;
+    if (isPaid(db, r.delivery_status, r.delivery_meta, r.user_id)) continue;
 
     // Stage A: not bound yet
     if (!r.bound_at) {
