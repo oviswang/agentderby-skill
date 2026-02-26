@@ -157,11 +157,28 @@ function main() {
   try { lastRepairAt = Date.parse(JSON.parse(fs.readFileSync(REPAIR_STATE_PATH,'utf8'))?.lastRepairAt || '') || 0; } catch {}
 
   const total = db.prepare(`SELECT COUNT(*) c FROM instances WHERE lifecycle_status IN ('IN_POOL','ALLOCATED')`).get().c;
-  const ready = db.prepare(`SELECT COUNT(*) c FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='READY'`).get().c;
+
+  // NOTE: Some instances may be incorrectly left as lifecycle_status=IN_POOL even though they're bound/paid.
+  // We must exclude such "reserved" instances from READY pool capacity decisions, otherwise replenisher will stop creating.
+  const readyRaw = db.prepare(`SELECT COUNT(*) c FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='READY'`).get().c;
+  const reservedRaw = db.prepare(
+    `SELECT COUNT(DISTINCT d.instance_id) c
+       FROM deliveries d
+       JOIN instances i ON i.instance_id = d.instance_id
+      WHERE i.lifecycle_status='IN_POOL'
+        AND i.health_status='READY'
+        AND d.instance_id IS NOT NULL
+        AND d.bound_at IS NOT NULL
+        AND d.status IN ('ACTIVE','PAID','DELIVERED')`
+  ).get().c;
+
+  const reserved = Number(reservedRaw || 0);
+  const ready = Math.max(0, Number(readyRaw || 0) - reserved);
+
   const needs = db.prepare(`SELECT instance_id FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='NEEDS_VERIFY' ORDER BY last_probe_at ASC NULLS FIRST LIMIT 1`).get();
 
   if (total >= WARN_THRESHOLD) {
-    tgSend(`[bothook] pool nearing cap: total=${total}/${CAP_TOTAL}, ready=${ready}/${TARGET_READY}`);
+    tgSend(`[bothook] pool nearing cap: total=${total}/${CAP_TOTAL}, ready=${ready}/${TARGET_READY} (raw_ready=${readyRaw}, reserved=${reserved})`);
   }
 
   if (ready >= TARGET_READY) {
@@ -169,7 +186,7 @@ function main() {
     const nowMs = Date.now();
     const due = (nowMs - lastRepairAt) >= REPAIR_EVERY_MS;
     if (!due) {
-      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient', total, ready, needs_verify: Boolean(needs?.instance_id), next_repair_in_ms: Math.max(0, REPAIR_EVERY_MS - (nowMs - lastRepairAt)) }, null, 2));
+      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient', total, ready, raw_ready: readyRaw, reserved, needs_verify: Boolean(needs?.instance_id), next_repair_in_ms: Math.max(0, REPAIR_EVERY_MS - (nowMs - lastRepairAt)) }, null, 2));
       return;
     }
 
@@ -183,13 +200,13 @@ function main() {
       return;
     }
 
-    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient_no_needs_verify', total, ready }, null, 2));
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient_no_needs_verify', total, ready, raw_ready: readyRaw, reserved }, null, 2));
     return;
   }
 
   if (total >= CAP_TOTAL) {
-    tgSend(`[bothook][WARN] pool blocked by cap: total=${total}/${CAP_TOTAL}, ready=${ready}/${TARGET_READY}`);
-    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'cap_reached', total, ready }, null, 2));
+    tgSend(`[bothook][WARN] pool blocked by cap: total=${total}/${CAP_TOTAL}, ready=${ready}/${TARGET_READY} (raw_ready=${readyRaw}, reserved=${reserved})`);
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'cap_reached', total, ready, raw_ready: readyRaw, reserved }, null, 2));
     return;
   }
 
@@ -198,13 +215,13 @@ function main() {
   try {
     const busy = getJson(`${API_BASE}/api/ops/pool/init/busy`);
     if (busy?.busy || (Number(busy?.active || 0) > 0)) {
-      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'init_busy_suppress_create', total, ready, active_init: Number(busy?.active||0) }, null, 2));
+      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'init_busy_suppress_create', total, ready, raw_ready: readyRaw, reserved, active_init: Number(busy?.active||0) }, null, 2));
       return;
     }
   } catch {
     // Fail-closed: if busy signal is unreachable (e.g. API server blocked by a long init),
     // suppress create to avoid over-provision.
-    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'init_busy_suppress_create_unreachable', total, ready }, null, 2));
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'init_busy_suppress_create_unreachable', total, ready, raw_ready: readyRaw, reserved }, null, 2));
     return;
   }
 
