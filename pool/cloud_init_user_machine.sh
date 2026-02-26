@@ -32,12 +32,15 @@ ensure_node(){
 ensure_openclaw(){
   if command -v openclaw >/dev/null 2>&1; then
     log "openclaw exists: $(openclaw --version 2>/dev/null || true)"
+    # If an unpinned version exists, replace with pinned to ensure deterministic pre-delivery flow.
+    # (Post-delivery can re-enable auto-update.)
     return
   fi
-  log "installing openclaw"
+  log "installing openclaw (PINNED)"
   # npm global prefix
   sudo -u ubuntu bash -lc 'mkdir -p /home/ubuntu/.npm-global && npm config set prefix "/home/ubuntu/.npm-global"'
-  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; npm i -g openclaw'
+  # Pinned version for pre-delivery deterministic onboarding flow
+  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; npm i -g openclaw@2026.2.24'
 }
 
 place_assets(){
@@ -68,6 +71,15 @@ main(){
   ensure_openclaw
   place_assets
   install_units
+
+  # Verify pinned version
+  local v
+  v=$(sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw --version' 2>/dev/null || true)
+  if [[ "$v" != "2026.2.24" ]]; then
+    log "FATAL: openclaw version mismatch, expected 2026.2.24 got: $v"
+    exit 3
+  fi
+
   log "done"
 }
 
