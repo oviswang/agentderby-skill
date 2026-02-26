@@ -167,13 +167,19 @@ export CHK_PROVISION=$(svc_active bothook-provision.service && echo 1 || echo 0)
 export CHK_PORT18789=$([ "$port18789_ok" = true ] && echo 1 || echo 0)
 export CHK_PROV_HEALTHZ=$([ "$prov_ok" = true ] && echo 1 || echo 0)
 
+# Additional checks
+export CHK_TMUX=$([ -x /usr/bin/tmux ] && echo 1 || echo 0)
+export CHK_AUTH_PROFILES=$([ -f /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json ] && echo 1 || echo 0)
+
 checks_json=$(python3 - <<'PY'
 import json,os
 j={
   'openclaw_gateway_active': os.environ.get('CHK_GATEWAY')=='1',
   'bothook_provision_active': os.environ.get('CHK_PROVISION')=='1',
   'port_18789_listening': os.environ.get('CHK_PORT18789')=='1',
-  'provision_healthz_ok': os.environ.get('CHK_PROV_HEALTHZ')=='1'
+  'provision_healthz_ok': os.environ.get('CHK_PROV_HEALTHZ')=='1',
+  'tmux_installed': os.environ.get('CHK_TMUX')=='1',
+  'auth_profiles_present': os.environ.get('CHK_AUTH_PROFILES')=='1'
 }
 print(json.dumps(j,ensure_ascii=False))
 PY
