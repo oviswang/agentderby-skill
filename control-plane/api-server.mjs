@@ -1638,7 +1638,10 @@ PY`,
           { timeoutMs: 6000, tty: false, retries: 0 }
         );
         const jid = String(pr.stdout || '').trim();
-        if (jid) waJid = jid;
+        if (jid) {
+          waJid = jid;
+          connected = true;
+        }
       } catch {}
     }
 
