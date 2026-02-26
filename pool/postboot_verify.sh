@@ -171,6 +171,11 @@ export CHK_PROV_HEALTHZ=$([ "$prov_ok" = true ] && echo 1 || echo 0)
 export CHK_TMUX=$([ -x /usr/bin/tmux ] && echo 1 || echo 0)
 export CHK_AUTH_PROFILES=$([ -f /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json ] && echo 1 || echo 0)
 
+# Default model check (best-effort)
+MODEL_PRIMARY=$(sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config get agents.defaults.model.primary 2>/dev/null || true)
+MODEL_PRIMARY=$(echo "$MODEL_PRIMARY" | tr -d '\r' | tail -n 1)
+export CHK_DEFAULT_MODEL_OK=$([ "$MODEL_PRIMARY" = "openai/gpt-5.2" ] && echo 1 || echo 0)
+
 checks_json=$(python3 - <<'PY'
 import json,os
 j={
@@ -179,7 +184,8 @@ j={
   'port_18789_listening': os.environ.get('CHK_PORT18789')=='1',
   'provision_healthz_ok': os.environ.get('CHK_PROV_HEALTHZ')=='1',
   'tmux_installed': os.environ.get('CHK_TMUX')=='1',
-  'auth_profiles_present': os.environ.get('CHK_AUTH_PROFILES')=='1'
+  'auth_profiles_present': os.environ.get('CHK_AUTH_PROFILES')=='1',
+  'default_model_openai_gpt_5_2': os.environ.get('CHK_DEFAULT_MODEL_OK')=='1'
 }
 print(json.dumps(j,ensure_ascii=False))
 PY
