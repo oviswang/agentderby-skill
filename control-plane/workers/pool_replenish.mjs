@@ -111,22 +111,43 @@ function chooseZone() {
 function getBundlesFromCache() {
   try {
     const j = JSON.parse(fs.readFileSync(BUNDLE_CACHE_PATH, 'utf8'));
-    if (!j?.ts || !Array.isArray(j.bundles)) return null;
+    if (!j?.ts) return null;
     if ((Date.now() - Date.parse(j.ts)) > BUNDLE_CACHE_TTL_MS) return null;
-    return j.bundles.map(String).filter(Boolean);
-  } catch { return null; }
+
+    // Backward compatible:
+    // - v1: { ts, bundles: [bundleId,...] }
+    // - v2: { ts, bundles: [{ bundleId, price }, ...] }
+    if (Array.isArray(j.bundles) && j.bundles.length && typeof j.bundles[0] === 'string') {
+      return j.bundles
+        .map((bundleId) => ({ bundleId: String(bundleId || '').trim(), price: null }))
+        .filter((x) => x.bundleId);
+    }
+
+    if (Array.isArray(j.bundles) && j.bundles.length && typeof j.bundles[0] === 'object') {
+      return j.bundles
+        .map((x) => ({
+          bundleId: String(x?.bundleId || '').trim(),
+          price: (typeof x?.price === 'number' && Number.isFinite(x.price)) ? x.price : null
+        }))
+        .filter((x) => x.bundleId);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
-function setBundlesCache(bundles) {
+function setBundlesCache(bundlesDetailed) {
   try {
-    fs.writeFileSync(BUNDLE_CACHE_PATH, JSON.stringify({ ts: new Date().toISOString(), bundles }, null, 2));
+    // bundlesDetailed: [{ bundleId, price }]
+    fs.writeFileSync(BUNDLE_CACHE_PATH, JSON.stringify({ ts: new Date().toISOString(), bundles: bundlesDetailed }, null, 2));
   } catch {}
 }
 
 function pickCheapestBundlesDetailed() {
-  // Cache stores only the ordered bundle ids. Price is fetched fresh when cache miss.
   const cached = getBundlesFromCache();
-  if (cached?.length) return cached.map(bundleId => ({ bundleId, price: null }));
+  if (cached?.length) return cached;
 
   const txt = tccli(`tccli lighthouse DescribeBundles --region ${REGION} --version ${API_VERSION} --output json`);
   const j = JSON.parse(txt);
@@ -150,9 +171,10 @@ function pickCheapestBundlesDetailed() {
   }
 
   cand.sort((a,b)=> (a.price-b.price) || (a.cpu-b.cpu) || (a.mem-b.mem) || a.bundleId.localeCompare(b.bundleId));
-  const bundles = cand.map(x=>x.bundleId);
-  if (bundles.length) setBundlesCache(bundles);
-  return cand.map(x => ({ bundleId: x.bundleId, price: x.price }));
+
+  const bundlesDetailed = cand.map(x => ({ bundleId: x.bundleId, price: x.price }));
+  if (bundlesDetailed.length) setBundlesCache(bundlesDetailed);
+  return bundlesDetailed;
 }
 
 function main() {
