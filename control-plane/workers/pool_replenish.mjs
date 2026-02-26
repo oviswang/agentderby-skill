@@ -21,13 +21,16 @@ import { openDb, nowIso } from '../lib/db.mjs';
 
 const API_BASE = process.env.BOTHOOK_API_BASE || 'http://127.0.0.1:18998';
 const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
+// Lighthouse API version (recommended by tccli help)
+const API_VERSION = process.env.BOTHOOK_CLOUD_API_VERSION || '2020-03-24';
 const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || 'lhbp-1l4ptuvm';
-// Default pool bundle: prefer the cheaper 2GB "starter" bundle; fall back to rs_* if needed.
-const DEFAULT_BUNDLE_ID = process.env.BOTHOOK_POOL_BUNDLE_ID || 'bundle_starter_nmc_lin_med2_01';
+
+// Bundle selection policy:
+// - Prefer dynamic cheapest bundle list from DescribeBundles (filtered by CPU/MEM/MAX_PRICE)
+// - If BUNDLE_ALLOWLIST is set, ONLY those bundles are allowed
+// - If DescribeBundles yields none (rare), fall back to env BOTHOOK_POOL_BUNDLE_FALLBACKS
 const FALLBACK_BUNDLES = (process.env.BOTHOOK_POOL_BUNDLE_FALLBACKS || '')
   .split(',').map(s=>s.trim()).filter(Boolean)
-  // Always include rs_* as a built-in fallback (some accounts only have stock for one of the two).
-  .concat(['bundle_rs_nmc_lin_med2_01'])
   .filter((v,i,a)=>a.indexOf(v)===i);
 
 const MIN_CPU = parseInt(process.env.BOTHOOK_POOL_MIN_CPU || '2', 10);
@@ -124,7 +127,7 @@ function pickCheapestBundles() {
   const cached = getBundlesFromCache();
   if (cached?.length) return cached;
 
-  const txt = tccli(`tccli lighthouse DescribeBundles --region ${REGION} --output json`);
+  const txt = tccli(`tccli lighthouse DescribeBundles --region ${REGION} --version ${API_VERSION} --output json`);
   const j = JSON.parse(txt);
   const bs = j.BundleSet || [];
   const cand = [];
@@ -246,9 +249,13 @@ function main() {
   const name = `bothook-pool-${ts.replace(/[:.]/g,'-')}`;
   const clientToken = crypto.randomUUID();
 
+  // Candidate bundles (sorted cheapest first) — do NOT hardcode a default.
+  // This avoids manual intervention when bundle stock/discount changes.
   const cheapest = pickCheapestBundles();
-  // If allowlist is set, only try allowlisted bundles.
-  const baseList = BUNDLE_ALLOWLIST.length ? BUNDLE_ALLOWLIST : [DEFAULT_BUNDLE_ID, ...FALLBACK_BUNDLES, ...cheapest];
+  const baseList = BUNDLE_ALLOWLIST.length
+    ? BUNDLE_ALLOWLIST
+    : (cheapest.length ? cheapest : FALLBACK_BUNDLES);
+
   const bundlesToTry = baseList.filter(Boolean)
     .filter((v, i, a) => a.indexOf(v) === i)
     .slice(0, 8); // avoid huge loops
@@ -277,7 +284,7 @@ function main() {
       const tmp = `/tmp/bothook_create_${clientToken}.json`;
       fs.writeFileSync(tmp, JSON.stringify(payload));
       try {
-        const json = tccli(`tccli lighthouse CreateInstances --region ${REGION} --cli-input-json file://${tmp} --output json`);
+        const json = tccli(`tccli lighthouse CreateInstances --region ${REGION} --version ${API_VERSION} --cli-input-json file://${tmp} --output json`);
         resp = JSON.parse(json);
         usedBundle = bundleId;
         break;
@@ -297,7 +304,7 @@ function main() {
   }
 
   if (!resp) {
-    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'cloud_quota_all_bundles', total, ready, bundlesToTry }, null, 2));
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'cloud_quota_all_bundles', total, ready, raw_ready: readyRaw, reserved, bundlesToTry }, null, 2));
     return;
   }
 
@@ -317,10 +324,10 @@ function main() {
        blueprint_id=excluded.blueprint_id,
        lifecycle_status='IN_POOL',
        health_status='NEEDS_VERIFY'`
-  ).run(instance_id, 'tencent_lighthouse', REGION, zone, usedBundle || DEFAULT_BUNDLE_ID, BLUEPRINT_ID, 'IN_POOL', 'NEEDS_VERIFY', ts, JSON.stringify({ created_by:'pool_replenish', client_token: clientToken }));
+  ).run(instance_id, 'tencent_lighthouse', REGION, zone, usedBundle || null, BLUEPRINT_ID, 'IN_POOL', 'NEEDS_VERIFY', ts, JSON.stringify({ created_by:'pool_replenish', client_token: clientToken }));
 
   db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-    .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_INSTANCE_CREATED', JSON.stringify({ bundle_id: DEFAULT_BUNDLE_ID, blueprint_id: BLUEPRINT_ID, zone, request_id: resp.RequestId }));
+    .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_INSTANCE_CREATED', JSON.stringify({ bundle_id: usedBundle || null, blueprint_id: BLUEPRINT_ID, zone, request_id: resp.RequestId }));
 
   const job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
   console.log(JSON.stringify({ ok:true, ts, action:'create_and_init', instance_id, zone, job }, null, 2));
