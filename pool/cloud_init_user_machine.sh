@@ -42,9 +42,11 @@ ensure_openclaw(){
 
 place_assets(){
   log "placing /opt/bothook assets"
-  mkdir -p /opt/bothook/bin /opt/bothook/evidence
+  mkdir -p /opt/bothook/bin /opt/bothook/evidence /opt/bothook/plugins/bothook-onboarding-plugin
   install -m 755 /home/ubuntu/.openclaw/workspace/pool/postboot_verify.sh /opt/bothook/bin/postboot_verify.sh
   install -m 755 /home/ubuntu/.openclaw/workspace/pool/openclaw-gateway-start.sh /opt/bothook/bin/openclaw-gateway-start.sh
+  install -m 644 /home/ubuntu/.openclaw/workspace/pool/bothook-onboarding-plugin/openclaw.plugin.json /opt/bothook/plugins/bothook-onboarding-plugin/openclaw.plugin.json
+  install -m 644 /home/ubuntu/.openclaw/workspace/pool/bothook-onboarding-plugin/index.ts /opt/bothook/plugins/bothook-onboarding-plugin/index.ts
 }
 
 install_units(){

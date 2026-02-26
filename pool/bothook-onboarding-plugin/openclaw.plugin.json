@@ -1,0 +1,10 @@
+{
+  "id": "bothook-onboarding-plugin",
+  "name": "BOTHook Onboarding (WhatsApp)",
+  "description": "Intercept WhatsApp auto-reply errors during onboarding and replace with platform guide/prompts.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
