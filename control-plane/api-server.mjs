@@ -1454,6 +1454,7 @@ app.get('/api/billing/portal', async (req, res) => {
 
 app.post('/api/wa/start', async (req, res) => {
   try {
+    res.set('x-bothook-build', 'wa-start-alloc-v1');
     const uuid = String(req.body?.uuid || '').trim();
     if (!uuid) return send(res, 400, { ok: false, error: 'uuid_required' });
 
