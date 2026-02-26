@@ -21,7 +21,7 @@
 - 目标：前端永远不会白屏/超时转圈。
 
 ## 一键脚本
-- `/home/ubuntu/.openclaw/workspace/scripts/bootstrap_master_services.sh`
+- `/home/ubuntu/.openclaw/workspace/scripts/bootstrap_control_plane_host.sh`
   - 写入/启用 `~/.config/systemd/user/bothook-control-plane.service`
   - 固化 env（DB path / pool ssh key）
   - 清理 stray `api-server.mjs`
