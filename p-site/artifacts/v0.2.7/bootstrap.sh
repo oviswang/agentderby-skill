@@ -227,6 +227,52 @@ JSON
     chmod 600 /home/ubuntu/.openclaw/openclaw.json
   fi
 
+  # Ensure gateway block exists even if later config mutations accidentally drop it.
+  # Without this, openclaw-gateway-start.sh will wait forever on "config invalid" and port 18789 never listens.
+  python3 - <<'PY'
+import json, os, shutil, time, secrets
+p='/home/ubuntu/.openclaw/openclaw.json'
+if not os.path.exists(p):
+  raise SystemExit(0)
+with open(p,'r',encoding='utf-8') as f:
+  j=json.load(f)
+if not isinstance(j, dict):
+  raise SystemExit(0)
+
+# Preserve existing token if present
+existing_token = None
+try:
+  g=j.get('gateway') if isinstance(j.get('gateway'), dict) else None
+  a=g.get('auth') if isinstance(g, dict) and isinstance(g.get('auth'), dict) else None
+  if isinstance(a, dict) and isinstance(a.get('token'), str) and a.get('token'):
+    existing_token=a.get('token')
+except Exception:
+  existing_token=None
+
+g=j.get('gateway') if isinstance(j.get('gateway'), dict) else {}
+if not isinstance(g, dict):
+  g={}
+g.setdefault('mode','local')
+g.setdefault('bind','loopback')
+g.setdefault('port',18789)
+a=g.get('auth') if isinstance(g.get('auth'), dict) else {}
+a.setdefault('mode','token')
+a['token']= existing_token or secrets.token_hex(24)
+g['auth']=a
+j['gateway']=g
+
+bak=p+f'.bak.bootstrap.gateway.{int(time.time())}'
+try:
+  shutil.copy2(p,bak)
+except Exception:
+  pass
+with open(p,'w',encoding='utf-8') as f:
+  json.dump(j,f,ensure_ascii=False,indent=2)
+  f.write('\n')
+PY
+  chown ubuntu:ubuntu /home/ubuntu/.openclaw/openclaw.json 2>/dev/null || true
+  chmod 600 /home/ubuntu/.openclaw/openclaw.json 2>/dev/null || true
+
   # Enforce OpenClaw auto-update config (idempotent)
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set update.channel stable >/dev/null 2>&1 || true
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set update.checkOnStart false >/dev/null 2>&1 || true
