@@ -39,7 +39,8 @@ Goal: cloud-init as primary. No control-plane bottleneck. User provides OpenAI k
 - [ ] Only when ok==true: ready report to control-plane.
 
 ### Phase 4 — Cloud-init packaging
-- [ ] Produce a single cloud-init payload or install script that:
+- [~] Produce a single cloud-init payload or install script that:
+  - started: pool/cloud_init_user_machine.sh
   - [ ] Installs dependencies (node/openclaw/tmux)
   - [ ] Places /opt/bothook/* assets
   - [ ] Installs systemd units
