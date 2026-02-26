@@ -135,6 +135,11 @@ MSG
 
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw message send --channel whatsapp --target "$self" --message "$msg" >/dev/null 2>&1 || true
   touch "$MARKER" 2>/dev/null || true
+
+  # Disable agent auto-reply until the key is configured (prevents provider error spam in WhatsApp).
+  # Control-plane and provision flows still work; this only affects embedded agent replies.
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set channels.whatsapp.dmPolicy allowlist >/dev/null 2>&1 || true
+  sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true
 }
 
 fix_config_if_needed
