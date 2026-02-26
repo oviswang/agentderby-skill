@@ -22,8 +22,14 @@ import { openDb, nowIso } from '../lib/db.mjs';
 const API_BASE = process.env.BOTHOOK_API_BASE || 'http://127.0.0.1:18998';
 const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || 'lhbp-1l4ptuvm';
-const DEFAULT_BUNDLE_ID = process.env.BOTHOOK_POOL_BUNDLE_ID || 'bundle_rs_nmc_lin_med2_01';
-const FALLBACK_BUNDLES = (process.env.BOTHOOK_POOL_BUNDLE_FALLBACKS || '').split(',').map(s=>s.trim()).filter(Boolean);
+// Default pool bundle: prefer the cheaper 2GB "starter" bundle; fall back to rs_* if needed.
+const DEFAULT_BUNDLE_ID = process.env.BOTHOOK_POOL_BUNDLE_ID || 'bundle_starter_nmc_lin_med2_01';
+const FALLBACK_BUNDLES = (process.env.BOTHOOK_POOL_BUNDLE_FALLBACKS || '')
+  .split(',').map(s=>s.trim()).filter(Boolean)
+  // Always include rs_* as a built-in fallback (some accounts only have stock for one of the two).
+  .concat(['bundle_rs_nmc_lin_med2_01'])
+  .filter((v,i,a)=>a.indexOf(v)===i);
+
 const MIN_CPU = parseInt(process.env.BOTHOOK_POOL_MIN_CPU || '2', 10);
 const MIN_MEM_GB = parseInt(process.env.BOTHOOK_POOL_MIN_MEM_GB || '2', 10);
 // Cost guard: by default, do not create bundles larger than 2GB RAM.
