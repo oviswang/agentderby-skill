@@ -1619,9 +1619,9 @@ app.get('/api/wa/status', async (req, res) => {
 
     // If probe failed and we have nothing, still return a valid response.
 
-    // If we detected a successful QR scan but couldn't extract self JID, try reading it from creds.json.
-    // This allows DB binding to complete even while the gateway is intentionally stopped during linking.
-    if (connected && !waJid) {
+    // If we can't extract self JID from probes, try reading it from creds.json.
+    // This allows DB binding to complete even while the gateway/provision are intentionally stopped during linking.
+    if (!waJid) {
       try {
         const pr = poolSsh(
           instance,
