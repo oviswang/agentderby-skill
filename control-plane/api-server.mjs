@@ -2612,6 +2612,7 @@ app.post('/api/ops/qr-generated', (req, res) => {
     // Self-heal: p-site currently calls this endpoint on "retry".
     // If watchdog cleared delivery.instance_id, allocate a fresh clean pool machine here so a QR can be produced.
     if (!d.instance_id) {
+      console.log('[bothook-api] ops/qr-generated allocating for uuid', uuid, 'delivery_id', d.delivery_id, 'status', d.status);
       const ts0 = nowIso();
       const candidates = db.prepare(`
         SELECT instance_id, public_ip, lifecycle_status, health_status, meta_json, created_at
