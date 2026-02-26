@@ -22,7 +22,8 @@ Goal: cloud-init as primary. No control-plane bottleneck. User provides OpenAI k
 - [ ] If OpenAI key missing:
   - [ ] Agent should NOT crash; should send a short guide asking user to provide OpenAI key.
   - [ ] Do not send provider error messages.
-- [ ] Add postboot verify check: "auth store present + default provider OK".
+- [~] Add postboot verify check: "auth store present + default provider OK".
+  - added: tmux_installed + auth_profiles_present (default provider OK still pending)
 
 ### Phase 2 — Welcome/guide messages must be sent locally (no exit_code=127)
 - [ ] Move welcome_unpaid send execution to user machine (local openclaw message send).
