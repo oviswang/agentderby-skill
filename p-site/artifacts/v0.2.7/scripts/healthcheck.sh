@@ -15,21 +15,35 @@ main(){
   # Provision server health (if running)
   curl -fsS --max-time 2 http://127.0.0.1:18999/healthz >/dev/null 2>&1 && log "provision /healthz OK" || log "provision /healthz not ready"
 
-  log "Checking OpenClaw gateway (best-effort)..."
+  log "Checking OpenClaw gateway (STRICT gate)..."
+
+  # Gateway service must be active.
   if systemctl is-active --quiet openclaw-gateway.service; then
     log "openclaw-gateway.service active"
   else
-    log "openclaw-gateway.service not active (may be waiting for config)"
+    log "FATAL: openclaw-gateway.service not active"
+    exit 41
   fi
 
-  # Port check (only meaningful when config exists and gateway has started)
-  ss -ltn 2>/dev/null | grep -q ':18789' && log "port 18789 listening" || log "port 18789 not listening"
+  # Port must be listening (hard gate).
+  if ss -ltn 2>/dev/null | grep -q ':18789'; then
+    log "port 18789 listening"
+  else
+    log "FATAL: port 18789 not listening"
+    exit 42
+  fi
 
-  # Strong-ish RPC probe when config exists (run as ubuntu so HOME/config/token resolve correctly)
+  # RPC probe must succeed (hard gate). Run as ubuntu so HOME/config/token resolve correctly.
   if [[ -f /home/ubuntu/.openclaw/openclaw.json ]] && command -v openclaw >/dev/null 2>&1; then
-    sudo -u ubuntu -H bash -lc 'export HOME=/home/ubuntu; export OPENCLAW_STATE_DIR=/home/ubuntu/.openclaw; openclaw gateway status >/dev/null 2>&1' \
-      && log "openclaw gateway status OK (as ubuntu)" \
-      || log "openclaw gateway status failed (as ubuntu)"
+    if sudo -u ubuntu -H bash -lc 'export HOME=/home/ubuntu; export OPENCLAW_STATE_DIR=/home/ubuntu/.openclaw; openclaw gateway status >/dev/null 2>&1'; then
+      log "openclaw gateway status OK (as ubuntu)"
+    else
+      log "FATAL: openclaw gateway status failed (as ubuntu)"
+      exit 43
+    fi
+  else
+    log "FATAL: openclaw.json missing or openclaw binary not found"
+    exit 44
   fi
 
   log "Healthcheck completed."
