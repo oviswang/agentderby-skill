@@ -101,43 +101,14 @@ PY
     return 0
   fi
 
-  # Try to detect self E164 (best-effort)
-  local self
-  self=$(sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw channels status --probe --json 2>/dev/null | python3 - <<'PY'
-import sys,json
-s=sys.stdin.read()
-# Some commands may prefix plugin logs; keep only the last JSON object.
-i=s.rfind('{')
-if i==-1:
-  print('')
-  raise SystemExit
-try:
-  j=json.loads(s[i:])
-  wa=(j.get('channels',{}) or {}).get('whatsapp',{}) or {}
-  e=(wa.get('self',{}) or {}).get('e164','')
-  print(e)
-except Exception:
-  print('')
-PY
-  )
-
-  [[ -n "$self" ]] || return 0
-
-  local msg
-  msg=$(cat <<'MSG'
-[bothook]
-Next step: please add your OpenAI API key.
-
-Open your UUID page on p.bothook.me, paste the key, then send a message here again.
-(We never store your key in the control-plane; it stays on this machine.)
-MSG
-  )
-
-  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw message send --channel whatsapp --target "$self" --message "$msg" >/dev/null 2>&1 || true
+  # If key missing, we should NOT crash. We also avoid spamming WhatsApp with provider errors.
+  # NOTE: we do NOT attempt to proactively message the user here, because on a fresh machine we may not
+  # yet know the user's self id/e164, and relying on provider status can itself fail.
+  # Instead: (a) keep gateway up; (b) write a local marker and let the provisioning UX ask for the key.
+  echo "openai_key_missing" > "$EVID_DIR/openai_key_missing" 2>/dev/null || true
   touch "$MARKER" 2>/dev/null || true
 
-  # Disable agent auto-reply until the key is configured (prevents provider error spam in WhatsApp).
-  # Control-plane and provision flows still work; this only affects embedded agent replies.
+  # Optional hardening: restrict unsolicited DMs until key is configured (best-effort, do not fail the script).
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set channels.whatsapp.dmPolicy allowlist >/dev/null 2>&1 || true
   sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true
 }
