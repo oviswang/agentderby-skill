@@ -103,10 +103,16 @@ PY
 
   # Try to detect self E164 (best-effort)
   local self
-  self=$(sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw channels status --probe --json 2>/dev/null | tail -n +2 | python3 - <<'PY'
+  self=$(sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw channels status --probe --json 2>/dev/null | python3 - <<'PY'
 import sys,json
+s=sys.stdin.read()
+# Some commands may prefix plugin logs; keep only the last JSON object.
+i=s.rfind('{')
+if i==-1:
+  print('')
+  raise SystemExit
 try:
-  j=json.load(sys.stdin)
+  j=json.loads(s[i:])
   wa=(j.get('channels',{}) or {}).get('whatsapp',{}) or {}
   e=(wa.get('self',{}) or {}).get('e164','')
   print(e)
