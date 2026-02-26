@@ -2602,6 +2602,7 @@ app.get('/api/delivery/status', (req, res) => {
 // Ops: mark QR generated (A-stage start)
 app.post('/api/ops/qr-generated', (req, res) => {
   try {
+    res.set('x-bothook-build', 'ops-alloc-v2');
     const uuid = String(req.body?.uuid || '').trim();
     const lang = String(req.body?.lang || '').trim() || null;
     if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
