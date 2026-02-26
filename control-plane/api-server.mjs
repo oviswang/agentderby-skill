@@ -1398,7 +1398,10 @@ app.post('/api/wa/start', async (req, res) => {
     // - Stripe subscription is still in the paid effective period (including cancel_at_period_end but not yet ended).
     if (force) {
       const st = String(delivery.status || '');
-      let entitled = (st === 'PAID');
+      // Allow forcing a fresh (unpaid) onboarding relink when the delivery is not in a paid/delivered state.
+      // This keeps the UI unblocked for new-user tests and avoids trapping users behind subscription checks.
+      const allowUnpaidForce = ['QR_EXPIRED','BOUND_UNPAID','ACTIVE','LINKING_TIMEOUT','LINKING','ALLOCATED'].includes(st);
+      let entitled = (st === 'PAID') || allowUnpaidForce;
 
       if (!entitled) {
         const uid = String(delivery.user_id || '').trim();
@@ -1525,6 +1528,10 @@ app.get('/api/wa/qr', async (req, res) => {
     if (!delivery) return send(res, 404, { ok: false, error: 'unknown_uuid' });
 
     const instance = getInstanceById(db, delivery.instance_id);
+    if (!instance?.public_ip) {
+      // No machine allocated (or cleared by watchdog). UI should prompt for a fresh link/allocate.
+      return send(res, 409, { ok: false, error: 'no_instance_allocated', uuid, status: delivery.status });
+    }
     const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
 
     const rr = poolSsh(instance, `set -euo pipefail; tmux has-session -t '${tmuxSession}' 2>/dev/null || exit 3; tmux capture-pane -t '${tmuxSession}' -p -S - | tail -n 260`, { timeoutMs: 12000, tty: false, retries: 1 });
