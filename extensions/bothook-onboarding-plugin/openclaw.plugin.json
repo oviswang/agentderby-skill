@@ -2,6 +2,9 @@
   "id": "bothook-onboarding-plugin",
   "name": "BOTHook Onboarding (WhatsApp)",
   "description": "Intercept WhatsApp auto-reply errors during onboarding and replace with platform guide/prompts.",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "engine": { "openclaw": "*" },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
