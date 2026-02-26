@@ -1582,67 +1582,56 @@ app.get('/api/wa/status', async (req, res) => {
 
     const instance = getInstanceById(db, delivery.instance_id);
 
-    // Linking flow stops the gateway and runs `openclaw channels login` in tmux.
-    // So /api/wa/status MUST NOT depend on the gateway being up.
-    // Use `openclaw channels status --probe --json` (provider-level probe) as the primary source of truth.
-    const rr = poolSsh(
-      instance,
-      `set -euo pipefail; openclaw channels status --probe --json 2>/dev/null || true`,
-      { timeoutMs: 12000, tty: false }
-    );
-    const text = (rr.stdout || rr.stderr || '').trim();
+    // FAST PATH: do not block HTTP on SSH/tmux probes.
+    // UI should poll /api/wa/qr for QR availability; /api/wa/status is used mainly to observe bind completion.
+    let connected = Boolean(delivery?.wa_jid);
+    let waJid = delivery?.wa_jid || null;
 
-    let connected = false;
-    let waJid = null;
-
-    try {
-      const pj = text ? JSON.parse(text) : null;
-      const wa = pj?.channels?.whatsapp;
-      if (typeof wa?.connected === 'boolean') connected = wa.connected;
-      if (wa?.self?.jid) waJid = String(wa.self.jid);
-    } catch {
-      connected = false;
-      waJid = null;
-    }
-
-    // Fallback: if probe JSON isn't available, look at the tmux login session output.
-    // This catches the "✅ Linked" marker from openclaw login even before the gateway is restarted.
-    if (!connected) {
-      try {
-        const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
-        const cap = poolSsh(instance, `set -euo pipefail; tmux has-session -t '${tmuxSession}' 2>/dev/null || exit 0; tmux capture-pane -t '${tmuxSession}' -p -S - | tail -n 200`, { timeoutMs: 8000, tty: false, retries: 0 });
-        const raw = String(cap.stdout || cap.stderr || '').toLowerCase();
-        if (raw.includes('linked') && raw.includes('credentials saved')) connected = true;
-        if (raw.includes('linked after restart')) connected = true;
-      } catch {}
-    }
-
-    // If probe failed and we have nothing, still return a valid response.
-
-    // If we can't extract self JID from probes, try reading it from creds.json.
-    // This allows DB binding to complete even while the gateway/provision are intentionally stopped during linking.
-    if (!waJid) {
-      try {
-        const pr = poolSsh(
-          instance,
-          `set -euo pipefail; python3 - <<'PY'
-import json
-p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'
-try:
-  j=json.load(open(p))
-except Exception:
-  j={}
-me=j.get('me') or {}
-print(me.get('id') or me.get('jid') or '')
+    // Background probe: best-effort discover JID from creds.json and bind.
+    if (!waJid && instance?.public_ip) {
+      setTimeout(() => {
+        try {
+          const pr = poolSsh(
+            instance,
+            `set -euo pipefail; python3 - <<'PY'\
+import json\
+p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'\
+try:\
+  j=json.load(open(p))\
+except Exception:\
+  j={}\
+me=j.get('me') or {}\
+print(me.get('id') or me.get('jid') or '')\
 PY`,
-          { timeoutMs: 6000, tty: false, retries: 0 }
-        );
-        const jid = String(pr.stdout || '').trim();
-        if (jid) {
-          waJid = jid;
-          connected = true;
-        }
-      } catch {}
+            { timeoutMs: 2500, tty: false, retries: 0 }
+          );
+          const jid = String(pr.stdout || '').trim();
+          if (!jid) return;
+          const ts = nowIso();
+          const { db: db2 } = openDb();
+          db2.exec('BEGIN IMMEDIATE');
+          try {
+            const current = db2.prepare('SELECT wa_jid, meta_json FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+            if (!current?.wa_jid) {
+              const boundUnpaidExpiresAt = new Date(Date.parse(ts) + 15*60*1000).toISOString();
+              const meta2 = mergeMeta(current?.meta_json || delivery.meta_json, { bound_unpaid_expires_at: boundUnpaidExpiresAt, qr_done_at: ts });
+              db2.prepare('UPDATE deliveries SET status=?, wa_jid=?, bound_at=?, updated_at=?, meta_json=? WHERE delivery_id=?')
+                .run('BOUND_UNPAID', jid, ts, ts, meta2, delivery.delivery_id);
+              db2.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'UUID_BOUND', JSON.stringify({ uuid, wa_jid: jid, instance_id: instance.instance_id })
+              );
+              try {
+                db2.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                  crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'WA_LINKED', JSON.stringify({ uuid, wa_jid: jid, instance_id: instance.instance_id })
+                );
+              } catch {}
+            }
+            db2.exec('COMMIT');
+          } catch {
+            try { db2.exec('ROLLBACK'); } catch {}
+          }
+        } catch {}
+      }, 0);
     }
 
     // If connected: bind UUID to WhatsApp identity (prevents relink takeover)
@@ -1720,7 +1709,7 @@ PY`,
 
     // If waJid is unavailable (e.g. gateway not yet reachable), but we have a boundJid and status indicates linked,
     // treat it as connected for UI purposes.
-    const claimConnected = Boolean(connected && boundJid && (!waJid || normalizeWaBase(boundJid) === normalizeWaBase(waJid)));
+    const claimConnected = Boolean(boundJid);
 
     // If linked, restart services (gateway + provision) and close the tmux login session.
     // This is required for the UI to reflect bound status and for welcome/onboarding messages to be delivered.
@@ -1905,7 +1894,6 @@ PY`,
     } catch {}
 
     const out = { ok: true, uuid, instance_id: instance.instance_id, status: claimConnected ? 'connected' : 'linking', connected: claimConnected, wa_jid: boundJid || null, lastUpdateAt: nowIso() };
-    if (isDebug(req)) out.debug = { raw: text.slice(0, 800) };
     return send(res, 200, out);
   } catch (e) {
     return send(res, 500, { ok: false, error: e.message || 'server_error' });
@@ -2615,7 +2603,11 @@ function startOpsWorker(){
                 + `rm -rf /home/ubuntu/.openclaw/channels/whatsapp 2>/dev/null || true; `
                 + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
                 + `echo cleaned`;
-              poolSsh(inst, remoteCmd, { timeoutMs: 25000, tty: false, retries: 2 });
+              // Fire-and-forget cleanup. Never block the ops loop (and thus the whole HTTP server)
+              // on slow/unreachable instances.
+              setTimeout(() => {
+                try { poolSsh(inst, remoteCmd, { timeoutMs: 8000, tty: false, retries: 0 }); } catch {}
+              }, 0);
             }
           }
         } catch {}
