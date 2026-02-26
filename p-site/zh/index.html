@@ -716,7 +716,8 @@
           const s = window.__bothook_i18n || {};
           qrStatus.textContent = s.startingNewQrSession || 'Starting a new QR session…';
         }
-        try { await startProvision(uuid, true); } catch {}
+        // New-user flow: Retry should NOT force relink (force=true triggers subscription gate).
+        try { await startProvision(uuid, false); } catch {}
         const box=document.getElementById('turnstileBox'); if(box) box.style.display='flex';
         {
           const s = window.__bothook_i18n || {};
