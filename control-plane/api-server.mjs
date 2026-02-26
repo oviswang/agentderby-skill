@@ -2607,7 +2607,56 @@ app.post('/api/ops/qr-generated', (req, res) => {
     if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
 
     const { db } = openDb();
-    const d = getOrCreateDeliveryForUuid(db, uuid, { preferredLang: lang || null });
+    let d = getOrCreateDeliveryForUuid(db, uuid, { preferredLang: lang || null });
+
+    // Self-heal: p-site currently calls this endpoint on "retry".
+    // If watchdog cleared delivery.instance_id, allocate a fresh clean pool machine here so a QR can be produced.
+    if (!d.instance_id) {
+      const ts0 = nowIso();
+      const candidates = db.prepare(`
+        SELECT instance_id, public_ip, lifecycle_status, health_status, meta_json, created_at
+        FROM instances
+        WHERE public_ip IS NOT NULL AND public_ip != ''
+          AND lifecycle_status='IN_POOL'
+        ORDER BY created_at ASC
+        LIMIT 50
+      `).all();
+
+      const provisionReady = candidates.filter((i) => (jsonMeta(i.meta_json) || {}).provision_ready === true);
+      if (!provisionReady.length) return send(res, 503, { ok:false, error:'no_provision_ready_instances' });
+
+      let chosen = null;
+      for (const c of provisionReady) {
+        const inst = getInstanceById(db, c.instance_id);
+        const probe = probeInstanceWhatsappClean(db, inst);
+        if (probe.clean) { chosen = inst; break; }
+      }
+      if (!chosen) return send(res, 503, { ok:false, error:'no_clean_instances_available' });
+
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const row = db.prepare('SELECT status, meta_json FROM deliveries WHERE delivery_id=?').get(d.delivery_id);
+        const meta2 = mergeMeta(row?.meta_json || d.meta_json, { reallocated_at: ts0, prev_status: row?.status || d.status || null });
+        db.prepare('UPDATE deliveries SET instance_id=?, status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
+          .run(chosen.instance_id, 'LINKING', ts0, meta2, d.delivery_id);
+        db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=?, assigned_at=? WHERE instance_id=?')
+          .run('ALLOCATED', uuid, ts0, chosen.instance_id);
+
+        writeUuidStateFilesOnInstance(chosen, { uuid, lang: lang || getDeliveryLang(d) || 'en' });
+
+        db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+          crypto.randomUUID(), ts0, 'delivery', d.delivery_id, 'PROVISION_REALLOCATED',
+          JSON.stringify({ uuid, instance_id: chosen.instance_id, via: 'ops/qr-generated', from_status: row?.status || d.status || null })
+        );
+        db.exec('COMMIT');
+      } catch (e) {
+        try { db.exec('ROLLBACK'); } catch {}
+        throw e;
+      }
+
+      d = db.prepare('SELECT * FROM deliveries WHERE delivery_id=?').get(d.delivery_id);
+    }
+
     // Ensure /opt/bothook/UUID.txt + /opt/bothook/state.json exist on the allocated instance.
     try {
       const inst = getInstanceById(db, d.instance_id);
