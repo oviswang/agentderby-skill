@@ -123,9 +123,10 @@ function setBundlesCache(bundles) {
   } catch {}
 }
 
-function pickCheapestBundles() {
+function pickCheapestBundlesDetailed() {
+  // Cache stores only the ordered bundle ids. Price is fetched fresh when cache miss.
   const cached = getBundlesFromCache();
-  if (cached?.length) return cached;
+  if (cached?.length) return cached.map(bundleId => ({ bundleId, price: null }));
 
   const txt = tccli(`tccli lighthouse DescribeBundles --region ${REGION} --version ${API_VERSION} --output json`);
   const j = JSON.parse(txt);
@@ -151,7 +152,7 @@ function pickCheapestBundles() {
   cand.sort((a,b)=> (a.price-b.price) || (a.cpu-b.cpu) || (a.mem-b.mem) || a.bundleId.localeCompare(b.bundleId));
   const bundles = cand.map(x=>x.bundleId);
   if (bundles.length) setBundlesCache(bundles);
-  return bundles;
+  return cand.map(x => ({ bundleId: x.bundleId, price: x.price }));
 }
 
 function main() {
@@ -251,7 +252,10 @@ function main() {
 
   // Candidate bundles (sorted cheapest first) — do NOT hardcode a default.
   // This avoids manual intervention when bundle stock/discount changes.
-  const cheapest = pickCheapestBundles();
+  const cheapestDetailed = pickCheapestBundlesDetailed();
+  const cheapest = cheapestDetailed.map(x => x.bundleId);
+  const priceByBundle = new Map(cheapestDetailed.map(x => [x.bundleId, x.price]));
+
   const baseList = BUNDLE_ALLOWLIST.length
     ? BUNDLE_ALLOWLIST
     : (cheapest.length ? cheapest : FALLBACK_BUNDLES);
@@ -312,6 +316,8 @@ function main() {
   const instance_id = String(ids[0] || '').trim();
   if (!instance_id) throw new Error('create_instances_no_id');
 
+  const usedPrice = usedBundle ? (priceByBundle.has(usedBundle) ? priceByBundle.get(usedBundle) : null) : null;
+
   // Upsert minimal DB row so ops/init can find it
   db.prepare(
     `INSERT INTO instances(instance_id, provider, region, zone, bundle_id, blueprint_id, lifecycle_status, health_status, created_at, meta_json)
@@ -324,13 +330,31 @@ function main() {
        blueprint_id=excluded.blueprint_id,
        lifecycle_status='IN_POOL',
        health_status='NEEDS_VERIFY'`
-  ).run(instance_id, 'tencent_lighthouse', REGION, zone, usedBundle || null, BLUEPRINT_ID, 'IN_POOL', 'NEEDS_VERIFY', ts, JSON.stringify({ created_by:'pool_replenish', client_token: clientToken }));
+  ).run(
+    instance_id,
+    'tencent_lighthouse',
+    REGION,
+    zone,
+    usedBundle || null,
+    BLUEPRINT_ID,
+    'IN_POOL',
+    'NEEDS_VERIFY',
+    ts,
+    JSON.stringify({ created_by:'pool_replenish', client_token: clientToken, used_bundle_id: usedBundle || null, used_bundle_price_cny: usedPrice })
+  );
 
   db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-    .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_INSTANCE_CREATED', JSON.stringify({ bundle_id: usedBundle || null, blueprint_id: BLUEPRINT_ID, zone, request_id: resp.RequestId }));
+    .run(
+      crypto.randomUUID(),
+      ts,
+      'instance',
+      instance_id,
+      'POOL_INSTANCE_CREATED',
+      JSON.stringify({ bundle_id: usedBundle || null, bundle_price_cny: usedPrice, blueprint_id: BLUEPRINT_ID, zone, request_id: resp.RequestId })
+    );
 
   const job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
-  console.log(JSON.stringify({ ok:true, ts, action:'create_and_init', instance_id, zone, job }, null, 2));
+  console.log(JSON.stringify({ ok:true, ts, action:'create_and_init', instance_id, zone, bundle_id: usedBundle || null, bundle_price_cny: usedPrice, job }, null, 2));
 }
 
 main();

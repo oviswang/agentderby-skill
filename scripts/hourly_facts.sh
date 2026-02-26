@@ -71,9 +71,34 @@ con=sqlite3.connect('control-plane/data/bothook.sqlite')
 cur=con.cursor()
 rows=cur.execute("select lifecycle_status, count(*) from instances group by lifecycle_status").fetchall()
 print('lifecycle_status counts:', ', '.join([f"{k}={v}" for k,v in rows]))
-rows=cur.execute("select instance_id, public_ip, lifecycle_status, health_status from instances where lifecycle_status in ('IN_POOL','DELIVERING','PAID_TEST') order by lifecycle_status, instance_id").fetchall()
+rows=cur.execute("select instance_id, public_ip, lifecycle_status, health_status from instances where lifecycle_status in ('IN_POOL','ALLOCATED','DELIVERING','PAID_TEST') order by lifecycle_status, instance_id").fetchall()
 for iid, ip, ls, hs in rows:
     print(f"- {iid} {ip} lifecycle={ls} health={hs}")
+PY
+
+echo
+
+echo "【事实源 3.1：本小时 Pool 补货/创建事件（SQLite events: POOL_INSTANCE_CREATED）】"
+python3 - <<'PY'
+import sqlite3, json
+con=sqlite3.connect('control-plane/data/bothook.sqlite')
+cur=con.cursor()
+rows=cur.execute("""
+  select ts, entity_id, payload_json
+    from events
+   where event_type='POOL_INSTANCE_CREATED'
+     and ts >= datetime('now','-1 hour')
+   order by ts asc
+""").fetchall()
+if not rows:
+    print('- 本小时无 POOL_INSTANCE_CREATED')
+else:
+    for ts, instance_id, payload_json in rows:
+        try:
+            p=json.loads(payload_json or '{}')
+        except Exception:
+            p={}
+        print(f"- {ts} instance={instance_id} bundle_id={p.get('bundle_id')} price_cny={p.get('bundle_price_cny')} zone={p.get('zone')}")
 PY
 
 echo
