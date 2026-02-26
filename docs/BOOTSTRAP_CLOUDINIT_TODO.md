@@ -8,14 +8,15 @@ Goal: cloud-init as primary. No control-plane bottleneck. User provides OpenAI k
 
 ## Work items (checklist)
 
-### Phase 0 — Baseline capture (done/notes)
-- [ ] Identify user-machine init entrypoints (systemd units, scripts)
+### Phase 0 — Baseline capture (done)
+- [x] Identify user-machine init entrypoints (systemd units, scripts)
   - bothook-provision.service -> /opt/bothook/provision/server.mjs
   - openclaw-gateway.service -> /opt/bothook/bin/openclaw-gateway-start.sh
   - bothook-postboot-verify.service -> /opt/bothook/bin/postboot_verify.sh
 
 ### Phase 1 — Fix LLM auth/key behavior on user machine (no more anthropic error)
-- [ ] Ensure agent never defaults to anthropic on fresh machine.
+- [~] Ensure agent never defaults to anthropic on fresh machine.
+  - note: on test machine, `openclaw models set openai/gpt-5.2` works and models list now includes openai.
 - [ ] Ensure /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json exists.
 - [ ] If OpenAI key missing:
   - [ ] Agent should NOT crash; should send a short guide asking user to provide OpenAI key.
@@ -46,4 +47,5 @@ Goal: cloud-init as primary. No control-plane bottleneck. User provides OpenAI k
 - [ ] Document rerun/rollback.
 
 ## Progress log
-- 2026-02-26: start
+- 2026-02-26: started
+- 2026-02-26: Phase0 done; began Phase1 baseline (model default fix on test box)
