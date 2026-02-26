@@ -2530,9 +2530,21 @@ function startOpsWorker(){
             crypto.randomUUID(), ts, 'delivery', r.delivery_id, 'RECYCLE_UNBOUND', JSON.stringify({ uuid: r.provision_uuid, instance_id: r.instance_id })
           );
           // return instance to pool (safe for unbound)
+          // Guard: do NOT return to pool if the user has an active subscription.
           if (r.instance_id){
-            db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=NULL, assigned_order_id=NULL, assigned_at=NULL WHERE instance_id=?')
-              .run('IN_POOL', r.instance_id);
+            const sub = db.prepare(
+              `SELECT status
+                 FROM subscriptions
+                WHERE user_id=? AND provider='stripe'
+                ORDER BY datetime(updated_at) DESC
+                LIMIT 1`
+            ).get(String(r.provision_uuid||''));
+            const st = String(sub?.status || '').toLowerCase();
+            const active = (st === 'active' || st === 'trialing' || st === 'paid');
+            if (!active) {
+              db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=NULL, assigned_order_id=NULL, assigned_at=NULL WHERE instance_id=?')
+                .run('IN_POOL', r.instance_id);
+            }
           }
           db.exec('COMMIT');
         } catch (e) {
@@ -2582,8 +2594,19 @@ function startOpsWorker(){
             crypto.randomUUID(), ts, 'delivery', r.delivery_id, 'RECYCLE_UNPAID', JSON.stringify({ uuid: r.provision_uuid, instance_id: r.instance_id })
           );
           if (r.instance_id){
-            db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=NULL, assigned_order_id=NULL, assigned_at=NULL WHERE instance_id=?')
-              .run('IN_POOL', r.instance_id);
+            const sub = db.prepare(
+              `SELECT status
+                 FROM subscriptions
+                WHERE user_id=? AND provider='stripe'
+                ORDER BY datetime(updated_at) DESC
+                LIMIT 1`
+            ).get(String(r.provision_uuid||''));
+            const st = String(sub?.status || '').toLowerCase();
+            const active = (st === 'active' || st === 'trialing' || st === 'paid');
+            if (!active) {
+              db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=NULL, assigned_order_id=NULL, assigned_at=NULL WHERE instance_id=?')
+                .run('IN_POOL', r.instance_id);
+            }
           }
           db.exec('COMMIT');
         } catch (e) {
