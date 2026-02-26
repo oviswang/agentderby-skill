@@ -924,6 +924,27 @@ async function issueReadyToken(db, instRow){
   writeReadyReportFilesOnInstance(instRow, { token, expIso });
 }
 
+async function resetInstance(instance_id, blueprint_id){
+  const r = await tccli(`tccli lighthouse ResetInstance --region ap-singapore --version 2020-03-24 --InstanceId '${instance_id}' --BlueprintId '${blueprint_id}' --output json`);
+  const out = String((r.stdout||'') + (r.stderr||''));
+  if ((r.code ?? 0) === 0) return { ok:true, out };
+  if (out.includes('LatestOperationUnfinished')) return { ok:false, retryable:true, out };
+  throw new Error('reset_instance_failed');
+}
+
+async function waitInstanceRunning(instance_id, { timeoutMs=15*60*1000 }={}){
+  const t0 = Date.now();
+  while (Date.now()-t0 < timeoutMs) {
+    const it = await describeInstance(instance_id);
+    const st = String(it?.InstanceState || '').toUpperCase();
+    const op = String(it?.LatestOperation || '');
+    const opSt = String(it?.LatestOperationState || '');
+    if (st === 'RUNNING' && (!op || opSt === 'SUCCESS' || opSt === '')) return true;
+    await sleepMs(5000);
+  }
+  return false;
+}
+
 async function runPoolInitJob(job){
   const { db } = openDb();
   const ts0 = nowIso();
@@ -948,6 +969,25 @@ async function runPoolInitJob(job){
     meta.key_ids = keyIds;
     db.prepare('UPDATE instances SET public_ip=COALESCE(?,public_ip), private_ip=COALESCE(?,private_ip), meta_json=? WHERE instance_id=?')
       .run(pub, priv, JSON.stringify(meta), job.instance_id);
+
+    // Reimage (cloud reset) when requested
+    if (String(job.mode||'') === 'reimage_and_init') {
+      pushJobLog(job, `reset instance (reimage): blueprint=${(it.BlueprintId||'')}`);
+      // reset may be blocked by ongoing ops; retry a bit
+      for (let i=0;i<10;i++){
+        const rr = await resetInstance(job.instance_id, String(it.BlueprintId || ''));
+        if (rr.ok) break;
+        if (rr.retryable) {
+          await sleepMs(5000);
+          continue;
+        }
+        if (i===9) throw new Error('reset_instance_timeout');
+      }
+
+      pushJobLog(job, 'wait instance RUNNING after reset');
+      const running = await waitInstanceRunning(job.instance_id, { timeoutMs: 20*60*1000 });
+      if (!running) throw new Error('reset_not_running');
+    }
 
     // Associate pool key (retry window)
     pushJobLog(job, 'associate keypair bothook_pool_key');
