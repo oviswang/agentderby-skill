@@ -288,16 +288,88 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
   const existing = db.prepare('SELECT * FROM deliveries WHERE provision_uuid = ? LIMIT 1').get(uuid);
   if (existing) {
     // Best-effort: persist preferred lang when provided.
+    let updated = existing;
     try {
       const lang = String(preferredLang || '').trim().toLowerCase();
       if (lang) {
         const meta = mergeMeta(existing.meta_json, { preferred_lang: lang });
         db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?')
           .run(meta, nowIso(), existing.delivery_id);
-        return { ...existing, meta_json: meta };
+        updated = { ...existing, meta_json: meta };
       }
     } catch {}
-    return existing;
+
+    // IMPORTANT: If watchdog cleared instance_id (e.g. stale QR_EXPIRED) we must re-allocate a fresh pool machine.
+    // This keeps the website flow self-healing: user can click "retry" and get a new QR.
+    const st = String(updated.status || '');
+    const needsAlloc = !updated.instance_id && ['QR_EXPIRED','CANCELED','LINKING_TIMEOUT','LINKING'].includes(st);
+    if (needsAlloc) {
+      // Re-enter allocation path by treating as non-existing.
+      // (We allocate a clean instance and move status back to LINKING.)
+      // NOTE: we keep the same delivery_id and provision_uuid.
+      const ts = nowIso();
+
+      const candidates = db.prepare(`
+        SELECT instance_id, public_ip, lifecycle_status, health_status, meta_json, created_at
+        FROM instances
+        WHERE public_ip IS NOT NULL AND public_ip != ''
+          AND lifecycle_status='IN_POOL'
+        ORDER BY created_at ASC
+        LIMIT 50
+      `).all();
+
+      const provisionReady = candidates.filter((i) => (jsonMeta(i.meta_json) || {}).provision_ready === true);
+      if (!provisionReady.length) {
+        throw Object.assign(new Error('No provision-ready instances available'), { statusCode: 503 });
+      }
+
+      let chosen = null;
+      for (const c of provisionReady) {
+        const inst = getInstanceById(db, c.instance_id);
+        const probe = probeInstanceWhatsappClean(db, inst);
+        if (probe.clean) { chosen = inst; break; }
+      }
+      if (!chosen) {
+        throw Object.assign(new Error('No clean instances available (all linked). Please retry in a few minutes.'), { statusCode: 503 });
+      }
+
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const meta2 = mergeMeta(updated.meta_json, {
+          reallocated_at: ts,
+          prev_instance_id: updated.instance_id || null,
+          prev_status: updated.status || null
+        });
+        db.prepare('UPDATE deliveries SET instance_id=?, status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
+          .run(chosen.instance_id, 'LINKING', ts, meta2, updated.delivery_id);
+
+        db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=?, assigned_at=? WHERE instance_id=?')
+          .run('ALLOCATED', uuid, ts, chosen.instance_id);
+
+        writeUuidStateFilesOnInstance(chosen, { uuid, lang: preferredLang || 'en' });
+
+        db.prepare(`
+          INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json)
+          VALUES (?,?,?,?,?,?)
+        `).run(
+          crypto.randomUUID(),
+          ts,
+          'instance',
+          chosen.instance_id,
+          'PROVISION_REALLOCATED',
+          JSON.stringify({ provision_uuid: uuid, delivery_id: updated.delivery_id, from_status: st })
+        );
+
+        db.exec('COMMIT');
+      } catch (e) {
+        try { db.exec('ROLLBACK'); } catch {}
+        throw e;
+      }
+
+      updated = db.prepare('SELECT * FROM deliveries WHERE delivery_id=?').get(updated.delivery_id);
+    }
+
+    return updated;
   }
 
   // A-mode strict allocation: choose only pool instances and reserve exclusively.
