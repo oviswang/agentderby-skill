@@ -74,8 +74,66 @@ JSON
   fi
 }
 
+# If OpenAI key is missing, send a short guide instead of letting the agent emit provider errors.
+# Idempotent: send at most once per boot.
+send_openai_key_guide_if_missing(){
+  local AGENT_DIR="/home/ubuntu/.openclaw/agents/main/agent"
+  local AUTH_PROFILES="$AGENT_DIR/auth-profiles.json"
+  local MARKER="/opt/bothook/evidence/openai_key_guide_sent"
+
+  [[ -f "$MARKER" ]] && return 0
+  [[ -f "$AUTH_PROFILES" ]] || return 0
+
+  local key
+  key=$(python3 - <<'PY'
+import json
+p='/home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json'
+try:
+  j=json.load(open(p))
+except Exception:
+  j={}
+prof=(j.get('profiles') or {}).get('openai:manual') or {}
+print((prof.get('key') or '').strip())
+PY
+  )
+
+  if [[ -n "$key" ]]; then
+    return 0
+  fi
+
+  # Try to detect self E164 (best-effort)
+  local self
+  self=$(sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw channels status --probe --json 2>/dev/null | tail -n +2 | python3 - <<'PY'
+import sys,json
+try:
+  j=json.load(sys.stdin)
+  wa=(j.get('channels',{}) or {}).get('whatsapp',{}) or {}
+  e=(wa.get('self',{}) or {}).get('e164','')
+  print(e)
+except Exception:
+  print('')
+PY
+  )
+
+  [[ -n "$self" ]] || return 0
+
+  local msg
+  msg=$(cat <<'MSG'
+[bothook]
+Next step: please add your OpenAI API key.
+
+Open your UUID page on p.bothook.me, paste the key, then send a message here again.
+(We never store your key in the control-plane; it stays on this machine.)
+MSG
+  )
+
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw message send --channel whatsapp --target "$self" --message "$msg" >/dev/null 2>&1 || true
+  touch "$MARKER" 2>/dev/null || true
+}
+
 fix_config_if_needed
 ensure_agent_baseline
+send_openai_key_guide_if_missing
 
 # Check services
 if ! svc_active openclaw-gateway.service; then ok=false; errs+=("openclaw-gateway.service not active"); fi
