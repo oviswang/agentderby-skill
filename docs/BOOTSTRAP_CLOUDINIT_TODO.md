@@ -20,8 +20,10 @@ Goal: cloud-init as primary. No control-plane bottleneck. User provides OpenAI k
 - [~] Ensure /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json exists.
   - implemented in pool/postboot_verify.sh (self-heal)
 - [ ] If OpenAI key missing:
-  - [ ] Agent should NOT crash; should send a short guide asking user to provide OpenAI key.
-  - [ ] Do not send provider error messages.
+  - [~] Agent should NOT crash; should send a short guide asking user to provide OpenAI key.
+    - 2026-02-27: hardened pool/postboot_verify.sh to avoid provider error spam + set local marker; still need UX-level guide delivery via provision flow.
+  - [~] Do not send provider error messages.
+    - 2026-02-27: pool/postboot_verify.sh best-effort dmPolicy allowlist + restart gateway; still need end-to-end validation.
 - [x] Add postboot verify check: "auth store present + default provider OK".
   - checks: tmux_installed + auth_profiles_present + default_model_openai_gpt_5_2
 
@@ -42,11 +44,13 @@ Goal: cloud-init as primary. No control-plane bottleneck. User provides OpenAI k
 ### Phase 4 — Cloud-init packaging
 - [~] Produce a single cloud-init payload or install script that:
   - started: pool/cloud_init_user_machine.sh (now includes systemd units + gateway start script)
-  - [ ] Installs dependencies (node/openclaw/tmux)
-  - [ ] Places /opt/bothook/* assets
-  - [ ] Installs systemd units
-  - [ ] Enables + starts services
-  - [ ] Runs postboot verify (or waits for systemd)
+  - [~] Installs dependencies (node/openclaw/tmux)
+  - 2026-02-27: verified deps install works on fresh box.
+  - [~] Places /opt/bothook/* assets
+  - 2026-02-27: fixed installer to be self-contained via /tmp/bothook-assets (commit fafbf19); needs full E2E confirm.
+  - [~] Installs systemd units
+  - [~] Enables + starts services
+  - [~] Runs postboot verify (or waits for systemd)
 - [ ] Document rerun/rollback.
 
 ## Progress log
