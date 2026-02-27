@@ -66,6 +66,12 @@ ensure_openclaw(){
   sudo -u ubuntu bash -lc 'mkdir -p /home/ubuntu/.npm-global && npm config set prefix "/home/ubuntu/.npm-global"'
   # Pinned version for pre-delivery deterministic onboarding flow
   sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; npm i -g openclaw@2026.2.26'
+
+  # Minimal gateway config to ensure the service can bind on first boot.
+  # (OpenClaw 2026.2.26 blocks start if gateway.mode is unset.)
+  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw config set gateway.mode local >/dev/null 2>&1 || true'
+  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw config set gateway.bind loopback >/dev/null 2>&1 || true'
+  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw config set gateway.port 18789 >/dev/null 2>&1 || true'
 }
 
 asset_base(){
