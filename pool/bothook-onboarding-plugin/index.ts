@@ -95,11 +95,17 @@ const plugin = {
           return { content: render(prompts.welcome_unpaid, vars) };
         }
 
-        // Paid but missing key: guide key setup (control-plane endpoint decides verified or not)
+        // Paid but missing key: guide key setup.
+        // Updated flow: ask user to paste the key directly in chat.
+        // User message will be handled by a local provision endpoint that verifies and persists key,
+        // then triggers cutover/finish.
         const ks = await fetchJson(`${apiBase}/api/key/status?uuid=${encodeURIComponent(uuid)}`);
         const verified = Boolean(ks?.ok && ks?.verified);
         if (verified) return;
-        return { content: render(prompts.guide_key_paid, vars) };
+
+        // Prefer a dedicated prompt if present; fall back to guide_key_paid.
+        const tpl = (prompts && (prompts.guide_key_paid_chat || prompts.guide_key_paid)) || '';
+        return { content: render(tpl, vars) };
       } catch {
         return;
       }
