@@ -405,10 +405,13 @@ setInterval(() => {
   }
 }, QR_PARSE_INTERVAL_MS);
 
+const BUILD_ID = process.env.PROVISION_BUILD_ID || `dev-${nowIso()}`;
+
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/healthz', (req, res) => res.json({ ok:true }));
+app.get('/version', (req, res) => res.json({ ok:true, buildId: BUILD_ID }));
 
 app.post('/api/wa/start', async (req, res) => {
   try {
