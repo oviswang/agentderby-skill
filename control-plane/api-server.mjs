@@ -532,7 +532,15 @@ function poolSsh(instance, remoteCmd, { timeoutMs = 20000, tty = false, retries 
   const ip = instance.public_ip;
   if (!ip) return { code: 1, stdout: '', stderr: 'instance_missing_ip' };
   const tflag = tty ? '-tt' : '';
-  const cmd = `ssh ${tflag} -i '${POOL_SSH_KEY}' -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=25 ubuntu@${ip} '${String(remoteCmd).replace(/'/g, "'\\''")}'`;
+  // Keep SSH fast-fail for interactive QR polling.
+  // - ConnectTimeout: avoid hanging HTTP handlers
+  // - ServerAlive*: detect stuck connections
+  // - ConnectionAttempts: no long retries inside a single request
+  const cmd = `ssh ${tflag} -i '${POOL_SSH_KEY}' `
+    + `-o BatchMode=yes -o StrictHostKeyChecking=no `
+    + `-o ConnectTimeout=8 -o ConnectionAttempts=1 `
+    + `-o ServerAliveInterval=2 -o ServerAliveCountMax=2 `
+    + `ubuntu@${ip} '${String(remoteCmd).replace(/'/g, "'\\''")}'`;
 
   let last = null;
   for (let i = 0; i <= retries; i++) {
