@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BOTHook 交付</title>
+  <title>BOTHook Provisioning</title>
   <meta name="description" content="Provisioning page for WhatsApp device linking." />
   <link rel="icon" href="https://bothook.me/assets/logo.jpg" />
   <style>
@@ -743,8 +743,7 @@
           qrStatus.textContent = s.requestingQr || 'Requesting QR code…';
         }
 
-        try {
-          try {
+        try {try {
             await startProvision(uuid, forceRelink);
           } catch (e) {
             // Even if start fails (e.g. transient SSH failure), keep trying to fetch QR from existing login stdout.
@@ -754,7 +753,7 @@
             }
           }
           forceRelink = false;
-
+          // Create / reuse QR canvas element (scan-friendly)
           function renderAsciiQrToCanvas(qrText, canvas) {
             const lines = String(qrText || '').replace(/\r/g,'').split('\n');
             // Find the first QR line (starts with block chars)
@@ -797,7 +796,6 @@
             return true;
           }
 
-          // Create / reuse QR canvas element (scan-friendly)
           let canvas = document.getElementById('qrCanvas');
           if (!canvas) {
             canvas = document.createElement('canvas');
@@ -855,7 +853,7 @@
               // ignore transient qr_not_ready
             }
 
-            // Delivery status: authoritative for "ever linked" + expiry/recycle states
+          // Delivery status: authoritative for "ever linked" + expiry/recycle states
             let deliveryStatus = null;
             try {
               deliveryStatus = await fetchDeliveryStatus(uuid);
@@ -884,11 +882,13 @@
               st = null;
             }
 
-            const everLinked = Boolean(deliveryStatus && deliveryStatus.ok && deliveryStatus.wa_jid);
+            // IMPORTANT: Do not treat historical wa_jid as proof of a CURRENT successful link.
+            // Only trust live status from the pool machine.
+            const isLinked = Boolean(st && (st.linked || st.connected));
             const isConnected = Boolean(st && st.connected);
 
             // Three-state UI
-            if (everLinked && isConnected) {
+            if (isLinked && isConnected) {
               linked = true;
               {
                 const s = window.__bothook_i18n || {};
@@ -901,7 +901,7 @@
               if (linkedCard) linkedCard.style.display = 'block';
               break;
             }
-            if (everLinked && !isConnected) {
+            if (isLinked && !isConnected) {
               // Previously linked but currently disconnected.
               // If we already have a QR on screen, keep it visible for relink instead of hiding it.
               if (hadQr) {
@@ -944,7 +944,7 @@
             }
 
             statusErrs = 0;
-            if (st.connected) {
+            if (isLinked) {
               linked = true;
               {
                 const s = window.__bothook_i18n || {};
