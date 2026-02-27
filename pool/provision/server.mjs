@@ -256,6 +256,8 @@ function startLogin(uuid, { force=false } = {}){
 
   // Some CLIs only flush after first input; nudge it.
   try { term.write('\r'); } catch {}
+  setTimeout(() => { try { term.write(' '); } catch {} }, 200);
+  setTimeout(() => { try { term.write('\r'); } catch {} }, 400);
 
   term.onData((d) => {
     // Only append; do NOT parse/encode QR in the hot path (it can block the event loop).
@@ -276,10 +278,10 @@ function startLogin(uuid, { force=false } = {}){
   setTimeout(() => {
     try {
       if (!s.lastQrDataUrl && (!s.buf || s.buf.trim().length === 0) && s.pty) {
-        s.lastError = s.lastError || 'openclaw-login produced no output after 3s (possible hang before QR output)';
+        s.lastError = s.lastError || 'openclaw-login produced no output after 15s (possible hang before QR output)';
       }
     } catch {}
-  }, 3000);
+  }, 15000);
 
   term.onExit((e) => {
     s.pty = null;
