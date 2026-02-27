@@ -22,25 +22,31 @@ install_deps(){
 
 ensure_node(){
   # OpenClaw 2026.2.26 requires Node >=22.12.0.
-  if command -v node >/dev/null 2>&1; then
-    local v major
-    v=$(node -v 2>/dev/null | tr -d '\r' || true)
+  local v
+  v=$(node -v 2>/dev/null | tr -d '\r' || true)
+  if [[ -n "$v" ]]; then
     log "node exists: $v"
-    major=$(printf "%s" "$v" | sed -n 's/^v\([0-9]\+\)\..*/\1/p')
-    if [[ -n "$major" ]] && [[ "$major" =~ ^[0-9]+$ ]] && (( major >= 22 )); then
-      return
-    fi
+  fi
+
+  # Hard requirement: Node v22.x. If not, replace it.
+  if [[ "$v" =~ ^v22\. ]]; then
+    return
   fi
 
   log "installing nodejs 22.x (NodeSource)"
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
   apt-get install -y ca-certificates curl gnupg
+
+  # Remove old distro node/npm if present (prevents staying on v18).
+  apt-get remove -y nodejs npm >/dev/null 2>&1 || true
+  apt-get autoremove -y >/dev/null 2>&1 || true
+
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y nodejs
 
   local v2
-  v2=$(node -v | tr -d '\r' || true)
+  v2=$(node -v 2>/dev/null | tr -d '\r' || true)
   log "node installed: $v2"
   if [[ ! "$v2" =~ ^v22\. ]]; then
     log "FATAL: node version mismatch, expected v22.x got: $v2"
