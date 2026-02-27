@@ -13,6 +13,7 @@ Environment=PROVISION_DATA_DIR=/opt/bothook/provision/data
 Environment=PROVISION_PORT=18999
 Environment=OPENCLAW_HOME=/home/ubuntu
 Environment=OPENCLAW_STATE_DIR=/home/ubuntu/.openclaw
+Environment=PATH=/home/ubuntu/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/bin/node /opt/bothook/provision/server.mjs
 Restart=always
 RestartSec=2
