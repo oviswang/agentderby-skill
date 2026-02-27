@@ -23,15 +23,12 @@ install_deps(){
 ensure_node(){
   # OpenClaw 2026.2.26 requires Node >=22.12.0.
   if command -v node >/dev/null 2>&1; then
-    local v
-    v=$(node -v | tr -d '\r' || true)
+    local v major
+    v=$(node -v 2>/dev/null | tr -d '\r' || true)
     log "node exists: $v"
-    # If too old, reinstall using NodeSource 22.
-    if [[ "$v" =~ ^v([0-9]+)\. ]]; then
-      major=${BASH_REMATCH[1]}
-      if (( major >= 22 )); then
-        return
-      fi
+    major=$(printf "%s" "$v" | sed -n 's/^v\([0-9]\+\)\..*/\1/p')
+    if [[ -n "$major" ]] && [[ "$major" =~ ^[0-9]+$ ]] && (( major >= 22 )); then
+      return
     fi
   fi
 
