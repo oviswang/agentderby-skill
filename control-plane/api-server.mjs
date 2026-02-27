@@ -1680,7 +1680,8 @@ app.get('/api/wa/qr', async (req, res) => {
     }
     const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
 
-    const capCmd = `set -euo pipefail; tmux has-session -t '${tmuxSession}' 2>/dev/null || exit 3; tmux capture-pane -t '${tmuxSession}' -p -S - | tail -n 260`;
+    // Capture a wider window: QR blocks can be >260 lines and may be truncated.
+    const capCmd = `set -euo pipefail; tmux has-session -t '${tmuxSession}' 2>/dev/null || exit 3; tmux capture-pane -t '${tmuxSession}' -p -S -4000 | tail -n 1200`;
     let rr = poolSsh(instance, capCmd, { timeoutMs: 5000, tty: false, retries: 0 });
 
     // If session is missing, auto-start it here (so UI doesn't need to call /api/wa/start).
@@ -1698,12 +1699,21 @@ app.get('/api/wa/qr', async (req, res) => {
       rr = poolSsh(instance, capCmd, { timeoutMs: 5000, tty: false, retries: 0 });
     }
 
-    const raw = (rr.stdout || rr.stderr || '').toString();
-    const qrText = extractAsciiQrBlock(raw);
+    let raw = (rr.stdout || rr.stderr || '').toString();
+    let qrText = extractAsciiQrBlock(raw);
+
+    // If parse failed, do one quick re-capture (handles partial pane races).
+    if (!qrText) {
+      try {
+        rr = poolSsh(instance, capCmd, { timeoutMs: 5000, tty: false, retries: 0 });
+        raw = (rr.stdout || rr.stderr || '').toString();
+        qrText = extractAsciiQrBlock(raw);
+      } catch {}
+    }
 
     if (!qrText) {
       // Fast-fail (do not hang HTTP). UI should keep polling.
-      return send(res, 409, { ok: false, error: 'qr_not_ready', loginRunning: (rr.code ?? 0) !== 3 });
+      return send(res, 409, { ok: false, error: 'qr_not_ready', loginRunning: (rr.code ?? 0) !== 3, detail: 'parse_failed' });
     }
 
     // Watchdog: ensure QR rotates.
