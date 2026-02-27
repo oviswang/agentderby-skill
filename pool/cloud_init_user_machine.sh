@@ -129,8 +129,8 @@ main(){
   # Verify pinned version
   local v
   v=$(sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw --version' 2>/dev/null || true)
-  if [[ "$v" != "2026.2.24" ]]; then
-    log "FATAL: openclaw version mismatch, expected 2026.2.24 got: $v"
+  if [[ "$v" != "2026.2.26" ]]; then
+    log "FATAL: openclaw version mismatch, expected 2026.2.26 got: $v"
     exit 3
   fi
 
