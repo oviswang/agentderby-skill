@@ -21,12 +21,34 @@ install_deps(){
 }
 
 ensure_node(){
+  # OpenClaw 2026.2.26 requires Node >=22.12.0.
   if command -v node >/dev/null 2>&1; then
-    log "node exists: $(node -v)"
-    return
+    local v
+    v=$(node -v | tr -d '\r' || true)
+    log "node exists: $v"
+    # If too old, reinstall using NodeSource 22.
+    if [[ "$v" =~ ^v([0-9]+)\. ]]; then
+      major=${BASH_REMATCH[1]}
+      if (( major >= 22 )); then
+        return
+      fi
+    fi
   fi
-  log "node missing; install nodejs (ubuntu repo)"
-  apt-get install -y nodejs npm
+
+  log "installing nodejs 22.x (NodeSource)"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -y
+  apt-get install -y ca-certificates curl gnupg
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt-get install -y nodejs
+
+  local v2
+  v2=$(node -v | tr -d '\r' || true)
+  log "node installed: $v2"
+  if [[ ! "$v2" =~ ^v22\. ]]; then
+    log "FATAL: node version mismatch, expected v22.x got: $v2"
+    exit 3
+  fi
 }
 
 ensure_openclaw(){
