@@ -226,13 +226,20 @@ function startLogin(uuid, { force=false } = {}){
   const OPENCLAW_BIN = process.env.OPENCLAW_BIN || path.join(OPENCLAW_HOME, '.npm-global', 'bin', 'openclaw');
   env.PATH = `${path.dirname(OPENCLAW_BIN)}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
 
-  const term = pty.spawn('bash', ['-lc', `${OPENCLAW_BIN} channels login --channel whatsapp`], {
-    name: 'xterm-256color',
-    cols: 120,
-    rows: 40,
-    cwd: OPENCLAW_HOME,
-    env
-  });
+  let term;
+  try {
+    term = pty.spawn('bash', ['-lc', `${OPENCLAW_BIN} channels login --channel whatsapp`], {
+      name: 'xterm-256color',
+      cols: 120,
+      rows: 40,
+      cwd: OPENCLAW_HOME,
+      env
+    });
+  } catch (e) {
+    s.lastExit = { at: nowIso(), spawnError: true };
+    s.lastError = String(e?.stack || e?.message || e);
+    return;
+  }
 
   s.pty = term;
   s.buf = '';
