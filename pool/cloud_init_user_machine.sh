@@ -123,6 +123,7 @@ main(){
   install_deps
   ensure_node
   ensure_openclaw
+
   place_assets
   install_units
 
