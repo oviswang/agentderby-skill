@@ -219,7 +219,12 @@ function startLogin(uuid, { force=false } = {}){
     FORCE_COLOR: '0'
   };
 
-  const term = pty.spawn('bash', ['-lc', 'openclaw channels login --channel whatsapp'], {
+  // Use absolute openclaw path + explicit PATH to avoid `command not found`
+  // under systemd environments.
+  const OPENCLAW_BIN = process.env.OPENCLAW_BIN || path.join(OPENCLAW_HOME, '.npm-global', 'bin', 'openclaw');
+  env.PATH = `${path.dirname(OPENCLAW_BIN)}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
+
+  const term = pty.spawn('bash', ['-lc', `${OPENCLAW_BIN} channels login --channel whatsapp`], {
     name: 'xterm-256color',
     cols: 120,
     rows: 40,
