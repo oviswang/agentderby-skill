@@ -171,6 +171,7 @@ function ensureSession(uuid){
       _lastQrHash: null,
       lastError: null,
       lastExit: null,
+      _logPath: null,
     };
     sessions.set(uuid, s);
   }
@@ -236,9 +237,14 @@ function startLogin(uuid, { force=false } = {}){
     s.lastError = `openclaw preflight exception: ${String(e?.message||e)}`;
   }
 
+  // Use `script` to force a real PTY/tty transcript (more reliable than node-pty
+  // for some CLIs). We will tail the transcript file to parse QR blocks.
+  const logPath = `/tmp/wa-login-${uuid}.log`;
+  try { fs.rmSync(logPath, { force: true }); } catch {}
+
   let term;
   try {
-    term = pty.spawn(OPENCLAW_BIN, ['channels','login','--channel','whatsapp'], {
+    term = pty.spawn('script', ['-qfc', `${OPENCLAW_BIN} channels login --channel whatsapp`, logPath], {
       name: 'xterm',
       cols: 200,
       rows: 60,
@@ -253,11 +259,14 @@ function startLogin(uuid, { force=false } = {}){
 
   s.pty = term;
   s.buf = '';
+  s._logPath = logPath;
 
-  // Some CLIs only flush after first input; nudge it.
-  try { term.write('\r'); } catch {}
-  setTimeout(() => { try { term.write(' '); } catch {} }, 200);
-  setTimeout(() => { try { term.write('\r'); } catch {} }, 400);
+  term.onData((d) => {
+    // keep tail buffer mainly for debugging; QR parsing uses the transcript file.
+    s.buf += d;
+    if (s.buf.length > 60000) s.buf = s.buf.slice(-30000);
+    s._pendingQr = true;
+  });
 
   term.onData((d) => {
     // Only append; do NOT parse/encode QR in the hot path (it can block the event loop).
@@ -391,7 +400,14 @@ setInterval(() => {
     s._pendingQr = false;
 
     try {
-      const tailLines = stripAnsi(s.buf).split(/\r?\n/).slice(-240);
+      // Prefer parsing from transcript file (script output) if available.
+      let text = null;
+      if (s._logPath) {
+        try { text = fs.readFileSync(s._logPath, 'utf8'); } catch {}
+      }
+      if (!text) text = stripAnsi(s.buf);
+
+      const tailLines = stripAnsi(text).split(/\r?\n/).slice(-240);
       const blocks = extractQrBlocksFromLines(tailLines);
       if (!blocks.length) continue;
       const last = blocks[blocks.length - 1];
@@ -466,7 +482,8 @@ app.get('/api/wa/status', async (req, res) => {
       qrAt: s.lastQrAt || null,
       lastError: s.lastError || null,
       lastExit: s.lastExit || null,
-      bufTail: stripAnsi(s.buf || '').slice(-2000) || null
+      bufTail: stripAnsi(s.buf || '').slice(-2000) || null,
+      logPath: s._logPath || null
     });
   } catch (e) {
     return res.status(500).json({ ok:false, error: e?.message || 'server_error' });
