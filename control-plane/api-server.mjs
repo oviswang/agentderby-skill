@@ -1672,12 +1672,30 @@ app.get('/api/wa/qr', async (req, res) => {
     }
     const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
 
-    const rr = poolSsh(instance, `set -euo pipefail; tmux has-session -t '${tmuxSession}' 2>/dev/null || exit 3; tmux capture-pane -t '${tmuxSession}' -p -S - | tail -n 260`, { timeoutMs: 12000, tty: false, retries: 1 });
+    const capCmd = `set -euo pipefail; tmux has-session -t '${tmuxSession}' 2>/dev/null || exit 3; tmux capture-pane -t '${tmuxSession}' -p -S - | tail -n 260`;
+    let rr = poolSsh(instance, capCmd, { timeoutMs: 5000, tty: false, retries: 0 });
+
+    // If session is missing, auto-start it here (so UI doesn't need to call /api/wa/start).
+    if ((rr.code ?? 0) === 3) {
+      const remoteCmd = `set -euo pipefail; `
+        + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
+        + `tmux new-session -d -s '${tmuxSession}' "bash -lc 'stty cols 220 rows 80 2>/dev/null || true; export COLUMNS=220 LINES=80; openclaw channels login --channel whatsapp'"; `
+        + `echo started`;
+      const sr = poolSsh(instance, remoteCmd, { timeoutMs: 12000, tty: false, retries: 0 });
+      if ((sr.code ?? 0) !== 0) {
+        const detail = ((sr.stdout || '') + '\n' + (sr.stderr || '')).trim();
+        return send(res, 502, { ok:false, error:'login_start_failed', detail: detail || `ssh_failed_exit_${sr.code}` });
+      }
+      // Re-capture
+      rr = poolSsh(instance, capCmd, { timeoutMs: 5000, tty: false, retries: 0 });
+    }
+
     const raw = (rr.stdout || rr.stderr || '').toString();
     const qrText = extractAsciiQrBlock(raw);
 
     if (!qrText) {
-      return send(res, 409, { ok: false, error: 'qr_not_ready' });
+      // Fast-fail (do not hang HTTP). UI should keep polling.
+      return send(res, 409, { ok: false, error: 'qr_not_ready', loginRunning: (rr.code ?? 0) !== 3 });
     }
 
     // Watchdog: ensure QR rotates.
