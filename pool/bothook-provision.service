@@ -8,6 +8,7 @@ ConditionPathExists=!/opt/bothook/LOGIN_AUTHORITY.control-plane
 
 [Service]
 Type=simple
+User=ubuntu
 WorkingDirectory=/opt/bothook/provision
 Environment=PROVISION_DATA_DIR=/opt/bothook/provision/data
 Environment=PROVISION_PORT=18999
