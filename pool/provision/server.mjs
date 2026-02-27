@@ -151,7 +151,7 @@ function parseWhatsappStatus(text){
 }
 
 const sessions = new Map();
-// uuid -> { pty, buf, lastQrDataUrl, lastQrAt, lastLoginAt, status, lastStatusAt, lastStatusRaw, qrSeq, welcomeSentAt, _pendingQr, _lastQrHash }
+// uuid -> { pty, buf, lastQrDataUrl, lastQrAt, lastLoginAt, status, lastStatusAt, lastStatusRaw, qrSeq, welcomeSentAt, _pendingQr, _lastQrHash, lastError, lastExit }
 
 function ensureSession(uuid){
   let s = sessions.get(uuid);
@@ -169,6 +169,8 @@ function ensureSession(uuid){
       welcomeSentAt: null,
       _pendingQr: false,
       _lastQrHash: null,
+      lastError: null,
+      lastExit: null,
     };
     sessions.set(uuid, s);
   }
@@ -240,11 +242,22 @@ function startLogin(uuid, { force=false } = {}){
     s.buf += d;
     // keep buffer bounded (tail only) to avoid heavy parsing work
     if (s.buf.length > 60000) s.buf = s.buf.slice(-30000);
+
+    // Capture common startup failures for observability.
+    const tail = stripAnsi(s.buf).slice(-2000);
+    if (tail.includes('command not found') || tail.toLowerCase().includes('permission denied') || tail.toLowerCase().includes('no such file')) {
+      s.lastError = tail.split(/\r?\n/).slice(-6).join('\n');
+    }
+
     s._pendingQr = true;
   });
 
-  term.onExit(() => {
+  term.onExit((e) => {
     s.pty = null;
+    s.lastExit = { at: nowIso(), ...e };
+    if (!s.lastQrDataUrl) {
+      s.lastError = s.lastError || `openclaw-login exited before QR (exit=${JSON.stringify(e)})`;
+    }
     // do not auto-restart here; UI can call start again.
   });
 }
@@ -416,7 +429,9 @@ app.get('/api/wa/status', async (req, res) => {
       wa_jid: null,
       lastUpdateAt: s.lastStatusAt || s.lastQrAt || null,
       qrSeq: s.qrSeq,
-      qrAt: s.lastQrAt || null
+      qrAt: s.lastQrAt || null,
+      lastError: s.lastError || null,
+      lastExit: s.lastExit || null
     });
   } catch (e) {
     return res.status(500).json({ ok:false, error: e?.message || 'server_error' });
