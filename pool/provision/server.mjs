@@ -460,7 +460,8 @@ app.get('/api/wa/status', async (req, res) => {
       qrSeq: s.qrSeq,
       qrAt: s.lastQrAt || null,
       lastError: s.lastError || null,
-      lastExit: s.lastExit || null
+      lastExit: s.lastExit || null,
+      bufTail: stripAnsi(s.buf || '').slice(-2000) || null
     });
   } catch (e) {
     return res.status(500).json({ ok:false, error: e?.message || 'server_error' });
