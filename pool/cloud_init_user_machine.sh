@@ -72,6 +72,13 @@ ensure_openclaw(){
   sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw config set gateway.mode local >/dev/null 2>&1 || true'
   sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw config set gateway.bind loopback >/dev/null 2>&1 || true'
   sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw config set gateway.port 18789 >/dev/null 2>&1 || true'
+
+  # BOTHook patch: ensure whatsapp channel is present so provisioning server can run
+  # `openclaw channels login --channel whatsapp` for QR generation.
+  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw config set channels.whatsapp.dmPolicy pairing >/dev/null 2>&1 || true'
+  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw config set channels.whatsapp.groupPolicy allowlist >/dev/null 2>&1 || true'
+  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw config set channels.whatsapp.debounceMs 0 >/dev/null 2>&1 || true'
+  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw config set channels.whatsapp.mediaMaxMb 50 >/dev/null 2>&1 || true'
 }
 
 asset_base(){
