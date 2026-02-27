@@ -2756,6 +2756,43 @@ function startOpsWorker(){
   async function tick(){
     const { db } = openDb();
     const now = Date.now();
+
+    // QR/Login watchdog (linking loop):
+    // Ensure tmux login session is running while status=LINKING and not yet bound.
+    // This makes the QR stream continuous across rotations until scan completes.
+    try {
+      const rowsW = db.prepare(`
+        SELECT provision_uuid, instance_id
+        FROM deliveries
+        WHERE status='LINKING' AND (wa_jid IS NULL OR wa_jid='') AND instance_id IS NOT NULL AND instance_id != ''
+        LIMIT 50
+      `).all();
+
+      for (const r of rowsW) {
+        const uuid = String(r.provision_uuid || '').trim();
+        if (!uuid) continue;
+        const inst = getInstanceById(db, r.instance_id);
+        if (!inst?.public_ip) continue;
+        const session = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
+
+        // Fire-and-forget: do not block the ops loop.
+        setTimeout(() => {
+          try {
+            const chk = poolSsh(inst, `set -euo pipefail; tmux has-session -t '${session}' 2>/dev/null && echo has || echo no`, { timeoutMs: 2500, tty: false, retries: 0 });
+            const has = String(chk.stdout || chk.stderr || '').includes('has');
+            if (!has) {
+              const cmd = `set -euo pipefail; `
+                + `tmux kill-session -t '${session}' 2>/dev/null || true; `
+                + `tmux new-session -d -s '${session}' "bash -lc 'stty cols 220 rows 80 2>/dev/null || true; export COLUMNS=220 LINES=80; openclaw channels login --channel whatsapp'"; `
+                + `echo started`;
+              poolSsh(inst, cmd, { timeoutMs: 12000, tty: false, retries: 0 });
+            }
+          } catch {}
+        }, 0);
+      }
+    } catch {}
+
+
     // A-stage: QR expired (5m) and not bound
     const rowsA = db.prepare(`
       SELECT delivery_id, provision_uuid, instance_id, meta_json
