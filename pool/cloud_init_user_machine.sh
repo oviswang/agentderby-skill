@@ -84,6 +84,14 @@ asset_base(){
   echo ""; return 1
 }
 
+install_provision_deps(){
+  local base; base=$(asset_base)
+  if [[ -f "$base/provision/package.json" ]]; then
+    log "installing provision deps"
+    (cd /opt/bothook/provision && npm i --omit=dev)
+  fi
+}
+
 place_assets(){
   log "placing /opt/bothook assets"
   local base; base=$(asset_base)
@@ -99,6 +107,9 @@ place_assets(){
   # Provision server (local-only 18999)
   if [[ -f "$base/provision/server.mjs" ]]; then
     install -m 755 "$base/provision/server.mjs" /opt/bothook/provision/server.mjs
+  fi
+  if [[ -f "$base/provision/package.json" ]]; then
+    install -m 644 "$base/provision/package.json" /opt/bothook/provision/package.json
   fi
 
   install -m 644 "$base/bothook-onboarding-plugin/openclaw.plugin.json" /opt/bothook/plugins/bothook-onboarding-plugin/openclaw.plugin.json
@@ -125,6 +136,7 @@ main(){
   ensure_openclaw
 
   place_assets
+  install_provision_deps
   install_units
 
   # Verify pinned version
