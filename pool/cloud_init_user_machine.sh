@@ -101,7 +101,19 @@ install_provision_deps(){
   local base; base=$(asset_base)
   if [[ -f "$base/provision/package.json" ]]; then
     log "installing provision deps"
-    (cd /opt/bothook/provision && npm i --omit=dev)
+
+    # Ensure ownership matches systemd runtime user (ubuntu).
+    # Otherwise npm/node-gyp rebuilds (e.g. node-pty) can fail with EACCES.
+    chown -R ubuntu:ubuntu /opt/bothook/provision
+
+    # Install deps as ubuntu (matches bothook-provision.service User=ubuntu)
+    sudo -u ubuntu bash -lc 'cd /opt/bothook/provision && npm i --omit=dev'
+
+    # Ensure node-pty native module is built on the target machine.
+    sudo -u ubuntu bash -lc 'cd /opt/bothook/provision && npm rebuild node-pty'
+
+    # Sanity check: pty.node must exist or QR login will crash.
+    sudo -u ubuntu bash -lc 'test -f /opt/bothook/provision/node_modules/node-pty/build/Release/pty.node'
   fi
 }
 
