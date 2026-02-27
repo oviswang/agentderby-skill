@@ -50,11 +50,18 @@ function safeUuid(s) {
 function ensureDir(p){ fs.mkdirSync(p, { recursive: true }); }
 
 function sh(cmd, { timeoutMs = 8000 } = {}) {
+  const baseEnv = { ...process.env };
+  // Ensure systemd services can find tmux/openclaw.
+  baseEnv.PATH = baseEnv.PATH || '';
+  if (!baseEnv.PATH.includes('/home/ubuntu/.npm-global/bin')) {
+    baseEnv.PATH = `/home/ubuntu/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${baseEnv.PATH}`;
+  }
+
   const res = spawnSync('bash', ['-lc', cmd], {
     encoding: 'utf8',
     maxBuffer: 5 * 1024 * 1024,
     timeout: timeoutMs,
-    env: { ...process.env, HOME: OPENCLAW_HOME, OPENCLAW_STATE_DIR }
+    env: { ...baseEnv, HOME: OPENCLAW_HOME, OPENCLAW_STATE_DIR }
   });
   return { code: res.status ?? 0, stdout: res.stdout || '', stderr: res.stderr || '' };
 }
@@ -92,7 +99,10 @@ function tmuxStartLoginSession(uuid, { force=false } = {}){
   try { startGateway(); } catch {}
 
   // Launch in tmux to ensure a real terminal.
-  sh(`tmux new-session -d -s ${JSON.stringify(session)} -x 200 -y 60 ${JSON.stringify(cmd)}`, { timeoutMs: 4000 });
+  const r = sh(`tmux new-session -d -s ${JSON.stringify(session)} -x 200 -y 60 ${JSON.stringify(cmd)}`, { timeoutMs: 4000 });
+  if (r.code !== 0) {
+    throw new Error(`tmux new-session failed (code=${r.code})\nstdout:\n${r.stdout}\nstderr:\n${r.stderr}`);
+  }
 }
 
 function tmuxCaptureTail(uuid, lines=320){
