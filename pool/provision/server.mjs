@@ -238,10 +238,10 @@ function startLogin(uuid, { force=false } = {}){
 
   let term;
   try {
-    term = pty.spawn('bash', ['-lc', `${OPENCLAW_BIN} channels login --channel whatsapp`], {
-      name: 'xterm-256color',
-      cols: 120,
-      rows: 40,
+    term = pty.spawn(OPENCLAW_BIN, ['channels','login','--channel','whatsapp'], {
+      name: 'xterm',
+      cols: 200,
+      rows: 60,
       cwd: OPENCLAW_HOME,
       env
     });
@@ -253,6 +253,9 @@ function startLogin(uuid, { force=false } = {}){
 
   s.pty = term;
   s.buf = '';
+
+  // Some CLIs only flush after first input; nudge it.
+  try { term.write('\r'); } catch {}
 
   term.onData((d) => {
     // Only append; do NOT parse/encode QR in the hot path (it can block the event loop).
