@@ -87,9 +87,20 @@ asset_base(){
 place_assets(){
   log "placing /opt/bothook assets"
   local base; base=$(asset_base)
-  mkdir -p /opt/bothook/bin /opt/bothook/evidence /opt/bothook/plugins/bothook-onboarding-plugin/dist
+  mkdir -p \
+    /opt/bothook/bin \
+    /opt/bothook/evidence \
+    /opt/bothook/plugins/bothook-onboarding-plugin/dist \
+    /opt/bothook/provision
+
   install -m 755 "$base/postboot_verify.sh" /opt/bothook/bin/postboot_verify.sh
   install -m 755 "$base/openclaw-gateway-start.sh" /opt/bothook/bin/openclaw-gateway-start.sh
+
+  # Provision server (local-only 18999)
+  if [[ -f "$base/provision/server.mjs" ]]; then
+    install -m 755 "$base/provision/server.mjs" /opt/bothook/provision/server.mjs
+  fi
+
   install -m 644 "$base/bothook-onboarding-plugin/openclaw.plugin.json" /opt/bothook/plugins/bothook-onboarding-plugin/openclaw.plugin.json
   install -m 644 "$base/bothook-onboarding-plugin/package.json" /opt/bothook/plugins/bothook-onboarding-plugin/package.json
   install -m 644 "$base/bothook-onboarding-plugin/dist/index.js" /opt/bothook/plugins/bothook-onboarding-plugin/dist/index.js
