@@ -882,11 +882,13 @@
               st = null;
             }
 
-            const everLinked = Boolean(deliveryStatus && deliveryStatus.ok && deliveryStatus.wa_jid);
+            // IMPORTANT: Do not treat historical wa_jid as proof of a CURRENT successful link.
+            // Only trust live status from the pool machine.
+            const isLinked = Boolean(st && (st.linked || st.connected));
             const isConnected = Boolean(st && st.connected);
 
             // Three-state UI
-            if (everLinked && isConnected) {
+            if (isLinked && isConnected) {
               linked = true;
               {
                 const s = window.__bothook_i18n || {};
@@ -899,7 +901,7 @@
               if (linkedCard) linkedCard.style.display = 'block';
               break;
             }
-            if (everLinked && !isConnected) {
+            if (isLinked && !isConnected) {
               // Previously linked but currently disconnected.
               // If we already have a QR on screen, keep it visible for relink instead of hiding it.
               if (hadQr) {
@@ -942,7 +944,7 @@
             }
 
             statusErrs = 0;
-            if (st.connected) {
+            if (isLinked) {
               linked = true;
               {
                 const s = window.__bothook_i18n || {};
