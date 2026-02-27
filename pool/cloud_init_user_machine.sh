@@ -40,7 +40,7 @@ ensure_openclaw(){
   # npm global prefix
   sudo -u ubuntu bash -lc 'mkdir -p /home/ubuntu/.npm-global && npm config set prefix "/home/ubuntu/.npm-global"'
   # Pinned version for pre-delivery deterministic onboarding flow
-  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; npm i -g openclaw@2026.2.24'
+  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; npm i -g openclaw@2026.2.26'
 }
 
 asset_base(){
