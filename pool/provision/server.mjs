@@ -76,6 +76,11 @@ function tmuxHasSession(name){
   return r.code === 0;
 }
 
+function tmuxProbe(){
+  const r = sh('tmux -V; tmux ls 2>&1 || true', { timeoutMs: 2000 });
+  return (r.stdout || r.stderr || '').trim();
+}
+
 function tmuxKillSession(name){
   sh(`tmux kill-session -t ${JSON.stringify(name)} 2>/dev/null || true`, { timeoutMs: 3000 });
 }
@@ -90,7 +95,7 @@ function tmuxStartLoginSession(uuid, { force=false } = {}){
     tmuxKillSession(session);
   }
 
-  if (tmuxHasSession(session)) return;
+  if (tmuxHasSession(session)) return { ok:true, session, reused:true };
 
   const OPENCLAW_BIN = process.env.OPENCLAW_BIN || path.join(OPENCLAW_HOME, '.npm-global', 'bin', 'openclaw');
   const cmd = `${OPENCLAW_BIN} channels login --channel whatsapp`;
@@ -101,8 +106,17 @@ function tmuxStartLoginSession(uuid, { force=false } = {}){
   // Launch in tmux to ensure a real terminal.
   const r = sh(`tmux new-session -d -s ${JSON.stringify(session)} -x 200 -y 60 ${JSON.stringify(cmd)}`, { timeoutMs: 4000 });
   if (r.code !== 0) {
-    throw new Error(`tmux new-session failed (code=${r.code})\nstdout:\n${r.stdout}\nstderr:\n${r.stderr}`);
+    return {
+      ok:false,
+      session,
+      error: `tmux new-session failed (code=${r.code})`,
+      stdout: (r.stdout||'').slice(-2000),
+      stderr: (r.stderr||'').slice(-2000),
+      probe: tmuxProbe()
+    };
   }
+
+  return { ok:true, session, reused:false };
 }
 
 function tmuxCaptureTail(uuid, lines=320){
@@ -280,8 +294,9 @@ function startLogin(uuid, { force=false } = {}){
 
   // Use tmux to run login in a real terminal session.
   // This avoids OpenClaw suppressing QR output in non-terminal contexts.
-  try { tmuxStartLoginSession(uuid, { force }); } catch (e) {
-    s.lastError = String(e?.stack || e?.message || e);
+  const tr = tmuxStartLoginSession(uuid, { force });
+  if (!tr.ok) {
+    s.lastError = JSON.stringify(tr, null, 2);
     return;
   }
 
