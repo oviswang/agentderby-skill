@@ -198,9 +198,9 @@ function startLogin(uuid, { force=false } = {}){
     return;
   }
 
-  // enforce single-login model: stop gateway first.
-  // IMPORTANT: do not block HTTP handler; do this in the background.
-  setTimeout(() => { try { stopGateway(); } catch {} }, 0);
+  // IMPORTANT: keep gateway running.
+  // Stopping the gateway can prevent WhatsApp QR generation under this deployment model.
+  setTimeout(() => { try { startGateway(); } catch {} }, 0);
 
   if (force) {
     // wipe whatsapp auth dir to force new QR rotation from scratch
