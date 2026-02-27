@@ -226,6 +226,16 @@ function startLogin(uuid, { force=false } = {}){
   const OPENCLAW_BIN = process.env.OPENCLAW_BIN || path.join(OPENCLAW_HOME, '.npm-global', 'bin', 'openclaw');
   env.PATH = `${path.dirname(OPENCLAW_BIN)}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
 
+  // Preflight: verify OPENCLAW_BIN is executable in this environment.
+  try {
+    const v = sh(`${OPENCLAW_BIN} --version`, { timeoutMs: 3000 });
+    if (v.code !== 0) {
+      s.lastError = `openclaw preflight failed (code=${v.code})\nstdout:\n${(v.stdout||'').slice(-800)}\nstderr:\n${(v.stderr||'').slice(-800)}`;
+    }
+  } catch (e) {
+    s.lastError = `openclaw preflight exception: ${String(e?.message||e)}`;
+  }
+
   let term;
   try {
     term = pty.spawn('bash', ['-lc', `${OPENCLAW_BIN} channels login --channel whatsapp`], {
@@ -258,6 +268,15 @@ function startLogin(uuid, { force=false } = {}){
 
     s._pendingQr = true;
   });
+
+  // If no output arrives soon, record a hint for debugging.
+  setTimeout(() => {
+    try {
+      if (!s.lastQrDataUrl && (!s.buf || s.buf.trim().length === 0) && s.pty) {
+        s.lastError = s.lastError || 'openclaw-login produced no output after 3s (possible hang before QR output)';
+      }
+    } catch {}
+  }, 3000);
 
   term.onExit((e) => {
     s.pty = null;
