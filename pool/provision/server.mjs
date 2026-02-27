@@ -59,16 +59,47 @@ function sh(cmd, { timeoutMs = 8000 } = {}) {
   return { code: res.status ?? 0, stdout: res.stdout || '', stderr: res.stderr || '' };
 }
 
-function stopGateway(){
-  // Avoid login competition. Must be fast/non-blocking.
-  // systemctl can hang on some systems; bound it hard.
-  sh('timeout 2 systemctl stop openclaw-gateway.service || true', { timeoutMs: 4000 });
-  sh('timeout 2 systemctl --user stop openclaw-gateway.service || true', { timeoutMs: 4000 });
-}
-
 function startGateway(){
   sh('timeout 2 systemctl start openclaw-gateway.service || true', { timeoutMs: 4000 });
   sh('timeout 2 systemctl --user start openclaw-gateway.service || true', { timeoutMs: 4000 });
+}
+
+function tmuxHasSession(name){
+  const r = sh(`tmux has-session -t ${JSON.stringify(name)} 2>/dev/null`, { timeoutMs: 2000 });
+  return r.code === 0;
+}
+
+function tmuxKillSession(name){
+  sh(`tmux kill-session -t ${JSON.stringify(name)} 2>/dev/null || true`, { timeoutMs: 3000 });
+}
+
+function tmuxStartLoginSession(uuid, { force=false } = {}){
+  const session = `wa-${uuid}`;
+
+  if (force) {
+    // wipe whatsapp auth dir to force new QR rotation from scratch
+    const authDir = path.join(OPENCLAW_STATE_DIR, 'channels', 'whatsapp');
+    try { fs.rmSync(authDir, { recursive:true, force:true }); } catch {}
+    tmuxKillSession(session);
+  }
+
+  if (tmuxHasSession(session)) return;
+
+  const OPENCLAW_BIN = process.env.OPENCLAW_BIN || path.join(OPENCLAW_HOME, '.npm-global', 'bin', 'openclaw');
+  const cmd = `${OPENCLAW_BIN} channels login --channel whatsapp`;
+
+  // Start gateway to ensure plugin environment is ready.
+  try { startGateway(); } catch {}
+
+  // Launch in tmux to ensure a real terminal.
+  sh(`tmux new-session -d -s ${JSON.stringify(session)} -x 200 -y 60 ${JSON.stringify(cmd)}`, { timeoutMs: 4000 });
+}
+
+function tmuxCaptureTail(uuid, lines=320){
+  const session = `wa-${uuid}`;
+  const r = sh(`tmux capture-pane -pt ${JSON.stringify(session)} -S -${lines} 2>/dev/null && tmux show-buffer && tmux delete-buffer`, { timeoutMs: 4000 });
+  if (r.code !== 0) return '';
+  return r.stdout || '';
 }
 
 function stripAnsi(s){
@@ -237,70 +268,16 @@ function startLogin(uuid, { force=false } = {}){
     s.lastError = `openclaw preflight exception: ${String(e?.message||e)}`;
   }
 
-  // Use `script` to force a real PTY/tty transcript (more reliable than node-pty
-  // for some CLIs). We will tail the transcript file to parse QR blocks.
-  ensureDir(DATA_DIR);
-  const logPath = path.join(DATA_DIR, `wa-login-${uuid}.log`);
-  try { fs.rmSync(logPath, { force: true }); } catch {}
-
-  let term;
-  try {
-    term = pty.spawn('script', ['-qfc', `${OPENCLAW_BIN} channels login --channel whatsapp`, logPath], {
-      name: 'xterm',
-      cols: 200,
-      rows: 60,
-      cwd: OPENCLAW_HOME,
-      env
-    });
-  } catch (e) {
-    s.lastExit = { at: nowIso(), spawnError: true };
+  // Use tmux to run login in a real terminal session.
+  // This avoids OpenClaw suppressing QR output in non-terminal contexts.
+  try { tmuxStartLoginSession(uuid, { force }); } catch (e) {
     s.lastError = String(e?.stack || e?.message || e);
     return;
   }
 
-  s.pty = term;
+  s.pty = null;
   s.buf = '';
-  s._logPath = logPath;
-
-  term.onData((d) => {
-    // keep tail buffer mainly for debugging; QR parsing uses the transcript file.
-    s.buf += d;
-    if (s.buf.length > 60000) s.buf = s.buf.slice(-30000);
-    s._pendingQr = true;
-  });
-
-  term.onData((d) => {
-    // Only append; do NOT parse/encode QR in the hot path (it can block the event loop).
-    s.buf += d;
-    // keep buffer bounded (tail only) to avoid heavy parsing work
-    if (s.buf.length > 60000) s.buf = s.buf.slice(-30000);
-
-    // Capture common startup failures for observability.
-    const tail = stripAnsi(s.buf).slice(-2000);
-    if (tail.includes('command not found') || tail.toLowerCase().includes('permission denied') || tail.toLowerCase().includes('no such file')) {
-      s.lastError = tail.split(/\r?\n/).slice(-6).join('\n');
-    }
-
-    s._pendingQr = true;
-  });
-
-  // If no output arrives soon, record a hint for debugging.
-  setTimeout(() => {
-    try {
-      if (!s.lastQrDataUrl && (!s.buf || s.buf.trim().length === 0) && s.pty) {
-        s.lastError = s.lastError || 'openclaw-login produced no output after 15s (possible hang before QR output)';
-      }
-    } catch {}
-  }, 15000);
-
-  term.onExit((e) => {
-    s.pty = null;
-    s.lastExit = { at: nowIso(), ...e };
-    if (!s.lastQrDataUrl) {
-      s.lastError = s.lastError || `openclaw-login exited before QR (exit=${JSON.stringify(e)})`;
-    }
-    // do not auto-restart here; UI can call start again.
-  });
+  s._logPath = null;
 }
 
 function shellReadUuidLink(uuid){
@@ -397,18 +374,12 @@ setInterval(() => {
 // Parse latest QR from PTY output at a fixed interval to avoid event-loop stalls.
 setInterval(() => {
   for (const [uuid, s] of sessions.entries()) {
-    if (!s._pendingQr) continue;
-    s._pendingQr = false;
-
+    // Poll tmux output for active sessions.
     try {
-      // Prefer parsing from transcript file (script output) if available.
-      let text = null;
-      if (s._logPath) {
-        try { text = fs.readFileSync(s._logPath, 'utf8'); } catch {}
-      }
-      if (!text) text = stripAnsi(s.buf);
+      const text = tmuxCaptureTail(uuid, 360);
+      if (!text) continue;
 
-      const tailLines = stripAnsi(text).split(/\r?\n/).slice(-240);
+      const tailLines = stripAnsi(text).split(/\r?\n/).slice(-300);
       const blocks = extractQrBlocksFromLines(tailLines);
       if (!blocks.length) continue;
       const last = blocks[blocks.length - 1];
