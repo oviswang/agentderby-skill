@@ -206,7 +206,7 @@ function parseWhatsappStatus(text){
 }
 
 const sessions = new Map();
-// uuid -> { pty, buf, lastQrDataUrl, lastQrAt, lastLoginAt, status, lastStatusAt, lastStatusRaw, qrSeq, welcomeSentAt, _pendingQr, _lastQrHash, lastError, lastExit }
+// uuid -> { pty, buf, lastQrDataUrl, lastQrAt, lastLoginAt, status, lastStatusAt, lastStatusRaw, qrSeq, welcomeSentAt, _pendingQr, _lastQrHash, lastError, lastExit, loginMode, lastStartAt }
 
 function ensureSession(uuid){
   let s = sessions.get(uuid);
@@ -227,6 +227,8 @@ function ensureSession(uuid){
       lastError: null,
       lastExit: null,
       _logPath: null,
+      loginMode: null,
+      lastStartAt: null,
     };
     sessions.set(uuid, s);
   }
@@ -303,6 +305,8 @@ function startLogin(uuid, { force=false } = {}){
   s.pty = null;
   s.buf = '';
   s._logPath = null;
+  s.loginMode = 'tmux';
+  s.lastStartAt = nowIso();
 }
 
 function shellReadUuidLink(uuid){
@@ -396,29 +400,29 @@ setInterval(() => {
   }
 }, 2500);
 
-// Parse latest QR from PTY output at a fixed interval to avoid event-loop stalls.
+// Parse latest QR from terminal output at a fixed interval to avoid event-loop stalls.
 setInterval(() => {
   for (const [uuid, s] of sessions.entries()) {
-    // Poll tmux output for active sessions.
+    if (s.loginMode !== 'tmux') continue;
+
     try {
-      const text = tmuxCaptureTail(uuid, 360);
+      const text = tmuxCaptureTail(uuid, 420);
       if (!text) continue;
 
-      const tailLines = stripAnsi(text).split(/\r?\n/).slice(-300);
+      const tailLines = stripAnsi(text).split(/\r?\n/).slice(-340);
       const blocks = extractQrBlocksFromLines(tailLines);
       if (!blocks.length) continue;
+
       const last = blocks[blocks.length - 1];
       const h = crypto.createHash('sha1').update(last.join('\n')).digest('hex');
       if (s._lastQrHash === h) continue;
       s._lastQrHash = h;
 
-      // Generate PNG data URL (bounded workload)
-      // Keep PNG generation cheap; browser scanning doesn't need huge scale.
       s.lastQrDataUrl = asciiQrToPngDataUrl(last, { scale: 3, border: 2 });
       s.lastQrAt = nowIso();
       s.qrSeq += 1;
-    } catch {
-      // ignore
+    } catch (e) {
+      s.lastError = s.lastError || String(e?.message || e);
     }
   }
 }, QR_PARSE_INTERVAL_MS);
