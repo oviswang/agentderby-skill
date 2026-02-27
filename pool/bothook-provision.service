@@ -3,9 +3,10 @@ Description=BOTHook Provisioning Server (Baileys)
 After=network-online.target
 Wants=network-online.target
 
-[Service]
 # If control-plane has taken over the WhatsApp login flow, do not run local provision server.
 ConditionPathExists=!/opt/bothook/LOGIN_AUTHORITY.control-plane
+
+[Service]
 Type=simple
 WorkingDirectory=/opt/bothook/provision
 Environment=PROVISION_DATA_DIR=/opt/bothook/provision/data
