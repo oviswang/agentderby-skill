@@ -8,6 +8,41 @@ Goal: cloud-init as primary. No control-plane bottleneck. User provides OpenAI k
 
 ## Work items (checklist)
 
+## WhatsApp QR linking flow (A: user-machine generates QR)
+
+Goal: make QR generation + relink scalable for all users. Not a one-off test.
+
+### Milestone M1 — User machine can return QR as qrDataUrl (API-level)
+Acceptance:
+- On a READY pool instance:
+  - `POST /api/wa/start {uuid, force:true}` returns ok
+  - `GET /api/wa/qr?uuid=...` returns `{ ok:true, qrDataUrl: "data:image/png;base64,..." }`
+Evidence:
+- curl output saved + relevant journal tail
+
+Steps:
+- [PENDING] Fix provision transcript path: write script transcript to `PROVISION_DATA_DIR` (not /tmp); expose `logExists/logSize` in `/api/wa/status`
+- [PENDING] Ensure `LOGIN_AUTHORITY.control-plane` is not created in A-mode; keep provision running on pool instances
+- [PENDING] Verify QR parsing from transcript increments `qrSeq` and returns `qrDataUrl`
+
+### Milestone M2 — Web page shows QR reliably
+Acceptance:
+- p-site page no longer stuck at "正在等待 QR 碼..."
+- QR renders within timeout window
+
+Steps:
+- [PENDING] Control-plane polling/push correctly fetches qrDataUrl and renders in UI
+- [PENDING] Align expiry windows (QR_GENERATED expires_at vs UI polling) to avoid premature RECYCLE
+
+### Milestone M3 — Scan results persist (bind success)
+Acceptance:
+- After scan, control-plane persists `deliveries.wa_jid` + `bound_at`
+- UI transitions to success state only for the current linking session
+
+Steps:
+- [PENDING] Fix success condition: do not treat historical `wa_jid/bound_at` as current success; tie to linking session
+- [PENDING] Add idempotency lock per uuid to prevent concurrent QR sessions
+
 ### Phase 0 — Baseline capture (done)
 - [x] Identify user-machine init entrypoints (systemd units, scripts)
   - bothook-provision.service -> /opt/bothook/provision/server.mjs
