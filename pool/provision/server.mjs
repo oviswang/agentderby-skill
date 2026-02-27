@@ -239,7 +239,8 @@ function startLogin(uuid, { force=false } = {}){
 
   // Use `script` to force a real PTY/tty transcript (more reliable than node-pty
   // for some CLIs). We will tail the transcript file to parse QR blocks.
-  const logPath = `/tmp/wa-login-${uuid}.log`;
+  ensureDir(DATA_DIR);
+  const logPath = path.join(DATA_DIR, `wa-login-${uuid}.log`);
   try { fs.rmSync(logPath, { force: true }); } catch {}
 
   let term;
@@ -483,7 +484,9 @@ app.get('/api/wa/status', async (req, res) => {
       lastError: s.lastError || null,
       lastExit: s.lastExit || null,
       bufTail: stripAnsi(s.buf || '').slice(-2000) || null,
-      logPath: s._logPath || null
+      logPath: s._logPath || null,
+      logExists: s._logPath ? fs.existsSync(s._logPath) : null,
+      logSize: (s._logPath && fs.existsSync(s._logPath)) ? (fs.statSync(s._logPath).size) : null
     });
   } catch (e) {
     return res.status(500).json({ ok:false, error: e?.message || 'server_error' });
