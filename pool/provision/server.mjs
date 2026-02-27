@@ -441,10 +441,18 @@ app.post('/api/wa/start', async (req, res) => {
     if (!uuid) return res.status(400).json({ ok:false, error:'uuid_required' });
     const force = Boolean(req.body?.force);
 
+    console.log(`[bothook-provision] wa.start uuid=${uuid} force=${force}`);
+
     // Respond immediately; login work happens in background.
     res.json({ ok:true, uuid, status:'starting' });
     setTimeout(() => {
-      try { startLogin(uuid, { force }); } catch {}
+      try {
+        startLogin(uuid, { force });
+        const s = ensureSession(uuid);
+        console.log(`[bothook-provision] wa.start dispatched uuid=${uuid} loginMode=${s.loginMode} lastError=${s.lastError ? 'yes' : 'no'}`);
+      } catch (e) {
+        console.log(`[bothook-provision] wa.start exception uuid=${uuid} err=${String(e?.message||e)}`);
+      }
     }, 0);
   } catch (e) {
     return res.status(500).json({ ok:false, error: e?.message || 'server_error' });
