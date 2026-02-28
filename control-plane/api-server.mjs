@@ -1615,41 +1615,9 @@ app.post('/api/wa/start', async (req, res) => {
       });
     }
 
-    // Fallback (optional): legacy control-plane tmux login path.
-    // Enable only when explicitly requested (env) to avoid competing login authorities.
-    if (String(process.env.BOTHOOK_WA_FALLBACK_TMUX || '').toLowerCase() !== '1') {
-      return send(res, 502, { ok:false, error:'user_machine_start_failed', detail: (rr.text||'').slice(0,300) });
-    }
-
-    // --- legacy tmux fallback below ---
-    const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
-    const relinkLogout = force
-      ? `openclaw channels logout --channel whatsapp 2>/dev/null || true; `
-      : '';
-
-    const remoteCmd = `set -euo pipefail; `
-      + `sudo mkdir -p /opt/bothook 2>/dev/null || true; `
-      + `sudo touch /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true; `
-      + `systemctl --user stop openclaw-gateway.service 2>/dev/null || true; `
-      + `sudo systemctl stop openclaw-gateway.service 2>/dev/null || true; `
-      + `sudo systemctl stop bothook-provision.service 2>/dev/null || true; `
-      + `sudo mkdir -p /home/ubuntu/.openclaw/credentials/whatsapp/default 2>/dev/null || true; `
-      + `sudo chown -R ubuntu:ubuntu /home/ubuntu/.openclaw/credentials/whatsapp 2>/dev/null || true; `
-      + `sudo chmod -R u+rwX,go-rwx /home/ubuntu/.openclaw/credentials/whatsapp 2>/dev/null || true; `
-      + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
-      + relinkLogout
-      + `tmux new-session -d -s '${tmuxSession}' "bash -lc 'stty cols 220 rows 80 2>/dev/null || true; export COLUMNS=220 LINES=80; openclaw channels login --channel whatsapp'"; `
-      + `echo started`;
-
-    const r = poolSsh(instance, remoteCmd, { timeoutMs: 20000, tty: false, retries: 2 });
-    if (r.code !== 0) {
-      const detail = ((r.stdout || '') + '\n' + (r.stderr || '')).trim();
-      return send(res, 502, { ok: false, error: 'pool_start_failed', detail: detail || `ssh_failed_exit_${r.code}` });
-    }
-
-    const out = { ok: true, uuid, instance_id: instance.instance_id, status: 'starting', mode: 'channels_login_tmux', tmuxSession };
-    if (isDebug(req)) out.debug = { stdout: r.stdout, stderr: r.stderr };
-    return send(res, 200, out);
+    // No tmux fallback in the default architecture.
+    // If delegation fails, surface the failure and let ops decide.
+    return send(res, 502, { ok:false, error:'user_machine_start_failed', detail: (rr.text||'').slice(0,300) });
   } catch (e) {
     return send(res, e.statusCode || 500, { ok: false, error: e.message || 'server_error' });
   }
