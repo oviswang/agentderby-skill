@@ -1,0 +1,11 @@
+{
+  "id": "bothook-wa-autoreply",
+  "name": "BOTHook WhatsApp Autoreply",
+  "version": "0.2.7",
+  "description": "Self-chat OpenAI key capture+verify and one-time external promo replies; suppress missing-key warnings",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

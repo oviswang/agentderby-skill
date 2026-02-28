@@ -14,14 +14,19 @@ Goal: make QR generation + relink scalable for all users. Not a one-off test.
 
 ### Milestone M1 — User machine can return QR as qrDataUrl (API-level)
 Acceptance:
-- On a READY pool instance:
+- On a READY pool instance (user-machine provision server on 127.0.0.1:18999):
   - `POST /api/wa/start {uuid, force:true}` returns ok
   - `GET /api/wa/qr?uuid=...` returns `{ ok:true, qrDataUrl: "data:image/png;base64,..." }`
+  - Allow short warmup: first few polls may return `qr_not_ready` before the QR appears/gets parsed.
 Evidence:
 - curl output saved + relevant journal tail
 
+Implementation notes (stability fixes):
+- tmux capture must use `tmux capture-pane -p ...` output directly (do not rely on `tmux show-buffer` without `save-buffer`).
+- QR extraction should tolerate partial captures (e.g. missing closing border) when enough QR rows are present.
+
 Steps:
-- [PENDING] Fix provision transcript path: write script transcript to `PROVISION_DATA_DIR` (not /tmp); expose `logExists/logSize` in `/api/wa/status`
+- [RUNNING] Fix provision transcript path: write script transcript to `PROVISION_DATA_DIR` (not /tmp); expose `logExists/logSize` in `/api/wa/status`
 - [PENDING] Ensure `LOGIN_AUTHORITY.control-plane` is not created in A-mode; keep provision running on pool instances
 - [PENDING] Verify QR parsing from transcript increments `qrSeq` and returns `qrDataUrl`
 
