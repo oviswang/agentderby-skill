@@ -539,6 +539,7 @@ function poolSsh(instance, remoteCmd, { timeoutMs = 20000, tty = false, retries 
   const cmd = `ssh ${tflag} -i '${POOL_SSH_KEY}' `
     + `-o BatchMode=yes -o StrictHostKeyChecking=no `
     + `-o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null `
+    + `-o LogLevel=ERROR `
     + `-o ConnectTimeout=8 -o ConnectionAttempts=1 `
     + `-o ServerAliveInterval=2 -o ServerAliveCountMax=2 `
     + `ubuntu@${ip} '${String(remoteCmd).replace(/'/g, "'\\''")}'`;
@@ -582,7 +583,7 @@ async function poolFetch(instance, path, opts = {}) {
       curl = `curl -sS -m ${Math.ceil(timeoutMs / 1000)} -X ${method} ${headerFlags} '${remoteUrl}'`;
     }
 
-    const cmd = `ssh -i '${POOL_SSH_KEY}' -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=25 ubuntu@${ip} '${curl.replace(/'/g, "'\\''")}'`;
+    const cmd = `ssh -i '${POOL_SSH_KEY}' -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=25 ubuntu@${ip} '${curl.replace(/'/g, "'\\''")}'`;
     const r = sh(cmd, { timeoutMs: timeoutMs + 3000 });
     const text = (r.stdout || r.stderr || '').trim();
     let json;
@@ -1662,6 +1663,9 @@ function extractAsciiQrBlock(text) {
 const qrWatch = new Map();
 // qrWatch.get(uuid) => { lastHash, lastSeenAtMs, lastRestartAtMs }
 
+const qrCache = new Map();
+// qrCache.get(uuid) => { qrDataUrl, qrSeq, qrAt, cachedAtMs }
+
 function sha256Hex(s){
   return crypto.createHash('sha256').update(String(s||''), 'utf8').digest('hex');
 }
@@ -1687,7 +1691,7 @@ app.get('/api/wa/qr', async (req, res) => {
     });
 
     if (rr.ok && rr.json) {
-      return send(res, 200, {
+      const payload = {
         ok: true,
         uuid,
         instance_id: instance.instance_id,
@@ -1696,6 +1700,26 @@ app.get('/api/wa/qr', async (req, res) => {
         qrSeq: rr.json.qrSeq || 0,
         qrAt: rr.json.qrAt || null,
         mode: 'user_machine_provision',
+      };
+      if (payload.qrDataUrl) {
+        qrCache.set(uuid, { qrDataUrl: payload.qrDataUrl, qrSeq: payload.qrSeq, qrAt: payload.qrAt, cachedAtMs: Date.now() });
+      }
+      return send(res, 200, payload);
+    }
+
+    // If user-machine provision is temporarily not ready, serve cached QR for UI stability.
+    const cached = qrCache.get(uuid);
+    if (cached?.qrDataUrl) {
+      return send(res, 200, {
+        ok: true,
+        uuid,
+        instance_id: instance.instance_id,
+        status: 'qr',
+        qrDataUrl: cached.qrDataUrl,
+        qrSeq: cached.qrSeq || 0,
+        qrAt: cached.qrAt || null,
+        mode: 'user_machine_provision_cached',
+        stale: true,
       });
     }
 
