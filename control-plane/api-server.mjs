@@ -2005,8 +2005,11 @@ PY`,
                 // Treat as OK when:
                 // - explicitly ok, OR
                 // - check is inconclusive (null) but we have a previous verified_at and no invalid_at.
+                // Treat as OK when:
+                // - last_check_ok is explicitly true, OR
+                // - we have a previous verified_at and no invalid_at (covers legacy meta that only stored verified_at).
                 if (km?.last_check_ok === true) keyOk = true;
-                else if (km?.last_check_ok === null && km?.verified_at && !km?.invalid_at) keyOk = true;
+                else if (km?.verified_at && !km?.invalid_at && km?.last_check_ok !== false) keyOk = true;
                 else keyOk = false;
               } else {
                 keyOk = false;
@@ -2311,6 +2314,53 @@ app.post('/api/stripe/webhook', async (req, res) => {
         );
         // If key already verified + linked, cutover now.
         try { tryCutoverDelivered(db, uuid, { reason: 'payment_confirmed' }); } catch {}
+
+        // If linked but key not yet verified: proactively send key setup guide immediately.
+        // (Control-plane learns payment first; do not wait for the user to send a message.)
+        // Fire-and-forget to keep webhook fast.
+        if (uuid) {
+          setTimeout(() => {
+            try {
+              const d2 = getDeliveryByUuid(db, String(uuid));
+              if (!d2?.instance_id || !d2?.wa_jid) return; // must be linked
+              const inst2 = getInstanceById(db, d2.instance_id);
+              if (!inst2?.public_ip) return;
+
+              // Check key verified
+              let keyVerified = false;
+              try {
+                const ks = db.prepare('SELECT meta_json FROM delivery_secrets WHERE provision_uuid=? AND kind=? LIMIT 1').get(String(uuid), 'openai_api_key');
+                if (ks?.meta_json) {
+                  const km = JSON.parse(ks.meta_json);
+                  keyVerified = Boolean(km?.verified_at) && !km?.invalid_at;
+                }
+              } catch { keyVerified = false; }
+              if (keyVerified) return;
+
+              // Idempotency: avoid spamming if already sent after this payment.
+              const ts2 = nowIso();
+              let meta = {};
+              try { meta = d2.meta_json ? JSON.parse(d2.meta_json) : {}; } catch { meta = {}; }
+              const paidAt = meta.paid_at ? Date.parse(meta.paid_at) : null;
+              const guideSentAt = meta.guide_key_sent_at ? Date.parse(meta.guide_key_sent_at) : null;
+              if (guideSentAt && (!paidAt || guideSentAt >= paidAt)) return;
+
+              const lang = getDeliveryLang(d2);
+              const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
+              const guide = prompts.guide_key_paid;
+              if (!guide) return;
+
+              const msg = renderTpl(guide, { uuid: String(uuid) });
+              const rr2 = sendSelfChatOnInstance(inst2, msg);
+              const ok = (rr2.code ?? 1) === 0;
+              const patch = ok
+                ? { guide_key_sent_at: ts2, guide_key_lang: lang, guide_key_send_ok: true, guide_key_sent_via: 'stripe_webhook' }
+                : { guide_key_last_attempt_at: ts2, guide_key_lang: lang, guide_key_send_ok: false, guide_key_sent_via: 'stripe_webhook' };
+              const meta2 = mergeMeta(d2.meta_json, patch);
+              try { db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts2, d2.delivery_id); } catch {}
+            } catch {}
+          }, 0);
+        }
       }
     }
 
@@ -2745,10 +2795,12 @@ function startOpsWorker(){
     const { db } = openDb();
     const now = Date.now();
 
-    // QR/Login watchdog (linking loop):
-    // Ensure tmux login session is running while status=LINKING and not yet bound.
-    // This makes the QR stream continuous across rotations until scan completes.
-    try {
+    // QR/Login watchdog (linking loop) — LEGACY.
+    // Default architecture delegates QR/login to the user-machine provisioning server (127.0.0.1:18999 on the instance).
+    // Running a second tmux-based login loop from the control-plane can conflict with provision/server.mjs.
+    // Gate behind an explicit env flag.
+    const tmuxWatchdogEnabled = (process.env.BOTHOOK_WA_TMUX_WATCHDOG || '0') === '1';
+    if (tmuxWatchdogEnabled) try {
       const rowsW = db.prepare(`
         SELECT provision_uuid, instance_id
         FROM deliveries
