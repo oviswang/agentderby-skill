@@ -999,7 +999,7 @@ async function associatePoolKey(instance_id){
 
 async function issueReadyToken(db, instRow){
   const token = makeReadyReportToken();
-  const expIso = new Date(Date.now() + 10*60*1000).toISOString();
+  const expIso = new Date(Date.now() + 60*60*1000).toISOString();
   const meta = mergeMeta(instRow.meta_json, { ready_report_token: token, ready_report_exp: expIso });
   db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta, instRow.instance_id);
   writeReadyReportFilesOnInstance(instRow, { token, expIso });
@@ -1125,6 +1125,14 @@ async function runPoolInitJob(job){
     // Ensure postboot verify has run (kick once)
     pushJobLog(job, 'kick postboot verify');
     poolSsh(inst, 'sudo systemctl start bothook-postboot-verify.service || true', { timeoutMs: 12000, tty:false, retries:0 });
+
+    // Refresh ready token right before we start waiting.
+    // Rationale: end-to-end init (reset+bootstrap+reboot+verify) can exceed a short token TTL.
+    try {
+      pushJobLog(job, 'refresh ready_report_token (pre-wait)');
+      const instX = getInstanceById(db, job.instance_id);
+      await issueReadyToken(db, instX);
+    } catch {}
 
     // Wait DB READY (from push)
     // Kick postboot verify periodically to self-heal transient failures (e.g. gateway port not yet listening).
