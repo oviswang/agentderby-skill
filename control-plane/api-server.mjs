@@ -1791,6 +1791,73 @@ app.get('/api/wa/qr', async (req, res) => {
   }
 });
 
+
+app.get('/api/wa/welcome_unpaid_text', async (req, res) => {
+  try {
+    const uuid = String(req.query?.uuid || '').trim();
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+
+    const { db } = openDb();
+    const d = db.prepare('SELECT * FROM deliveries WHERE provision_uuid = ? LIMIT 1').get(uuid);
+    if (!d) return send(res, 404, { ok:false, error:'unknown_uuid' });
+
+    const inst = getInstanceById(db, d.instance_id);
+    if (!inst?.public_ip) return send(res, 409, { ok:false, error:'no_instance_allocated' });
+
+    const lang = getDeliveryLang(d);
+    const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
+    const welcome = prompts.welcome_unpaid;
+    if (!welcome) return send(res, 404, { ok:false, error:'welcome_unpaid_missing', lang });
+
+    // Pay link
+    let payShortLink = '';
+    try {
+      const r = await fetch('http://127.0.0.1:18998/api/pay/link', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ uuid })
+      });
+      const t = await r.text();
+      const j = JSON.parse(t);
+      if (j?.ok && j?.payUrl) payShortLink = String(j.payUrl);
+    } catch {}
+
+    // Specs (best-effort)
+    let cpu='?', ram_gb='?', disk_gb='?';
+    try {
+      const m = jsonMeta(inst.meta_json) || {};
+      if (m.cpu) cpu=String(m.cpu);
+      if (m.ram_gb) ram_gb=String(m.ram_gb);
+      if (m.disk_gb) disk_gb=String(m.disk_gb);
+    } catch {}
+
+    let openclawVersion='';
+    try {
+      const vr = poolSsh(inst, `openclaw --version 2>/dev/null || true`, { timeoutMs: 6000, tty: false, retries: 0 });
+      openclawVersion = String(vr.stdout||'').trim();
+    } catch {}
+
+    const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
+
+    const msg = renderTpl(welcome, {
+      uuid,
+      region: inst.region || '',
+      public_ip: inst.public_ip || '',
+      cpu,
+      ram_gb,
+      disk_gb,
+      openclaw_version: openclawVersion,
+      p_link: pLink,
+      pay_countdown_minutes: 15,
+      pay_short_link: payShortLink
+    });
+
+    return send(res, 200, { ok:true, uuid, lang, text: msg });
+  } catch (e) {
+    return send(res, 500, { ok:false, error: e?.message || 'server_error' });
+  }
+});
+
 app.get('/api/wa/status', async (req, res) => {
   try {
     const uuid = String(req.query?.uuid || '').trim();
