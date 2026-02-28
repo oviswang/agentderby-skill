@@ -833,50 +833,12 @@
             verifyCard.appendChild(canvas);
           }
 
-          // QR history gallery (keep last few QR images so user can scan without rushing)
-          let gallery = document.getElementById('qrGallery');
-          if (!gallery) {
-            gallery = document.createElement('div');
-            gallery.id = 'qrGallery';
-            gallery.style.display = 'grid';
-            gallery.style.gridTemplateColumns = 'repeat(auto-fit, minmax(220px, 1fr))';
-            gallery.style.gap = '12px';
-            gallery.style.marginTop = '12px';
-            verifyCard.appendChild(gallery);
-          }
-
-          async function addQrToGallery(dataUrl) {
-            try {
-              if (!dataUrl) return;
-              // de-dupe
-              const items = Array.from(gallery.querySelectorAll('canvas[data-qr]'));
-              if (items.some(x => x.getAttribute('data-qr') === dataUrl)) return;
-
-              const c = document.createElement('canvas');
-              c.setAttribute('data-qr', dataUrl);
-              c.style.width = '260px';
-              c.style.maxWidth = '100%';
-              c.style.borderRadius = '16px';
-              c.style.background = '#fff';
-              c.style.padding = '10px';
-              c.style.display = 'block';
-              c.style.imageRendering = 'pixelated';
-
-              await renderPngDataUrlToCanvas(dataUrl, c);
-              gallery.prepend(c);
-              // Keep only last 4
-              const all = Array.from(gallery.querySelectorAll('canvas[data-qr]'));
-              for (let i = 4; i < all.length; i++) all[i].remove();
-            } catch(e) {}
-          }
-
           // Poll until QR ready
           for (let i = 0; i < 25; i++) {
             try {
               const q = await fetchQr(uuid);
               if (q.qrDataUrl) {
                 await renderPngDataUrlToCanvas(q.qrDataUrl, canvas);
-                await addQrToGallery(q.qrDataUrl);
                 hadQr = true;
                 {
                   const s = window.__bothook_i18n || {};
@@ -912,7 +874,6 @@
               if (q && q.qrDataUrl && q.qrDataUrl !== lastQr) {
                 lastQr = q.qrDataUrl;
                 await renderPngDataUrlToCanvas(q.qrDataUrl, canvas);
-                await addQrToGallery(q.qrDataUrl);
                 hadQr = true;
                 {
                   const s = window.__bothook_i18n || {};
@@ -963,8 +924,6 @@
             try {
               // Hide QR UI once linked
               if (canvas) canvas.style.display = 'none';
-              const g = document.getElementById('qrGallery');
-              if (g) g.style.display = 'none';
               getQrBtn.disabled = true;
               restartBtn.disabled = true;
               verifyCard.style.display = 'none';
