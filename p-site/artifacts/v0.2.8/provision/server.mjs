@@ -90,9 +90,14 @@ function tmuxStartLoginSession(uuid, { force=false } = {}){
 
   if (force) {
     // wipe whatsapp auth dir to force new QR rotation from scratch
-    const authDir = path.join(OPENCLAW_STATE_DIR, 'channels', 'whatsapp');
+    // NOTE: OpenClaw stores WhatsApp auth under credentials/whatsapp.
+    // Keep this consistent with control-plane binding logic that reads creds.json.
+    const authDir = path.join(OPENCLAW_STATE_DIR, 'credentials', 'whatsapp');
     try { fs.rmSync(authDir, { recursive:true, force:true }); } catch {}
+
+    // Kill both new and legacy session names to avoid conflicts.
     tmuxKillSession(session);
+    tmuxKillSession(`wa-login-${uuid}`);
   }
 
   if (tmuxHasSession(session)) return { ok:true, session, reused:true };
@@ -116,6 +121,18 @@ function tmuxStartLoginSession(uuid, { force=false } = {}){
     };
   }
 
+  // Strong validation: tmux may return 0 even if session creation immediately failed/exited.
+  if (!tmuxHasSession(session)) {
+    return {
+      ok:false,
+      session,
+      error: 'tmux_session_missing_after_create',
+      stdout: (r.stdout||'').slice(-2000),
+      stderr: (r.stderr||'').slice(-2000),
+      probe: tmuxProbe()
+    };
+  }
+
   return { ok:true, session, reused:false };
 }
 
@@ -124,7 +141,7 @@ function tmuxCaptureTail(uuid, lines=320){
   // Use capture-pane output directly.
   // NOTE: `tmux show-buffer` requires a prior `tmux save-buffer`; the previous implementation
   // could return empty output and prevent QR parsing.
-  const r = sh(`tmux capture-pane -pt ${JSON.stringify(session)} -S -${lines} 2>/dev/null`, { timeoutMs: 4000 });
+  const r = sh(`tmux capture-pane -p -t ${JSON.stringify(session)} -S -${lines} 2>/dev/null`, { timeoutMs: 4000 });
   if (r.code !== 0) return '';
   return r.stdout || '';
 }
@@ -511,6 +528,31 @@ app.get('/api/wa/qr', async (req, res) => {
     if (!uuid) return res.status(400).json({ ok:false, error:'uuid_required' });
 
     const s = ensureSession(uuid);
+
+    // If the interval parser hasn't produced a QR yet, parse on-demand.
+    // This makes the UI more responsive and resilient under load.
+    if (!s.lastQrDataUrl && s.loginMode === 'tmux') {
+      try {
+        const text = tmuxCaptureTail(uuid, 420);
+        if (text) {
+          const tailLines = stripAnsi(text).split(/\r?\n/).slice(-340);
+          const blocks = extractQrBlocksFromLines(tailLines);
+          if (blocks.length) {
+            const last = blocks[blocks.length - 1];
+            const h = crypto.createHash('sha1').update(last.join('\n')).digest('hex');
+            if (s._lastQrHash !== h) {
+              s._lastQrHash = h;
+              s.lastQrDataUrl = asciiQrToPngDataUrl(last, { scale: 3, border: 2 });
+              s.lastQrAt = nowIso();
+              s.qrSeq += 1;
+            }
+          }
+        }
+      } catch (e) {
+        s.lastError = s.lastError || String(e?.message || e);
+      }
+    }
+
     if (!s.lastQrDataUrl) {
       return res.status(409).json({ ok:false, error:'qr_not_ready' });
     }
