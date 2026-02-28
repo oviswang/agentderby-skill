@@ -796,6 +796,28 @@
             return true;
           }
 
+          async function renderPngDataUrlToCanvas(dataUrl, canvas) {
+            return await new Promise((resolve) => {
+              try {
+                const img = new Image();
+                img.onload = () => {
+                  try {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    resolve(true);
+                  } catch { resolve(false); }
+                };
+                img.onerror = () => resolve(false);
+                img.src = String(dataUrl || '');
+              } catch { resolve(false); }
+            });
+          }
+
+
           let canvas = document.getElementById('qrCanvas');
           if (!canvas) {
             canvas = document.createElement('canvas');
@@ -815,6 +837,15 @@
           for (let i = 0; i < 25; i++) {
             try {
               const q = await fetchQr(uuid);
+              if (q.qrDataUrl) {
+                await renderPngDataUrlToCanvas(q.qrDataUrl, canvas);
+                hadQr = true;
+                {
+                  const s = window.__bothook_i18n || {};
+                  qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
+                }
+                break;
+              }
               if (q.qrText) {
                 renderAsciiQrToCanvas(q.qrText, canvas);
                 hadQr = true;
@@ -840,9 +871,9 @@
             // Try refresh QR
             try {
               const q = await fetchQr(uuid);
-              if (q && q.qrText && q.qrText !== lastQr) {
-                lastQr = q.qrText;
-                renderAsciiQrToCanvas(q.qrText, canvas);
+              if (q && q.qrDataUrl && q.qrDataUrl !== lastQr) {
+                lastQr = q.qrDataUrl;
+                await renderPngDataUrlToCanvas(q.qrDataUrl, canvas);
                 hadQr = true;
                 {
                   const s = window.__bothook_i18n || {};
