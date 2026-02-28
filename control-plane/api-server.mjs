@@ -89,10 +89,24 @@ function getAttributionForUuid(db, uuid){
   } catch { return null; }
 }
 
-function sendSelfChatOnInstance(instance, text){
-  // Derive self e164 from channel status JSON, then send via gateway.
+function sendSelfChatOnInstance(instance, text, { toJid } = {}){
+  // Prefer loopback send endpoint (does not depend on CLI JSON output).
+  // NOTE: `toJid` should be a WhatsApp JID like "6581...@s.whatsapp.net".
+  const t = String(text || '').trim();
+  const to = String(toJid || '').trim();
+  if (to) {
+    const body = JSON.stringify({ to, text: t });
+    const b64 = Buffer.from(body, 'utf8').toString('base64');
+    const cmd = `set -euo pipefail; `
+      + `echo '${b64}' | base64 -d | `
+      + `curl -sS -m 10 -X POST -H 'content-type: application/json' --data-binary @- `
+      + `'http://127.0.0.1:18789/__bothook__/wa/send'`;
+    return poolSsh(instance, cmd, { timeoutMs: 15000, tty:false, retries: 1 });
+  }
+
+  // Fallback: Derive self e164 from channel status JSON, then send via CLI.
   // IMPORTANT: avoid heredoc in remote SSH (quoting is fragile); use python -c.
-  const msg = JSON.stringify(String(text||''));
+  const msg = JSON.stringify(t);
   const cmd = `set -euo pipefail; `
     + `JSON=$(openclaw channels status --probe --json 2>/dev/null || true); `
     + `SELF=$(JSON="$JSON" python3 -c "import os,json;\
@@ -2020,7 +2034,7 @@ app.get('/api/wa/status', async (req, res) => {
                   pay_short_link: payShortLink
                 });
 
-                const rr2 = sendSelfChatOnInstance(inst2, msg);
+                const rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
                 const ok = (rr2.code ?? 1) === 0;
                 const patch = ok
                   ? { welcome_unpaid_sent_at: ts, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: true }
@@ -2077,7 +2091,7 @@ app.get('/api/wa/status', async (req, res) => {
               if (shouldSend || shouldRetry) {
                 const ts = nowIso();
                 const msg = renderTpl(guide, { uuid });
-                const rr2 = sendSelfChatOnInstance(inst2, msg);
+                const rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
                 const ok = (rr2.code ?? 1) === 0;
                 const patch = ok
                   ? { guide_key_sent_at: ts, guide_key_lang: lang, guide_key_send_ok: true }
