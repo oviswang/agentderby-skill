@@ -1462,7 +1462,7 @@ app.get('/api/billing/portal', async (req, res) => {
 
 app.post('/api/wa/start', async (req, res) => {
   try {
-    res.set('x-bothook-build', 'wa-start-alloc-v1');
+    res.set('x-bothook-build', 'wa-start-alloc-v2-user-machine');
     const uuid = String(req.body?.uuid || '').trim();
     if (!uuid) return send(res, 400, { ok: false, error: 'uuid_required' });
 
@@ -1580,15 +1580,36 @@ app.post('/api/wa/start', async (req, res) => {
       }
     }
 
-    // SINGLE-CHANNEL login model (tmux-backed):
-    // - stop gateway (avoid competition)
-    // - start `openclaw channels login --channel whatsapp` inside tmux (stable TTY)
-    // - QR is only display (tmux capture), success judged by `openclaw channels status`
-    const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
+    // Default: delegate QR/login to user-machine provisioning server (18999) and keep it loopback-only.
+    // Control-plane should coordinate + persist state, not parse tmux QR.
+    const startPath = '/api/wa/start';
+    const body = JSON.stringify({ uuid, force });
 
-    // Relink hygiene:
-    // - For force relink, proactively logout any existing WhatsApp session to avoid QR scan hanging/spinning.
-    // - Always kill any previous tmux login session before starting.
+    const rr = await poolFetch(instance, startPath, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+      timeoutMs: 15000,
+    });
+
+    if (rr.ok && rr.json) {
+      return send(res, 200, {
+        ok: true,
+        uuid,
+        instance_id: instance.instance_id,
+        status: rr.json.status || 'starting',
+        mode: 'user_machine_provision',
+      });
+    }
+
+    // Fallback (optional): legacy control-plane tmux login path.
+    // Enable only when explicitly requested (env) to avoid competing login authorities.
+    if (String(process.env.BOTHOOK_WA_FALLBACK_TMUX || '').toLowerCase() !== '1') {
+      return send(res, 502, { ok:false, error:'user_machine_start_failed', detail: (rr.text||'').slice(0,300) });
+    }
+
+    // --- legacy tmux fallback below ---
+    const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
     const relinkLogout = force
       ? `openclaw channels logout --channel whatsapp 2>/dev/null || true; `
       : '';
@@ -1599,7 +1620,6 @@ app.post('/api/wa/start', async (req, res) => {
       + `systemctl --user stop openclaw-gateway.service 2>/dev/null || true; `
       + `sudo systemctl stop openclaw-gateway.service 2>/dev/null || true; `
       + `sudo systemctl stop bothook-provision.service 2>/dev/null || true; `
-      // Ensure WhatsApp credential dir is writable by ubuntu (prevents QR scan spinning due to EACCES).
       + `sudo mkdir -p /home/ubuntu/.openclaw/credentials/whatsapp/default 2>/dev/null || true; `
       + `sudo chown -R ubuntu:ubuntu /home/ubuntu/.openclaw/credentials/whatsapp 2>/dev/null || true; `
       + `sudo chmod -R u+rwX,go-rwx /home/ubuntu/.openclaw/credentials/whatsapp 2>/dev/null || true; `
@@ -1675,78 +1695,47 @@ app.get('/api/wa/qr', async (req, res) => {
 
     const instance = getInstanceById(db, delivery.instance_id);
     if (!instance?.public_ip) {
-      // No machine allocated (or cleared by watchdog). UI should prompt for a fresh link/allocate.
       return send(res, 409, { ok: false, error: 'no_instance_allocated', uuid, status: delivery.status });
     }
+
+    // Default: delegate to user machine (18999). Returns qrDataUrl.
+    const rr = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, {
+      method: 'GET',
+      timeoutMs: 8000,
+    });
+
+    if (rr.ok && rr.json) {
+      return send(res, 200, {
+        ok: true,
+        uuid,
+        instance_id: instance.instance_id,
+        status: rr.json.status || 'qr',
+        qrDataUrl: rr.json.qrDataUrl || null,
+        qrSeq: rr.json.qrSeq || 0,
+        qrAt: rr.json.qrAt || null,
+        mode: 'user_machine_provision',
+      });
+    }
+
+    // Fallback: legacy control-plane tmux parsing.
+    if (String(process.env.BOTHOOK_WA_FALLBACK_TMUX || '').toLowerCase() !== '1') {
+      return send(res, 409, { ok:false, error:'qr_not_ready', mode:'user_machine_provision', detail: (rr.text||'').slice(0,200) });
+    }
+
+    // --- legacy tmux fallback below (unchanged) ---
     const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
-
-    // Capture a wider window: QR blocks can be >260 lines and may be truncated.
     const capCmd = `set -euo pipefail; tmux has-session -t '${tmuxSession}' 2>/dev/null || exit 3; tmux capture-pane -t '${tmuxSession}' -p -S -4000 | tail -n 1200`;
-    let rr = poolSsh(instance, capCmd, { timeoutMs: 5000, tty: false, retries: 0 });
-
-    // If session is missing, auto-start it here (so UI doesn't need to call /api/wa/start).
-    if ((rr.code ?? 0) === 3) {
-      const remoteCmd = `set -euo pipefail; `
-        + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
-        + `tmux new-session -d -s '${tmuxSession}' "bash -lc 'stty cols 220 rows 80 2>/dev/null || true; export COLUMNS=220 LINES=80; openclaw channels login --channel whatsapp'"; `
-        + `echo started`;
-      const sr = poolSsh(instance, remoteCmd, { timeoutMs: 12000, tty: false, retries: 0 });
-      if ((sr.code ?? 0) !== 0) {
-        const detail = ((sr.stdout || '') + '\n' + (sr.stderr || '')).trim();
-        return send(res, 502, { ok:false, error:'login_start_failed', detail: detail || `ssh_failed_exit_${sr.code}` });
-      }
-      // Re-capture
-      rr = poolSsh(instance, capCmd, { timeoutMs: 5000, tty: false, retries: 0 });
+    let sshr = poolSsh(instance, capCmd, { timeoutMs: 5000, tty: false, retries: 0 });
+    if ((sshr.code ?? 0) === 3) {
+      return send(res, 409, { ok:false, error:'qr_not_ready', mode:'tmux_fallback', loginRunning:false });
     }
-
-    let raw = (rr.stdout || rr.stderr || '').toString();
-    let qrText = extractAsciiQrBlock(raw);
-
-    // If parse failed, do one quick re-capture (handles partial pane races).
+    const raw = (sshr.stdout || sshr.stderr || '').toString();
+    const qrText = extractAsciiQrBlock(raw);
     if (!qrText) {
-      try {
-        rr = poolSsh(instance, capCmd, { timeoutMs: 5000, tty: false, retries: 0 });
-        raw = (rr.stdout || rr.stderr || '').toString();
-        qrText = extractAsciiQrBlock(raw);
-      } catch {}
+      return send(res, 409, { ok:false, error:'qr_not_ready', mode:'tmux_fallback' });
     }
-
-    if (!qrText) {
-      // Fast-fail (do not hang HTTP). UI should keep polling.
-      return send(res, 409, { ok: false, error: 'qr_not_ready', loginRunning: (rr.code ?? 0) !== 3, detail: 'parse_failed' });
-    }
-
-    // Watchdog: ensure QR rotates.
-    // If QR hasn't changed for a while, restart tmux session to obtain a fresh QR.
-    const now = Date.now();
     const h = sha256Hex(qrText);
-    const w = qrWatch.get(uuid) || { lastHash: null, lastSeenAtMs: now, lastRestartAtMs: 0 };
-    if (w.lastHash !== h) {
-      w.lastHash = h;
-      w.lastSeenAtMs = now;
-    }
-
-    const staleMs = now - (w.lastSeenAtMs || now);
-    const sinceRestartMs = now - (w.lastRestartAtMs || 0);
-
-    let loginRunning = (rr.code ?? 0) !== 3; // code 3 => no session
-
-    const shouldRestart = (staleMs > 25_000);
-    if (shouldRestart && sinceRestartMs > 15_000) {
-      w.lastRestartAtMs = now;
-      w.lastSeenAtMs = now;
-      try {
-        const remoteCmd = `set -euo pipefail; `
-          + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
-          + `tmux new-session -d -s '${tmuxSession}' "bash -lc 'stty cols 220 rows 80 2>/dev/null || true; export COLUMNS=220 LINES=80; openclaw channels login --channel whatsapp'"; `
-          + `echo restarted`;
-        poolSsh(instance, remoteCmd, { timeoutMs: 20000, tty: false, retries: 1 });
-      } catch {}
-    }
-
-    qrWatch.set(uuid, w);
-
-    return send(res, 200, { ok: true, uuid, instance_id: instance.instance_id, status: 'qr', qrText, qrHash: h, qrAgeMs: staleMs, loginRunning });
+    return send(res, 200, { ok:true, uuid, instance_id: instance.instance_id, status:'qr', qrText, qrHash:h, mode:'tmux_fallback' });
   } catch (e) {
     return send(res, 500, { ok: false, error: e.message || 'server_error' });
   }
