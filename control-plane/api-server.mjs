@@ -2037,7 +2037,8 @@ app.get('/api/wa/status', async (req, res) => {
     // the UI must not jump to "linked" unless we have qr_done_at >= qr_generated_at.
     let claimConnected = Boolean(boundJid);
     try {
-      const meta = jsonMeta(delivery.meta_json) || {};
+      const rowm = db.prepare('SELECT meta_json FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+      const meta = jsonMeta(rowm?.meta_json || delivery.meta_json) || {};
       const qrGenAt = meta.qr_generated_at ? Date.parse(meta.qr_generated_at) : null;
       const qrDoneAt = meta.qr_done_at ? Date.parse(meta.qr_done_at) : null;
       if (qrGenAt && qrDoneAt && qrDoneAt < qrGenAt) claimConnected = false;
