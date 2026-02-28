@@ -18,7 +18,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "3983fbabf29499cbb8f9df586296dbf0632101513b59e13540abeb411695533c",
+      "sha256": "b152c30c5b5bc229b0540de16b0da73e9e6d6815391af87a4af752f7f5d6c108",
       "bytes": 4877
     },
     {
@@ -78,8 +78,8 @@
     },
     {
       "path": "provision/server.mjs",
-      "sha256": "07ac30de691da3b4a011b1a0c6aa1f210286837cfba3358ff7b0c0679ca3a0c0",
-      "bytes": 17518
+      "sha256": "bafade2c0d16e9f5472fa8b2338a4ee4cb5f2a8544a0c899823afe9de19e111b",
+      "bytes": 17657
     },
     {
       "path": "scripts/apply_inboundguard_v1_patch.sh",

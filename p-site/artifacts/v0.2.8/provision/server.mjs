@@ -323,6 +323,7 @@ function startLogin(uuid, { force=false } = {}){
   const tr = tmuxStartLoginSession(uuid, { force });
   if (!tr.ok) {
     s.lastError = JSON.stringify(tr, null, 2);
+    s.lastExit = { stage: 'tmuxStartLoginSession', at: nowIso() };
     return;
   }
 
@@ -468,6 +469,7 @@ app.post('/api/wa/start', async (req, res) => {
     console.log(`[bothook-provision] wa.start uuid=${uuid} force=${force}`);
 
     // Respond immediately; login work happens in background.
+    // NOTE: errors are reported via /api/wa/status lastError/lastExit.
     res.json({ ok:true, uuid, status:'starting' });
     setTimeout(() => {
       try {
