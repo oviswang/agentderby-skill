@@ -1112,8 +1112,9 @@ async function runPoolInitJob(job){
     if (!sshOk) throw new Error('ssh_unreachable');
 
     // Bootstrap
-    pushJobLog(job, 'run bootstrap v0.2.7');
-    const boot = poolSsh(inst, "sudo bash -lc \"curl -fsSL https://p.bothook.me/artifacts/v0.2.7/bootstrap.sh | bash\"", { timeoutMs: 20*60*1000, tty:false, retries:0 });
+    const bootstrapVer = String(process.env.BOTHOOK_BOOTSTRAP_VER || 'v0.2.8');
+    pushJobLog(job, `run bootstrap ${bootstrapVer}`);
+    const boot = poolSsh(inst, `sudo bash -lc "curl -fsSL https://p.bothook.me/artifacts/${bootstrapVer}/bootstrap.sh | bash"`, { timeoutMs: 20*60*1000, tty:false, retries:0 });
     if ((boot.code ?? 1) !== 0) throw new Error('bootstrap_failed');
 
     // Wait reboot
