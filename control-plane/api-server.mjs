@@ -1788,13 +1788,13 @@ app.get('/api/wa/status', async (req, res) => {
     let connected = Boolean(delivery?.wa_jid);
     let waJid = delivery?.wa_jid || null;
 
-    // Background probe: best-effort discover JID from creds.json and bind.
+    // Probe (sync, bounded): discover JID from creds.json and bind.
+    // This is required for the web UI to reflect scan success promptly.
     if (!waJid && instance?.public_ip) {
-      setTimeout(() => {
-        try {
-          const pr = poolSsh(
-            instance,
-            `set -euo pipefail; python3 - <<'PY'\
+      try {
+        const pr = poolSsh(
+          instance,
+          `set -euo pipefail; python3 - <<'PY'\
 import json\
 p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'\
 try:\
@@ -1804,35 +1804,39 @@ except Exception:\
 me=j.get('me') or {}\
 print(me.get('id') or me.get('jid') or '')\
 PY`,
-            { timeoutMs: 2500, tty: false, retries: 0 }
-          );
-          const jid = String(pr.stdout || '').trim();
-          if (!jid) return;
+          { timeoutMs: 2500, tty: false, retries: 0 }
+        );
+        const jid = String(pr.stdout || '').trim();
+        if (jid) {
           const ts = nowIso();
-          const { db: db2 } = openDb();
-          db2.exec('BEGIN IMMEDIATE');
-          try {
-            const current = db2.prepare('SELECT wa_jid, meta_json FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
-            if (!current?.wa_jid) {
-              const boundUnpaidExpiresAt = new Date(Date.parse(ts) + 15*60*1000).toISOString();
-              const meta2 = mergeMeta(current?.meta_json || delivery.meta_json, { bound_unpaid_expires_at: boundUnpaidExpiresAt, qr_done_at: ts });
-              db2.prepare('UPDATE deliveries SET status=?, wa_jid=?, bound_at=?, updated_at=?, meta_json=? WHERE delivery_id=?')
+          const current = db.prepare('SELECT wa_jid, meta_json FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+          if (!current?.wa_jid) {
+            const boundUnpaidExpiresAt = new Date(Date.parse(ts) + 15*60*1000).toISOString();
+            const meta2 = mergeMeta(current?.meta_json || delivery.meta_json, { bound_unpaid_expires_at: boundUnpaidExpiresAt, qr_done_at: ts });
+            db.exec('BEGIN IMMEDIATE');
+            try {
+              db.prepare('UPDATE deliveries SET status=?, wa_jid=?, bound_at=?, updated_at=?, meta_json=? WHERE delivery_id=?')
                 .run('BOUND_UNPAID', jid, ts, ts, meta2, delivery.delivery_id);
-              db2.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+              db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
                 crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'UUID_BOUND', JSON.stringify({ uuid, wa_jid: jid, instance_id: instance.instance_id })
               );
               try {
-                db2.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
                   crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'WA_LINKED', JSON.stringify({ uuid, wa_jid: jid, instance_id: instance.instance_id })
                 );
               } catch {}
+              db.exec('COMMIT');
+              waJid = jid;
+              connected = true;
+            } catch {
+              try { db.exec('ROLLBACK'); } catch {}
             }
-            db2.exec('COMMIT');
-          } catch {
-            try { db2.exec('ROLLBACK'); } catch {}
+          } else {
+            waJid = current.wa_jid;
+            connected = true;
           }
-        } catch {}
-      }, 0);
+        }
+      } catch {}
     }
 
     // If connected: bind UUID to WhatsApp identity (prevents relink takeover)
