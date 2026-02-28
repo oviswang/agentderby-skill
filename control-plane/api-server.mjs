@@ -1670,6 +1670,27 @@ function sha256Hex(s){
   return crypto.createHash('sha256').update(String(s||''), 'utf8').digest('hex');
 }
 
+function isPlausiblePngDataUrl(dataUrl){
+  try{
+    const s = String(dataUrl||'');
+    if(!s.startsWith('data:image/png;base64,')) return false;
+    const b64 = s.split(',',2)[1] || '';
+    const buf = Buffer.from(b64, 'base64');
+    if(buf.length < 24) return false;
+    // PNG signature
+    const sig = [0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A];
+    for(let i=0;i<sig.length;i++) if(buf[i]!==sig[i]) return false;
+    const w = buf.readUInt32BE(16);
+    const h = buf.readUInt32BE(20);
+    if(!w || !h) return false;
+    if(w < 120 || h < 120) return false;
+    if(w > 2000 || h > 2000) return false;
+    const ratio = w / h;
+    if(ratio > 1.6 || ratio < (1/1.6)) return false;
+    return true;
+  }catch{ return false; }
+}
+
 app.get('/api/wa/qr', async (req, res) => {
   try {
     const uuid = String(req.query?.uuid || '').trim();
@@ -1701,7 +1722,7 @@ app.get('/api/wa/qr', async (req, res) => {
         qrAt: rr.json.qrAt || null,
         mode: 'user_machine_provision',
       };
-      if (payload.qrDataUrl) {
+      if (payload.qrDataUrl && isPlausiblePngDataUrl(payload.qrDataUrl)) {
         qrCache.set(uuid, { qrDataUrl: payload.qrDataUrl, qrSeq: payload.qrSeq, qrAt: payload.qrAt, cachedAtMs: Date.now() });
       }
       return send(res, 200, payload);
@@ -1710,17 +1731,21 @@ app.get('/api/wa/qr', async (req, res) => {
     // If user-machine provision is temporarily not ready, serve cached QR for UI stability.
     const cached = qrCache.get(uuid);
     if (cached?.qrDataUrl) {
-      return send(res, 200, {
-        ok: true,
-        uuid,
-        instance_id: instance.instance_id,
-        status: 'qr',
-        qrDataUrl: cached.qrDataUrl,
-        qrSeq: cached.qrSeq || 0,
-        qrAt: cached.qrAt || null,
-        mode: 'user_machine_provision_cached',
-        stale: true,
-      });
+      if (!isPlausiblePngDataUrl(cached.qrDataUrl)) {
+        try { qrCache.delete(uuid); } catch {}
+      } else {
+        return send(res, 200, {
+          ok: true,
+          uuid,
+          instance_id: instance.instance_id,
+          status: 'qr',
+          qrDataUrl: cached.qrDataUrl,
+          qrSeq: cached.qrSeq || 0,
+          qrAt: cached.qrAt || null,
+          mode: 'user_machine_provision_cached',
+          stale: true,
+        });
+      }
     }
 
     // Fallback: legacy control-plane tmux parsing.
