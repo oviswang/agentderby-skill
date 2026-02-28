@@ -91,11 +91,16 @@ function getAttributionForUuid(db, uuid){
 
 function sendSelfChatOnInstance(instance, text){
   // Derive self e164 from channel status JSON, then send via gateway.
-  // Avoid jq dependency on fresh pool machines.
+  // IMPORTANT: avoid heredoc in remote SSH (quoting is fragile); use python -c.
   const msg = JSON.stringify(String(text||''));
   const cmd = `set -euo pipefail; `
     + `JSON=$(openclaw channels status --probe --json 2>/dev/null || true); `
-    + `SELF=$(python3 - <<'PY'\nimport json,sys\ntry:\n  j=json.loads(sys.argv[1] if len(sys.argv)>1 else '')\n  print(((j.get('channels',{}) or {}).get('whatsapp',{}) or {}).get('self',{}) or {}).get('e164','')\nexcept Exception:\n  print('')\nPY "$JSON"); `
+    + `SELF=$(JSON="$JSON" python3 -c "import os,json;\
+try: j=json.loads(os.environ.get('JSON','') or '{}');\
+except Exception: j={};\
+wa=((j.get('channels',{}) or {}).get('whatsapp',{}) or {});\
+self=(wa.get('self') or {});\
+print(self.get('e164') or '')" ); `
     + `[ -n "$SELF" ] || { echo no_self; exit 2; }; `
     + `openclaw message send --channel whatsapp --target "$SELF" --message ${msg} --json`;
   return poolSsh(instance, cmd, { timeoutMs: 15000, tty:false, retries: 1 });
