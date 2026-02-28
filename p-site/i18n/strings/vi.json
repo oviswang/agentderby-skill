@@ -55,5 +55,8 @@
   "paidActiveLine": "✅ Gói thuê bao đang hoạt động.",
   "paidHint": "Bạn có thể liên kết lại WhatsApp tại đây (Relink). Với vấn đề thanh toán (hủy/đổi phương thức), hãy gửi form hỗ trợ (email + WhatsApp + UUID/link).",
   "paidRelink": "Liên kết lại (Relink)",
-  "paidUpgradeComing": "Nâng cấp (sắp ra mắt)"
+  "paidUpgradeComing": "Nâng cấp (sắp ra mắt)",
+  "nextStepAfterLinkedTitle": "Next step",
+  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
+  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
 }

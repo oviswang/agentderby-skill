@@ -55,5 +55,8 @@
   "paidActiveLine": "✅ Subscription active.",
   "paidHint": "You can relink WhatsApp here. For billing actions (cancel / payment method), please contact support.",
   "paidRelink": "Relink device",
-  "paidUpgradeComing": "Upgrade (coming soon)"
+  "paidUpgradeComing": "Upgrade (coming soon)",
+  "nextStepAfterLinkedTitle": "Next step",
+  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
+  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
 }

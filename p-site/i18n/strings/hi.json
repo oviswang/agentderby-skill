@@ -55,5 +55,8 @@
   "paidActiveLine": "✅ सब्सक्रिप्शन सक्रिय है।",
   "paidHint": "आप यहाँ WhatsApp को फिर से लिंक (Relink) कर सकते हैं। बिलिंग (रद्द/भुगतान विधि) के लिए सपोर्ट फ़ॉर्म (ईमेल + WhatsApp नंबर + UUID/लिंक) भरें।",
   "paidRelink": "फिर से लिंक करें (Relink)",
-  "paidUpgradeComing": "अपग्रेड (जल्द आ रहा है)"
+  "paidUpgradeComing": "अपग्रेड (जल्द आ रहा है)",
+  "nextStepAfterLinkedTitle": "Next step",
+  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
+  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
 }

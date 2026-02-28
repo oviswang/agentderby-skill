@@ -55,5 +55,8 @@
   "paidActiveLine": "✅ サブスクリプションは有効です。",
   "paidHint": "ここで WhatsApp の再リンク（Relink）ができます。解約や支払い方法の変更などは、サポートフォーム（メール + WhatsApp番号 + UUID/リンク）からご連絡ください。",
   "paidRelink": "再リンク（Relink）",
-  "paidUpgradeComing": "アップグレード（近日公開）"
+  "paidUpgradeComing": "アップグレード（近日公開）",
+  "nextStepAfterLinkedTitle": "Next step",
+  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
+  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
 }

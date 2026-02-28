@@ -928,6 +928,16 @@
               restartBtn.disabled = true;
               verifyCard.style.display = 'none';
               linkedCard.style.display = 'block';
+              try {
+                const s = window.__bothook_i18n || {};
+                const nt = document.getElementById('nextStepTitle');
+                const sh = document.getElementById('scanHint');
+                const ah = document.getElementById('afterScanningHint');
+                if (nt) nt.textContent = s.nextStepAfterLinkedTitle || (s.nextStepTitle || 'Next step');
+                if (sh) sh.textContent = s.nextStepAfterLinkedBody || sh.textContent;
+                if (ah) ah.textContent = s.nextStepAfterLinkedHint || ah.textContent;
+              } catch(e) {}
+
             } catch(e) {}
               {
                 const s = window.__bothook_i18n || {};

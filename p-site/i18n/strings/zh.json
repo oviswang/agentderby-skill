@@ -55,5 +55,8 @@
   "paidActiveLine": "✅ 订阅已激活",
   "paidHint": "你可以在这里重新关联 WhatsApp 设备（Relink）。如需取消订阅/更换支付方式等操作，请提交客服表单（邮箱 + WhatsApp 手机号 + UUID/交付链接），我们会通过邮件协助。",
   "paidRelink": "重新关联设备（Relink）",
-  "paidUpgradeComing": "升级套餐（即将推出）"
+  "paidUpgradeComing": "升级套餐（即将推出）",
+  "nextStepAfterLinkedTitle": "下一步",
+  "nextStepAfterLinkedBody": "请在 WhatsApp 里搜索你自己的手机号，给自己发起自聊（Self chat）。然后在自聊里发送任意消息，本助手会把后续引导发给你。",
+  "nextStepAfterLinkedHint": "提示：可以在 WhatsApp 搜索你的号码，或使用“给自己发消息/备忘录（如果有）”。"
 }

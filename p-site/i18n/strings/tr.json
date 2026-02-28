@@ -55,5 +55,8 @@
   "paidActiveLine": "✅ Abonelik aktif.",
   "paidHint": "Buradan WhatsApp’ı yeniden bağlayabilirsiniz (Relink). Faturalandırma işlemleri (iptal/ödeme yöntemi) için destek formunu kullanın (e‑posta + WhatsApp + UUID/bağlantı).",
   "paidRelink": "Yeniden bağla (Relink)",
-  "paidUpgradeComing": "Yükselt (yakında)"
+  "paidUpgradeComing": "Yükselt (yakında)",
+  "nextStepAfterLinkedTitle": "Next step",
+  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
+  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
 }

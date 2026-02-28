@@ -55,5 +55,8 @@
   "paidActiveLine": "✅ Suscripción activa.",
   "paidHint": "Puedes volver a vincular WhatsApp aquí (Relink). Para acciones de facturación (cancelar / método de pago), usa el formulario de soporte (email + WhatsApp + UUID/enlace).",
   "paidRelink": "Re-vincular (Relink)",
-  "paidUpgradeComing": "Mejorar (próximamente)"
+  "paidUpgradeComing": "Mejorar (próximamente)",
+  "nextStepAfterLinkedTitle": "Next step",
+  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
+  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
 }
