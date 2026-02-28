@@ -280,6 +280,20 @@ function startLogin(uuid, { force=false } = {}){
     return;
   }
 
+  // Preflight tmux availability (surface failures to status instead of silently looping).
+  try {
+    const pr = sh('tmux -V', { timeoutMs: 1500 });
+    if ((pr.code ?? 1) !== 0) {
+      s.lastError = `tmux preflight failed (code=${pr.code})\nstdout:\n${(pr.stdout||'').slice(-400)}\nstderr:\n${(pr.stderr||'').slice(-800)}`;
+      s.lastExit = { stage: 'tmux_preflight', at: nowIso() };
+      return;
+    }
+  } catch (e) {
+    s.lastError = `tmux preflight exception: ${String(e?.message||e)}`;
+    s.lastExit = { stage: 'tmux_preflight', at: nowIso() };
+    return;
+  }
+
   // IMPORTANT: keep gateway running.
   // Stopping the gateway can prevent WhatsApp QR generation under this deployment model.
   setTimeout(() => { try { startGateway(); } catch {} }, 0);
@@ -327,11 +341,15 @@ function startLogin(uuid, { force=false } = {}){
     return;
   }
 
+  // Record session info for observability.
+  s.loginMode = 'tmux';
+  s.lastStartAt = nowIso();
+  s._tmuxSession = tr.session;
+  s._tmuxReused = Boolean(tr.reused);
+
   s.pty = null;
   s.buf = '';
   s._logPath = null;
-  s.loginMode = 'tmux';
-  s.lastStartAt = nowIso();
 }
 
 function shellReadUuidLink(uuid){
@@ -517,6 +535,9 @@ app.get('/api/wa/status', async (req, res) => {
       qrAt: s.lastQrAt || null,
       lastError: s.lastError || null,
       lastExit: s.lastExit || null,
+      loginMode: s.loginMode || null,
+      tmuxSession: s._tmuxSession || null,
+      tmuxReused: (typeof s._tmuxReused === 'boolean') ? s._tmuxReused : null,
       bufTail: stripAnsi(s.buf || '').slice(-2000) || null,
       logPath: s._logPath || null,
       logExists: s._logPath ? fs.existsSync(s._logPath) : null,
