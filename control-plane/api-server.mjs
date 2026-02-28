@@ -1794,11 +1794,7 @@ app.get('/api/wa/status', async (req, res) => {
       try {
         const pr = poolSsh(
           instance,
-          `set -euo pipefail; python3 -c "import json; p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json';\
-try: j=json.load(open(p));\
-except Exception: j={};\
-me=j.get('me') or {};\
-print(me.get('id') or me.get('jid') or '')"`,
+          `set -euo pipefail; python3 -c "import os,json; p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'; j=(json.load(open(p)) if os.path.exists(p) else {}); me=(j.get('me') or {}); print(me.get('id') or me.get('jid') or '')"`,
           { timeoutMs: 2500, tty: false, retries: 0 }
         );
         const jid = String(pr.stdout || '').trim();
