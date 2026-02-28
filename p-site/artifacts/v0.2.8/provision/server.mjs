@@ -335,6 +335,8 @@ function startLogin(uuid, { force=false } = {}){
   // Use tmux to run login in a real terminal session.
   // This avoids OpenClaw suppressing QR output in non-terminal contexts.
   const tr = tmuxStartLoginSession(uuid, { force });
+  // Persist tmux start result for observability.
+  s._tmuxStartResult = tr;
   if (!tr.ok) {
     s.lastError = JSON.stringify(tr, null, 2);
     s.lastExit = { stage: 'tmuxStartLoginSession', at: nowIso() };
@@ -493,7 +495,7 @@ app.post('/api/wa/start', async (req, res) => {
       try {
         startLogin(uuid, { force });
         const s = ensureSession(uuid);
-        console.log(`[bothook-provision] wa.start dispatched uuid=${uuid} loginMode=${s.loginMode} lastError=${s.lastError ? 'yes' : 'no'}`);
+        console.log(`[bothook-provision] wa.start dispatched uuid=${uuid} loginMode=${s.loginMode} tmuxOk=${s._tmuxStartResult? (s._tmuxStartResult.ok?'yes':'no'):'na'} lastError=${s.lastError ? 'yes' : 'no'}`);
       } catch (e) {
         console.log(`[bothook-provision] wa.start exception uuid=${uuid} err=${String(e?.message||e)}`);
       }
@@ -538,6 +540,10 @@ app.get('/api/wa/status', async (req, res) => {
       loginMode: s.loginMode || null,
       tmuxSession: s._tmuxSession || null,
       tmuxReused: (typeof s._tmuxReused === 'boolean') ? s._tmuxReused : null,
+      tmuxStartOk: s._tmuxStartResult ? Boolean(s._tmuxStartResult.ok) : null,
+      tmuxStartError: (s._tmuxStartResult && !s._tmuxStartResult.ok) ? (s._tmuxStartResult.error || null) : null,
+      tmuxStartStderr: (s._tmuxStartResult && !s._tmuxStartResult.ok) ? (String(s._tmuxStartResult.stderr||'').slice(-800) || null) : null,
+      tmuxStartProbe: (s._tmuxStartResult && !s._tmuxStartResult.ok) ? (s._tmuxStartResult.probe || null) : null,
       bufTail: stripAnsi(s.buf || '').slice(-2000) || null,
       logPath: s._logPath || null,
       logExists: s._logPath ? fs.existsSync(s._logPath) : null,
