@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh">
+<html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -86,7 +86,7 @@
         if (!uuid) return alert('Missing uuid. Open this page as: /paid.html?uuid=<uuid>');
         // For now, just redirect to the normal provisioning page. In the real paid flow,
         // this will call an API to allocate a fresh machine and then show the QR flow.
-        location.href = `/?lang=${encodeURIComponent(params.get('lang') || 'zh')}&uuid=${encodeURIComponent(uuid)}`;
+        location.href = `/?lang=${encodeURIComponent(params.get('lang') || 'es')}&uuid=${encodeURIComponent(uuid)}`;
       });
     </script>
   </div>
