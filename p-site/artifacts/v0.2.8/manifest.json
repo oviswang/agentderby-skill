@@ -8,7 +8,7 @@
     },
     {
       "path": "bootstrap.sh",
-      "sha256": "e2ab35e082032887618f2e63ac3752be1adb39662c2ecdd5e9b77389176eefe7",
+      "sha256": "efe89b390c340861a40e8fceda009c15fe3db988415626afeda5b4eca615c6cb",
       "bytes": 17299
     },
     {
@@ -18,7 +18,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "d6ee71941c2ddac5780fd7877866e330abf52d20977ca83c419b5dd5112cce1c",
+      "sha256": "3983fbabf29499cbb8f9df586296dbf0632101513b59e13540abeb411695533c",
       "bytes": 4877
     },
     {

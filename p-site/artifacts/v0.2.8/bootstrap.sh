@@ -70,7 +70,7 @@ ensure_openclaw(){
   local uhome="/home/ubuntu"
   local prefix="$uhome/.npm-global"
 
-  local pinned_ver="2026.2.24"
+  local pinned_ver="2026.2.26"
   local tarball_url="https://p.bothook.me/artifacts/openclaw/openclaw-${pinned_ver}.tgz"
 
   # If already pinned, keep.
