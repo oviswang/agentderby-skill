@@ -1991,7 +1991,18 @@ app.get('/api/wa/status', async (req, res) => {
 
     // If waJid is unavailable (e.g. gateway not yet reachable), but we have a boundJid and status indicates linked,
     // treat it as connected for UI purposes.
-    const claimConnected = Boolean(boundJid);
+    // Only claim connected for the CURRENT QR session.
+    // If a delivery was previously bound (wa_jid exists) but we generated a NEW QR (qr_generated_at),
+    // the UI must not jump to "linked" unless we have qr_done_at >= qr_generated_at.
+    let claimConnected = Boolean(boundJid);
+    try {
+      const meta = jsonMeta(delivery.meta_json) || {};
+      const qrGenAt = meta.qr_generated_at ? Date.parse(meta.qr_generated_at) : null;
+      const qrDoneAt = meta.qr_done_at ? Date.parse(meta.qr_done_at) : null;
+      if (qrGenAt && qrDoneAt && qrDoneAt < qrGenAt) claimConnected = false;
+      if (qrGenAt && (qrDoneAt == null)) claimConnected = false;
+    } catch {}
+
 
     // If linked, restart services (gateway + provision) and close the tmux login session.
     // This is required for the UI to reflect bound status and for welcome/onboarding messages to be delivered.
