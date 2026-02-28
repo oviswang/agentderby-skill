@@ -538,6 +538,7 @@ function poolSsh(instance, remoteCmd, { timeoutMs = 20000, tty = false, retries 
   // - ConnectionAttempts: no long retries inside a single request
   const cmd = `ssh ${tflag} -i '${POOL_SSH_KEY}' `
     + `-o BatchMode=yes -o StrictHostKeyChecking=no `
+    + `-o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null `
     + `-o ConnectTimeout=8 -o ConnectionAttempts=1 `
     + `-o ServerAliveInterval=2 -o ServerAliveCountMax=2 `
     + `ubuntu@${ip} '${String(remoteCmd).replace(/'/g, "'\\''")}'`;
@@ -581,7 +582,7 @@ async function poolFetch(instance, path, opts = {}) {
       curl = `curl -sS -m ${Math.ceil(timeoutMs / 1000)} -X ${method} ${headerFlags} '${remoteUrl}'`;
     }
 
-    const cmd = `ssh -i '${POOL_SSH_KEY}' -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=25 ubuntu@${ip} '${curl.replace(/'/g, "'\\''")}'`;
+    const cmd = `ssh -i '${POOL_SSH_KEY}' -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=25 ubuntu@${ip} '${curl.replace(/'/g, "'\\''")}'`;
     const r = sh(cmd, { timeoutMs: timeoutMs + 3000 });
     const text = (r.stdout || r.stderr || '').trim();
     let json;
