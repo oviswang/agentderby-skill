@@ -95,12 +95,11 @@ function sendSelfChatOnInstance(instance, text, { toJid } = {}){
   const t = String(text || '').trim();
   const to = String(toJid || '').trim();
   if (to) {
-    const body = JSON.stringify({ to, text: t });
-    const b64 = Buffer.from(body, 'utf8').toString('base64');
-    const cmd = `set -euo pipefail; `
-      + `echo '${b64}' | base64 -d | `
-      + `curl -sS -m 10 -X POST -H 'content-type: application/json' --data-binary @- `
-      + `'http://127.0.0.1:18789/__bothook__/wa/send'`;
+    // Send directly to self via WhatsApp target e164 derived from jid.
+    const e164 = '+' + String(to).split('@')[0].split(':')[0].replace(/\D+/g, '');
+    if (!/^\+\d{6,20}$/.test(e164)) return { code: 2, stdout: '', stderr: 'bad_toJid' };
+    const msg = JSON.stringify(t);
+    const cmd = `set -euo pipefail; openclaw message send --channel whatsapp --target '${e164}' --message ${msg} --json`;
     return poolSsh(instance, cmd, { timeoutMs: 15000, tty:false, retries: 1 });
   }
 
