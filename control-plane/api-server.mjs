@@ -2046,6 +2046,24 @@ app.get('/api/wa/status', async (req, res) => {
     } catch {}
 
 
+
+
+    // user-machine status override: if the pool machine reports WhatsApp not linked/connected, do not claim connected.
+    try {
+      const meta0 = jsonMeta(delivery.meta_json) || {};
+      const qrGenAt0 = meta0.qr_generated_at ? Date.parse(meta0.qr_generated_at) : null;
+      const recent = qrGenAt0 && (Date.now() - qrGenAt0) < 20*60*1000;
+      if (boundJid && recent && instance?.public_ip) {
+        const rr = await poolFetch(instance, `/api/wa/status?uuid=${encodeURIComponent(uuid)}`, { method:'GET', timeoutMs: 2200 });
+        const um = rr?.json || {};
+        const umConnected = (typeof um.connected === 'boolean') ? um.connected : null;
+        const umErr = String(um.lastError || '');
+        if (umConnected === false || umErr === 'not linked') {
+          // Force UI to stay in linking state until re-scan.
+          boundJid = null;
+        }
+      }
+    } catch {}
     // If linked, restart services (gateway + provision) and close the tmux login session.
     // This is required for the UI to reflect bound status and for welcome/onboarding messages to be delivered.
     if (claimConnected) {
