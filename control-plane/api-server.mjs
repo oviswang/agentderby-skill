@@ -1894,6 +1894,18 @@ app.get('/api/wa/status', async (req, res) => {
             try {
               db.prepare('UPDATE deliveries SET status=?, wa_jid=?, bound_at=?, updated_at=?, meta_json=? WHERE delivery_id=?')
                 .run('BOUND_UNPAID', jid, ts, ts, meta2, delivery.delivery_id);
+              // Mark QR as done for this QR session (prevents UI from staying in linking after scan).
+              try {
+                const cur2 = db.prepare('SELECT meta_json FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+                const m2 = jsonMeta(cur2?.meta_json || meta2) || {};
+                const qrGenAt2 = m2.qr_generated_at ? Date.parse(m2.qr_generated_at) : null;
+                const qrDoneAt2 = m2.qr_done_at ? Date.parse(m2.qr_done_at) : null;
+                if (qrGenAt2 && (!qrDoneAt2 || qrDoneAt2 < qrGenAt2)) {
+                  const meta3 = mergeMeta(cur2?.meta_json || meta2, { qr_done_at: ts });
+                  db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta3, ts, delivery.delivery_id);
+                }
+              } catch {}
+
               db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
                 crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'UUID_BOUND', JSON.stringify({ uuid, wa_jid: jid, instance_id: instance.instance_id })
               );
