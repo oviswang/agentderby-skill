@@ -1999,6 +1999,35 @@ app.get('/api/wa/status', async (req, res) => {
     try {
       const row = db.prepare('SELECT wa_jid, status FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
       boundJid = row?.wa_jid || null;
+
+
+    // If we generated a new QR but qr_done_at is still older, try to detect a fresh scan by checking creds.json mtime.
+    // This is bounded and only runs when already bound.
+    try {
+      const meta0 = jsonMeta(delivery.meta_json) || {};
+      const qrGenAt0 = meta0.qr_generated_at ? Date.parse(meta0.qr_generated_at) : null;
+      const qrDoneAt0 = meta0.qr_done_at ? Date.parse(meta0.qr_done_at) : null;
+      if (boundJid && qrGenAt0 && (!qrDoneAt0 || qrDoneAt0 < qrGenAt0) && instance?.public_ip) {
+        const pr = poolSsh(
+          instance,
+          `set -euo pipefail; p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'; `
+          + `if [ -f "$p" ]; then stat -c %Y "$p" 2>/dev/null || python3 -c "import os;print(int(os.path.getmtime('"'"'$p'"'"')))"; else echo 0; fi`,
+          { timeoutMs: 2500, tty: false, retries: 0 }
+        );
+        const mtimeSec = parseInt(String(pr.stdout||'').trim() || '0', 10);
+        const qrGenSec = Math.floor(qrGenAt0 / 1000);
+        if (mtimeSec && qrGenSec && mtimeSec >= qrGenSec) {
+          const ts = nowIso();
+          db.exec('BEGIN IMMEDIATE');
+          try {
+            const cur = db.prepare('SELECT meta_json FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+            const meta2 = mergeMeta(cur?.meta_json || delivery.meta_json, { qr_done_at: ts });
+            db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts, delivery.delivery_id);
+            db.exec('COMMIT');
+          } catch { try { db.exec('ROLLBACK'); } catch {} }
+        }
+      }
+    } catch {}
     } catch {}
 
     // If waJid is unavailable (e.g. gateway not yet reachable), but we have a boundJid and status indicates linked,
