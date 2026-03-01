@@ -1091,7 +1091,10 @@ async function runPoolInitJob(job){
     const inst0 = getInstanceById(db, job.instance_id);
     if (!inst0) throw new Error('instance_not_found');
     if (inst0.instance_id === 'lhins-npsqfxvn') throw new Error('forbidden_master_host');
-    if (String(inst0.lifecycle_status||'') !== 'IN_POOL') throw new Error('not_in_pool');
+    // Ops init is allowed for pool instances, and for explicit recovery of paid-but-stuck deliveries.
+    // Do NOT allow for master host (guarded above) and do not broaden to arbitrary statuses.
+    const ls = String(inst0.lifecycle_status||'');
+    if (!(ls === 'IN_POOL' || ls === 'DELIVERING')) throw new Error('not_in_pool');
 
     // Describe + write IP/KeyIds to DB
     const it = await describeInstance(job.instance_id);
