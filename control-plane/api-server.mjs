@@ -1663,6 +1663,97 @@ app.get('/api/billing/portal', async (req, res) => {
   }
 });
 
+// Billing cancel shortlink (Stripe portal session behind shortlink).
+// IMPORTANT: this does NOT cancel anything server-side; user cancels inside Stripe portal UI.
+app.post('/api/billing/cancel_link', async (req, res) => {
+  try {
+    const uuid = String(req.body?.uuid || '').trim();
+    const lang = String(req.body?.lang || '').trim().toLowerCase() || 'en';
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+
+    const secret = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '';
+    if (!secret) return send(res, 500, { ok:false, error:'stripe_not_configured' });
+
+    const { db } = openDb();
+    const delivery = getDeliveryByUuid(db, uuid);
+    if (!delivery) return send(res, 404, { ok:false, error:'unknown_uuid' });
+
+    // Create portal session URL via existing endpoint logic (inline minimal subset).
+    const sub = db.prepare(
+      "SELECT provider_sub_id, provider, user_id, plan, status, current_period_end, cancel_at_period_end, updated_at FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1"
+    ).get(delivery.user_id) || null;
+
+    if (!sub || String(sub.provider || '') !== 'stripe' || !sub.provider_sub_id) {
+      return send(res, 404, { ok:false, error:'subscription_not_found' });
+    }
+
+    const auth = Buffer.from(`${secret}:`).toString('base64');
+    const subResp = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(sub.provider_sub_id)}`, {
+      headers: { 'authorization': `Basic ${auth}` }
+    });
+    const subJson = await subResp.json().catch(()=>null);
+    if (!subResp.ok) return send(res, 502, { ok:false, error:'stripe_subscription_fetch_failed', detail: subJson });
+
+    const customer = subJson && subJson.customer;
+    if (!customer) return send(res, 502, { ok:false, error:'stripe_customer_missing' });
+
+    const return_url = (lang === 'zh')
+      ? `https://p.bothook.me/zh/?lang=zh&uuid=${encodeURIComponent(uuid)}`
+      : `https://p.bothook.me/?lang=${encodeURIComponent(lang)}&uuid=${encodeURIComponent(uuid)}`;
+
+    const body = new URLSearchParams();
+    body.set('customer', String(customer));
+    body.set('return_url', return_url);
+
+    const portalResp = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+      method: 'POST',
+      headers: {
+        'authorization': `Basic ${auth}`,
+        'content-type': 'application/x-www-form-urlencoded'
+      },
+      body
+    });
+    const portalJson = await portalResp.json().catch(()=>null);
+    if (!portalResp.ok) return send(res, 502, { ok:false, error:'stripe_portal_create_failed', detail: portalJson });
+    const portalUrl = portalJson?.url ? String(portalJson.url) : '';
+    if (!portalUrl) return send(res, 502, { ok:false, error:'stripe_portal_url_missing' });
+
+    // Shortlink TTL: 1 hour (portal URL itself is session-based).
+    const now = Date.now();
+    const expiresAt = new Date(now + 60*60*1000).toISOString();
+
+    // Reuse an unexpired shortlink if present (idempotent within TTL).
+    const existing = db.prepare(`SELECT code, expires_at FROM shortlinks WHERE provision_uuid=? AND kind='stripe_portal_cancel' ORDER BY created_at DESC LIMIT 1`).get(uuid);
+    if (existing?.code && (!existing.expires_at || Date.parse(existing.expires_at) > now)) {
+      return send(res, 200, { ok:true, uuid, cancelUrl: baseUrlForShortlinks()+existing.code, expiresAt: existing.expires_at || expiresAt, reused:true });
+    }
+
+    let code;
+    for (let i=0;i<5;i++){
+      const c = randCode(7);
+      const used = db.prepare('SELECT 1 FROM shortlinks WHERE code=?').get(c);
+      if (!used) { code = c; break; }
+    }
+    if (!code) throw new Error('shortlink_code_exhausted');
+
+    const ts2 = nowIso();
+    upsertShortlink(db, {
+      code,
+      long_url: portalUrl,
+      created_at: ts2,
+      expires_at: expiresAt,
+      kind: 'stripe_portal_cancel',
+      delivery_id: delivery.delivery_id,
+      provision_uuid: uuid,
+      meta: { lang },
+    });
+
+    return send(res, 200, { ok:true, uuid, cancelUrl: baseUrlForShortlinks()+code, expiresAt, reused:false });
+  } catch (e) {
+    return send(res, e.statusCode || 500, { ok:false, error: e.message || 'server_error', detail: e.detail });
+  }
+});
+
 app.post('/api/wa/start', async (req, res) => {
   try {
     res.set('x-bothook-build', 'wa-start-alloc-v2-user-machine');
