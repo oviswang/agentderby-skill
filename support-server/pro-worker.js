@@ -118,6 +118,7 @@ function detectLang(ticket){
 
 function summarizeCategory(message){
   const m = String(message || '').toLowerCase();
+  if (m.includes('cancel') || m.includes('cancellation') || m.includes('unsubscribe') || m.includes('取消订阅') || m.includes('退订')) return 'billing/cancel';
   if (m.includes('relink') || m.includes('续') || m.includes('到期') || m.includes('renew') || m.includes('billing') || m.includes('payment')) return 'billing/relink';
   if (m.includes('qr') || m.includes('scan') || m.includes('扫码') || m.includes('关联') || m.includes('linked device')) return 'whatsapp/linking';
   if (m.includes('timeout') || m.includes('timed out') || m.includes('不回') || m.includes('没回复') || m.includes('request timed out')) return 'stability/timeout';
@@ -274,6 +275,39 @@ async function seg1eProcessTicketForTest(ticket){
   // vres ok but not verified => NEEDS_INFO
   records.push({ ts: nowIso(), ticket_id: id, entry_id: entryId, action:'state', from: state, to:'NEEDS_INFO', reason: vres.reason||'verify_failed', expectedE164: vres.expectedE164||null, uuid: ticket.uuid||null });
   return { state:'NEEDS_INFO', records, reply: renderNeedsInfoReply(ticket, { reason: vres.reason||'verify_failed', expectedE164: vres.expectedE164||null }) };
+}
+
+async function renderBillingCancelReply(ticket){
+  const lang = detectLang(ticket);
+  const id = ticket.ticket_id;
+  const uuid = ticket.uuid ? String(ticket.uuid).trim() : '';
+  if (!uuid) {
+    // fall back to needs-info
+    return renderNeedsInfoReply(ticket, { reason: 'uuid_required' });
+  }
+
+  try {
+    const r = await fetch('http://127.0.0.1:18998/api/billing/cancel_link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ uuid, lang }),
+    });
+    const j = await r.json().catch(()=>null);
+    if (!r.ok || !j?.ok || !j?.cancelUrl) throw new Error('cancel_link_failed');
+
+    if (lang === 'zh' || lang === 'zh-tw') {
+      const subject = `[#${id}] BOTHook 订阅管理（自助取消）`;
+      const text = `我们已收到你的请求（工单号：${id}）。\n\n为安全起见，订阅取消需要你本人在自助页面确认完成。请打开：\n${j.cancelUrl}?uuid=${encodeURIComponent(uuid)}&lang=${encodeURIComponent(lang)}\n\n打开后在页面中选择取消订阅即可。\n\n— BOTHook Support`;
+      return { lang, subject, text, html: null, category: 'billing/cancel' };
+    }
+
+    const subject = `[#${id}] BOTHook Subscription — Self-service cancellation`;
+    const text = `We received your request (Ticket: ${id}).\n\nFor safety, subscription cancellation must be confirmed by you in the self-service portal. Please open:\n${j.cancelUrl}?uuid=${encodeURIComponent(uuid)}&lang=${encodeURIComponent(lang)}\n\nThen choose “Cancel subscription”.\n\n— BOTHook Support`;
+    return { lang, subject, text, html: null, category: 'billing/cancel' };
+  } catch {
+    // fall back to generic reply
+    return null;
+  }
 }
 
 function renderReply(ticket){
@@ -553,7 +587,13 @@ async function main(){
     if (ticketStateTo === 'NEEDS_INFO') {
       reply = renderNeedsInfoReply(t, { reason: verifyReason || waReason || 'needs_info', expectedE164 });
     } else {
-      reply = renderReply(t);
+      // billing cancel: provide self-service portal shortlink (no Stripe write operations)
+      if (summarizeCategory(t.message) === 'billing/cancel') {
+        const r2 = await renderBillingCancelReply(t);
+        reply = r2 || renderReply(t);
+      } else {
+        reply = renderReply(t);
+      }
     }
 
     const { lang, subject, text, html, category } = reply;
