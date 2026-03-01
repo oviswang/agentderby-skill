@@ -2167,8 +2167,23 @@ app.get('/api/wa/status', async (req, res) => {
         const umConnected = (typeof um.connected === 'boolean') ? um.connected : null;
         const umErr = String(um.lastError || '');
         if (umConnected === false || umErr === 'not linked') {
-          // Force UI to stay in linking state until re-scan.
-          boundJid = null;
+          // The provision server's session map can go idle (no active QR), causing false negatives.
+          // Double-check via `openclaw channels status --probe --json` over SSH before clearing boundJid.
+          let trulyConnected = false;
+          try {
+            const sr = poolSsh(instance, `openclaw channels status --probe --json 2>/dev/null || true`, { timeoutMs: 3500, tty: false, retries: 0 });
+            const raw = String(sr.stdout || '').trim();
+            if (raw) {
+              const j = JSON.parse(raw);
+              const w = j?.channels?.whatsapp || null;
+              if (w?.connected === true && w?.running === true) trulyConnected = true;
+            }
+          } catch {}
+
+          if (!trulyConnected) {
+            // Force UI to stay in linking state until re-scan.
+            boundJid = null;
+          }
         }
       }
     } catch {}
@@ -2925,7 +2940,22 @@ app.post('/api/key/verify', async (req, res) => {
       tryCutoverDelivered(db, uuid, { reason: 'openai_key_verified' });
     } catch {}
 
-    return send(res, 200, { ok:true, verified:true, message:'[bothook] OpenAI Key 验证成功 ✅ 现在你可以直接在 WhatsApp 里对它说“帮我做什么”。' });
+    // Return a localized success message (sent to WhatsApp by the user-machine autoreply plugin).
+    let msg = '';
+    try {
+      const { db } = openDb();
+      const d2 = db.prepare('SELECT * FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
+      const lang = d2 ? getDeliveryLang(d2) : 'en';
+      const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
+      const tpl = String(prompts.key_verified_success || '').trim();
+      if (tpl) msg = renderTpl(tpl, { uuid });
+    } catch {}
+
+    if (!msg) {
+      msg = '[bothook] OpenAI Key verified ✅\n\nWe’re finishing delivery cutover (takes ~1–2 minutes and includes a service restart).\n\nPlease wait 1 minute, then send: "hi"';
+    }
+
+    return send(res, 200, { ok:true, verified:true, message: msg });
   } catch (e) {
     return send(res, 500, { ok:false, error:'server_error' });
   }
