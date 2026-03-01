@@ -2922,8 +2922,29 @@ app.post('/api/stripe/webhook', async (req, res) => {
     const sig = req.headers['stripe-signature'];
     const rawBody = req.rawBody;
 
+    // Observability: record webhook hits and bad signatures (no sensitive payload stored).
+    // This helps diagnose misrouted webhooks / wrong secrets quickly.
+    try {
+      const { db } = openDb();
+      const ts0 = nowIso();
+      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+        crypto.randomUUID(), ts0, 'stripe', 'webhook', 'STRIPE_WEBHOOK_HIT',
+        JSON.stringify({ ts: ts0, has_sig: Boolean(sig), raw_len: rawBody ? Buffer.byteLength(String(rawBody)) : 0 })
+      );
+    } catch {}
+
     const v = verifyStripeSignature({ rawBody, sigHeader: sig, secret });
-    if (!v.ok) return res.status(400).type('text/plain').send('bad signature');
+    if (!v.ok) {
+      try {
+        const { db } = openDb();
+        const ts1 = nowIso();
+        db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+          crypto.randomUUID(), ts1, 'stripe', 'webhook', 'STRIPE_WEBHOOK_BAD_SIG',
+          JSON.stringify({ ts: ts1, has_sig: Boolean(sig), raw_len: rawBody ? Buffer.byteLength(String(rawBody)) : 0 })
+        );
+      } catch {}
+      return res.status(400).type('text/plain').send('bad signature');
+    }
 
     const evt = req.body;
     const ts = nowIso();
