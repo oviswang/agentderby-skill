@@ -966,14 +966,21 @@ app.post('/api/track', (req, res) => {
 });
 
 // Ops: pool init job runner (no autonomous tasks; explicit ops call only)
-const poolInitJobs = new Map(); // job_id -> { status, startedAt, endedAt, instance_id, mode, log:[] }
-let poolInitBusy = false;
+// IMPORTANT: pool init jobs must NOT block the API event loop.
+// We persist jobs in SQLite and run the worker loop in a separate process (BOTHOOK_OPS_WORKER=1).
 
 function sleepMs(ms){ return new Promise(r => setTimeout(r, ms)); }
 
 function pushJobLog(job, msg){
   job.log.push({ ts: nowIso(), msg: String(msg) });
   if (job.log.length > 200) job.log = job.log.slice(-200);
+  // Best-effort persist when job is DB-backed (worker mode).
+  try {
+    if (job?._db && job?.job_id) {
+      job._db.prepare('UPDATE pool_init_jobs SET log_json=? WHERE job_id=?')
+        .run(JSON.stringify(job.log), job.job_id);
+    }
+  } catch {}
 }
 
 async function tccli(cmd, { envFile='/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env' } = {}) {
@@ -1069,9 +1076,15 @@ async function waitInstanceRunning(instance_id, { timeoutMs=15*60*1000 }={}){
 
 async function runPoolInitJob(job){
   const { db } = openDb();
+  // If caller provided a db handle (worker mode), persist job updates there.
+  job._db = job._db || db;
+
   const ts0 = nowIso();
   job.startedAt = ts0;
   job.status = 'RUNNING';
+  try {
+    job._db.prepare('UPDATE pool_init_jobs SET status=?, started_at=? WHERE job_id=?').run('RUNNING', ts0, job.job_id);
+  } catch {}
   pushJobLog(job, `start (instance=${job.instance_id}, mode=${job.mode})`);
 
   try {
@@ -1209,8 +1222,10 @@ async function runPoolInitJob(job){
     while (Date.now()-startWait < 10*60*1000) {
       const cur = getInstanceById(db, job.instance_id);
       if (String(cur.health_status||'') === 'READY') {
+        const ts = nowIso();
         job.status='DONE';
-        job.endedAt=nowIso();
+        job.endedAt=ts;
+        try { job._db.prepare('UPDATE pool_init_jobs SET status=?, ended_at=? WHERE job_id=?').run('DONE', ts, job.job_id); } catch {}
         pushJobLog(job, 'done: READY');
         return;
       }
@@ -1231,6 +1246,7 @@ async function runPoolInitJob(job){
               ).run('READY', ts, 'postboot_ok', 'init_pull', txt.slice(0, 2000), job.instance_id);
               job.status='DONE';
               job.endedAt=ts;
+              try { job._db.prepare('UPDATE pool_init_jobs SET status=?, ended_at=? WHERE job_id=?').run('DONE', ts, job.job_id); } catch {}
               pushJobLog(job, 'done: READY (pulled postboot_verify.json)');
               return;
             }
@@ -1252,6 +1268,7 @@ async function runPoolInitJob(job){
   } catch (e) {
     job.status = 'ERROR';
     job.endedAt = nowIso();
+    try { job._db.prepare('UPDATE pool_init_jobs SET status=?, ended_at=? WHERE job_id=?').run('ERROR', job.endedAt, job.job_id); } catch {}
     pushJobLog(job, `error: ${e?.message || 'unknown'}`);
     try {
       const { db } = openDb();
@@ -1262,34 +1279,30 @@ async function runPoolInitJob(job){
   }
 }
 
+function spawnOpsWorkerBestEffort(){
+  // Fire-and-forget: run worker loop in a separate process so API remains responsive.
+  try {
+    const { spawn } = require('child_process');
+    const env = { ...process.env, BOTHOOK_OPS_WORKER: '1' };
+    const p = spawn('/usr/bin/node', [__filename], { env, stdio: 'ignore', detached: true });
+    p.unref();
+  } catch {}
+}
+
 app.post('/api/ops/pool/init', (req, res) => {
   try {
     const instance_id = String(req.body?.instance_id || '').trim();
     const mode = String(req.body?.mode || 'init_only').trim();
     if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
-    // Do not 429; enqueue and return QUEUED so callers can be fire-and-forget.
-    // poolInitBusy controls worker concurrency, not admission.
-    // (poolInitBusy is still exposed via /api/ops/pool/init/busy for suppressing cloud creates.)
     if (!['init_only','reimage_and_init'].includes(mode)) return send(res, 400, { ok:false, error:'bad_mode' });
 
     const job_id = crypto.randomUUID();
-    const job = { job_id, instance_id, mode, status:'QUEUED', startedAt:null, endedAt:null, log:[] };
-    poolInitJobs.set(job_id, job);
-    const runner = async () => {
-      // Single-worker concurrency: run jobs one-by-one to avoid overloading cloud APIs / SSH and to keep logs linear.
-      while (true) {
-        // pick oldest QUEUED job
-        const next = [...poolInitJobs.values()].find(j => String(j?.status||'').toUpperCase() === 'QUEUED');
-        if (!next) break;
-        poolInitBusy = true;
-        try { await runPoolInitJob(next); } finally { poolInitBusy = false; }
-      }
-    };
+    const { db } = openDb();
+    db.prepare('INSERT INTO pool_init_jobs(job_id, instance_id, mode, status, created_at, log_json) VALUES (?,?,?,?,?,?)')
+      .run(job_id, instance_id, mode, 'QUEUED', nowIso(), '[]');
 
-    // Kick the runner (best-effort). If another request already kicked it, that's fine.
-    setTimeout(() => { runner().catch(()=>{}); }, 0);
-
-    return send(res, 200, { ok:true, job_id, status: job.status, queued: true, busy: Boolean(poolInitBusy) });
+    spawnOpsWorkerBestEffort();
+    return send(res, 200, { ok:true, job_id, status:'QUEUED', queued:true });
   } catch {
     return send(res, 500, { ok:false, error:'server_error' });
   }
@@ -1298,19 +1311,26 @@ app.post('/api/ops/pool/init', (req, res) => {
 app.get('/api/ops/pool/init/status', (req, res) => {
   const job_id = String(req.query?.job_id || '').trim();
   if (!job_id) return send(res, 400, { ok:false, error:'job_id_required' });
-  const job = poolInitJobs.get(job_id);
-  if (!job) return send(res, 404, { ok:false, error:'job_not_found' });
-  return send(res, 200, { ok:true, job });
+  try {
+    const { db } = openDb();
+    const row = db.prepare('SELECT * FROM pool_init_jobs WHERE job_id=? LIMIT 1').get(job_id);
+    if (!row) return send(res, 404, { ok:false, error:'job_not_found' });
+    const log = (()=>{ try { return JSON.parse(row.log_json || '[]'); } catch { return []; } })();
+    return send(res, 200, { ok:true, job: { job_id: row.job_id, instance_id: row.instance_id, mode: row.mode, status: row.status, startedAt: row.started_at || null, endedAt: row.ended_at || null, createdAt: row.created_at || null, log } });
+  } catch {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
 });
 
 // Used by pool_replenish to suppress cloud creates during maintenance/init bursts.
 app.get('/api/ops/pool/init/busy', (req, res) => {
-  let active = 0;
-  for (const j of poolInitJobs.values()) {
-    const st = String(j?.status || '').toUpperCase();
-    if (st === 'QUEUED' || st === 'RUNNING') active++;
+  try {
+    const { db } = openDb();
+    const active = db.prepare("SELECT COUNT(*) as c FROM pool_init_jobs WHERE status IN ('QUEUED','RUNNING')").get()?.c ?? 0;
+    return send(res, 200, { ok:true, busy: active > 0, active });
+  } catch {
+    return send(res, 200, { ok:true, busy: false, active: 0 });
   }
-  return send(res, 200, { ok:true, busy: Boolean(poolInitBusy), active });
 });
 
 
@@ -3276,6 +3296,39 @@ app.post('/api/wa/reset', async (req, res) => {
   }
 });
 
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`[bothook-api] listening on 127.0.0.1:${PORT}`);
-});
+async function runOpsWorkerLoop(){
+  // Single-process worker loop. Use a lock file to avoid concurrent workers.
+  const lockPath = '/tmp/bothook_ops_worker.lock';
+  const fs = require('fs');
+  let fd = null;
+  try {
+    fd = fs.openSync(lockPath, 'wx');
+    fs.writeFileSync(lockPath, String(process.pid));
+  } catch {
+    // another worker running
+    return;
+  }
+
+  try {
+    const { db } = openDb();
+    while (true) {
+      const row = db.prepare("SELECT * FROM pool_init_jobs WHERE status='QUEUED' ORDER BY created_at ASC LIMIT 1").get();
+      if (!row) break;
+      const log = (()=>{ try { return JSON.parse(row.log_json || '[]'); } catch { return []; } })();
+      const job = { job_id: row.job_id, instance_id: row.instance_id, mode: row.mode, status: row.status, startedAt: null, endedAt: null, log, _db: db };
+      await runPoolInitJob(job);
+      // loop continues for next queued job
+    }
+  } finally {
+    try { if (fd) fs.closeSync(fd); } catch {}
+    try { fs.unlinkSync(lockPath); } catch {}
+  }
+}
+
+if (String(process.env.BOTHOOK_OPS_WORKER || '') === '1') {
+  runOpsWorkerLoop().then(()=>process.exit(0)).catch(()=>process.exit(0));
+} else {
+  app.listen(PORT, '127.0.0.1', () => {
+    console.log(`[bothook-api] listening on 127.0.0.1:${PORT}`);
+  });
+}
