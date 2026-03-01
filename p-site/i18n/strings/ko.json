@@ -56,7 +56,7 @@
   "paidHint": "여기에서 WhatsApp 기기를 다시 연결(RelinK)할 수 있습니다. 취소/결제수단 변경 등은 지원 폼(이메일 + WhatsApp 번호 + UUID/링크)으로 문의해 주세요.",
   "paidRelink": "기기 재연결 (Relink)",
   "paidUpgradeComing": "업그레이드(곧 제공)",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "다음 단계",
+  "nextStepAfterLinkedBody": "WhatsApp을 열고 내 번호로 셀프 채팅(나에게 보내기)을 시작하세요. 그런 다음 아무 메시지나 보내면 설정 안내가 그 채팅으로 옵니다.",
+  "nextStepAfterLinkedHint": "팁: WhatsApp에서 내 번호를 검색하거나, 가능하면 “나에게 메시지/메모” 기능을 사용하세요."
 }

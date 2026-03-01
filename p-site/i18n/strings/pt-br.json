@@ -56,7 +56,7 @@
   "paidHint": "Você pode reconectar o WhatsApp aqui (Relink). Para cobrança (cancelar / forma de pagamento), use o formulário de suporte (e-mail + WhatsApp + UUID/link).",
   "paidRelink": "Reconectar (Relink)",
   "paidUpgradeComing": "Upgrade (em breve)",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "Próximo passo",
+  "nextStepAfterLinkedBody": "Abra o WhatsApp e inicie um chat com o seu próprio número (chat consigo mesmo). Depois, envie qualquer mensagem — você receberá o guia de configuração por lá.",
+  "nextStepAfterLinkedHint": "Dica: pesquise seu número no WhatsApp ou use “Mensagem para você / Nota para mim” se estiver disponível."
 }

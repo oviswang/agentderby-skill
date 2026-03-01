@@ -56,7 +56,7 @@
   "paidHint": "ここで WhatsApp の再リンク（Relink）ができます。解約や支払い方法の変更などは、サポートフォーム（メール + WhatsApp番号 + UUID/リンク）からご連絡ください。",
   "paidRelink": "再リンク（Relink）",
   "paidUpgradeComing": "アップグレード（近日公開）",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "次のステップ",
+  "nextStepAfterLinkedBody": "WhatsApp を開き、自分の電話番号で自分宛てのチャット（セルフチャット）を開始してください。その後、何かメッセージを送ると、設定ガイドが届きます。",
+  "nextStepAfterLinkedHint": "ヒント：WhatsApp で自分の番号を検索するか、利用できる場合は「自分にメッセージ／メモ」を使ってください。"
 }

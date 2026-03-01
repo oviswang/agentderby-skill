@@ -56,7 +56,7 @@
   "paidHint": "Здесь можно выполнить повторную привязку WhatsApp (Relink). Для оплаты (отмена/способ оплаты) обратитесь в поддержку через форму (email + WhatsApp + UUID/ссылка).",
   "paidRelink": "Повторная привязка (Relink)",
   "paidUpgradeComing": "Обновить (скоро)",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "Следующий шаг",
+  "nextStepAfterLinkedBody": "Откройте WhatsApp и начните чат со своим номером (чат с самим собой). Затем отправьте любое сообщение — вы получите там инструкцию по настройке.",
+  "nextStepAfterLinkedHint": "Совет: найдите свой номер в WhatsApp или используйте «Сообщение себе / Заметка себе», если доступно."
 }

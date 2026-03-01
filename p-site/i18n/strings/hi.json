@@ -56,7 +56,7 @@
   "paidHint": "आप यहाँ WhatsApp को फिर से लिंक (Relink) कर सकते हैं। बिलिंग (रद्द/भुगतान विधि) के लिए सपोर्ट फ़ॉर्म (ईमेल + WhatsApp नंबर + UUID/लिंक) भरें।",
   "paidRelink": "फिर से लिंक करें (Relink)",
   "paidUpgradeComing": "अपग्रेड (जल्द आ रहा है)",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "अगला कदम",
+  "nextStepAfterLinkedBody": "WhatsApp खोलें और अपने ही नंबर से सेल्फ-चैट शुरू करें। फिर कोई भी संदेश भेजें — सेटअप गाइड वहीं मिलेगा।",
+  "nextStepAfterLinkedHint": "टिप: WhatsApp में अपना नंबर खोजें या यदि उपलब्ध हो तो “Message yourself / Note to self” का उपयोग करें।"
 }

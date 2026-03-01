@@ -56,7 +56,7 @@
   "paidHint": "Buradan WhatsApp’ı yeniden bağlayabilirsiniz (Relink). Faturalandırma işlemleri (iptal/ödeme yöntemi) için destek formunu kullanın (e‑posta + WhatsApp + UUID/bağlantı).",
   "paidRelink": "Yeniden bağla (Relink)",
   "paidUpgradeComing": "Yükselt (yakında)",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "Sonraki adım",
+  "nextStepAfterLinkedBody": "WhatsApp’ı açın ve kendi numaranızla bir self chat başlatın. Sonra herhangi bir mesaj gönderin — kurulum kılavuzu oraya gelecektir.",
+  "nextStepAfterLinkedHint": "İpucu: WhatsApp’ta kendi numaranızı arayın veya varsa “Kendine mesaj / Not” özelliğini kullanın."
 }

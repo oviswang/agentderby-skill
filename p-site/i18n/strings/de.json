@@ -56,7 +56,7 @@
   "paidHint": "Hier kannst du WhatsApp neu verbinden (Relink). Für Abrechnungsaktionen (Kündigung/Zahlungsmethode) nutze bitte das Support-Formular (E-Mail + WhatsApp-Nummer + UUID/Link).",
   "paidRelink": "Neu verbinden (Relink)",
   "paidUpgradeComing": "Upgrade (bald verfügbar)",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "Nächster Schritt",
+  "nextStepAfterLinkedBody": "Öffne WhatsApp und starte einen Chat mit deiner eigenen Nummer (Self-Chat). Sende dann eine beliebige Nachricht — du erhältst dort die Einrichtungsanleitung.",
+  "nextStepAfterLinkedHint": "Tipp: Suche in WhatsApp nach deiner Nummer oder nutze „Nachricht an dich selbst / Notiz an mich“, falls verfügbar."
 }

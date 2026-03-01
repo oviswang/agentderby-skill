@@ -56,7 +56,7 @@
   "paidHint": "คุณสามารถเชื่อม WhatsApp ใหม่ได้ที่นี่ (Relink) สำหรับการเรียกเก็บเงิน (ยกเลิก/เปลี่ยนวิธีชำระเงิน) โปรดติดต่อผ่านแบบฟอร์มซัพพอร์ต (อีเมล + WhatsApp + UUID/ลิงก์)",
   "paidRelink": "เชื่อมใหม่ (Relink)",
   "paidUpgradeComing": "อัปเกรด (เร็วๆ นี้)",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "ขั้นตอนถัดไป",
+  "nextStepAfterLinkedBody": "เปิด WhatsApp แล้วเริ่มแชตกับเบอร์ของตัวเอง (แชตกับตัวเอง) จากนั้นส่งข้อความอะไรก็ได้ — คุณจะได้รับคู่มือการตั้งค่าที่นั่น",
+  "nextStepAfterLinkedHint": "ทิป: ค้นหาเบอร์ของคุณใน WhatsApp หรือใช้ “Message yourself / Note to self” หากมีให้ใช้"
 }

@@ -56,7 +56,7 @@
   "paidHint": "Puedes volver a vincular WhatsApp aquí (Relink). Para acciones de facturación (cancelar / método de pago), usa el formulario de soporte (email + WhatsApp + UUID/enlace).",
   "paidRelink": "Re-vincular (Relink)",
   "paidUpgradeComing": "Mejorar (próximamente)",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "Siguiente paso",
+  "nextStepAfterLinkedBody": "Abre WhatsApp e inicia un chat con tu propio número (chat contigo mismo). Luego envía cualquier mensaje — recibirás la guía de configuración allí.",
+  "nextStepAfterLinkedHint": "Consejo: busca tu número en WhatsApp o usa “Mensaje a ti mismo / Nota para mí” si está disponible."
 }

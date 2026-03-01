@@ -56,7 +56,7 @@
   "paidHint": "Bạn có thể liên kết lại WhatsApp tại đây (Relink). Với vấn đề thanh toán (hủy/đổi phương thức), hãy gửi form hỗ trợ (email + WhatsApp + UUID/link).",
   "paidRelink": "Liên kết lại (Relink)",
   "paidUpgradeComing": "Nâng cấp (sắp ra mắt)",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "Bước tiếp theo",
+  "nextStepAfterLinkedBody": "Mở WhatsApp và bắt đầu chat với chính số điện thoại của bạn (self chat). Sau đó gửi bất kỳ tin nhắn nào — bạn sẽ nhận được hướng dẫn thiết lập ở đó.",
+  "nextStepAfterLinkedHint": "Mẹo: tìm số của bạn trong WhatsApp hoặc dùng “Nhắn cho chính mình / Ghi chú cho bản thân” nếu có."
 }

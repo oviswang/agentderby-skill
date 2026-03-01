@@ -56,7 +56,7 @@
   "paidHint": "Vous pouvez relier WhatsApp ici (Relink). Pour la facturation (annulation / moyen de paiement), contactez le support via le formulaire (e-mail + WhatsApp + UUID/lien).",
   "paidRelink": "Relier à nouveau (Relink)",
   "paidUpgradeComing": "Mise à niveau (bientôt)",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "Prochaine étape",
+  "nextStepAfterLinkedBody": "Ouvre WhatsApp et démarre une discussion avec ton propre numéro (auto-discussion). Ensuite, envoie n’importe quel message — tu recevras le guide de configuration ici.",
+  "nextStepAfterLinkedHint": "Astuce : recherche ton numéro dans WhatsApp ou utilise « Message à soi-même / Note à soi » si disponible."
 }

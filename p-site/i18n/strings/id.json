@@ -56,7 +56,7 @@
   "paidHint": "Anda bisa menghubungkan ulang WhatsApp di sini (Relink). Untuk penagihan (batalkan / metode pembayaran), kirim formulir dukungan (email + WhatsApp + UUID/tautan).",
   "paidRelink": "Hubungkan ulang (Relink)",
   "paidUpgradeComing": "Upgrade (segera hadir)",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "Langkah berikutnya",
+  "nextStepAfterLinkedBody": "Buka WhatsApp dan mulai chat dengan nomor kamu sendiri (self chat). Lalu kirim pesan apa pun — kamu akan menerima panduan onboarding di sana.",
+  "nextStepAfterLinkedHint": "Tips: cari nomor kamu di WhatsApp, atau gunakan “Message yourself / Note to self” jika tersedia."
 }

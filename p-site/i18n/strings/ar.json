@@ -56,7 +56,7 @@
   "paidHint": "يمكنك إعادة ربط WhatsApp هنا (Relink). لإجراءات الفوترة (الإلغاء/طريقة الدفع)، تواصل عبر نموذج الدعم (البريد + WhatsApp + UUID/الرابط).",
   "paidRelink": "إعادة الربط (Relink)",
   "paidUpgradeComing": "ترقية (قريبًا)",
-  "nextStepAfterLinkedTitle": "Next step",
-  "nextStepAfterLinkedBody": "Open WhatsApp and start a chat with your own phone number (self chat). Then send any message — you will receive the onboarding guide there.",
-  "nextStepAfterLinkedHint": "Tip: search your number in WhatsApp, or use “Message yourself / Note to self” if available."
+  "nextStepAfterLinkedTitle": "الخطوة التالية",
+  "nextStepAfterLinkedBody": "افتح واتساب وابدأ محادثة مع رقم هاتفك (محادثة مع نفسك). ثم أرسل أي رسالة — ستصلك إرشادات الإعداد هناك.",
+  "nextStepAfterLinkedHint": "نصيحة: ابحث عن رقمك في واتساب أو استخدم \"مراسلة نفسك / ملاحظة لنفسي\" إن كانت متاحة."
 }
