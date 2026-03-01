@@ -149,12 +149,13 @@ function writeOpenAiAuthOnInstance(db, instance, { uuid } = {}) {
     let verifyErr = null;
     let verifyStatus = 0;
     try {
-      // Keep key out of argv by passing via env. Verify via a node helper.
-      const envKey = JSON.stringify(key);
+      // Keep key out of argv by passing via env (base64) to a node helper.
+      const envKeyB64 = Buffer.from(key, 'utf8').toString('base64');
       const r = sh(
-        `set -euo pipefail; OPENAI_API_KEY=${envKey} node - <<'NODE'\
+        `set -euo pipefail; OPENAI_API_KEY_B64=${envKeyB64} node - <<'NODE'\
 import { verifyOpenAiKey } from './lib/openai_verify.mjs';\
-const key = process.env.OPENAI_API_KEY || '';\
+const b64 = process.env.OPENAI_API_KEY_B64 || '';\
+const key = Buffer.from(b64, 'base64').toString('utf8');\
 const out = await verifyOpenAiKey(key, { timeoutMs: 10000 });\
 console.log(JSON.stringify(out));\
 NODE`,
@@ -227,6 +228,66 @@ const POOL_HTTP_PORT = parseInt(process.env.BOTHOOK_POOL_HTTP_PORT || '80', 10);
 const POOL_LOCAL_PORT = parseInt(process.env.BOTHOOK_POOL_LOCAL_PORT || '18999', 10);
 const POOL_FETCH_MODE = String(process.env.BOTHOOK_POOL_FETCH_MODE || 'ssh').toLowerCase(); // ssh|http
 const POOL_SSH_KEY = process.env.BOTHOOK_POOL_SSH_KEY || '/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519';
+
+
+function readInstanceSpecsBestEffort(inst){
+  // Best-effort specs for welcome messages.
+  // Priority: DB meta_json -> /opt/bothook/SPECS.json on instance -> live shell probe.
+  let cpu='?', ram_gb='?', disk_gb='?';
+
+  try {
+    const m = jsonMeta(inst?.meta_json) || {};
+    if (m.cpu != null) cpu = String(m.cpu);
+    if (m.ram_gb != null) ram_gb = String(m.ram_gb);
+    if (m.disk_gb != null) disk_gb = String(m.disk_gb);
+    // cloud_reconcile legacy: memory is GB
+    if (ram_gb === '?' && m.memory != null) ram_gb = String(m.memory);
+  } catch {}
+
+  // Try stable specs file written by bootstrap/postboot.
+  if ((cpu === '?' || ram_gb === '?' || disk_gb === '?') && inst?.public_ip) {
+    try {
+      const sr = poolSsh(
+        inst,
+        `set -euo pipefail; f=/opt/bothook/SPECS.json; if [ -f "$f" ]; then cat "$f"; fi`,
+        { timeoutMs: 2500, tty: false, retries: 0 }
+      );
+      const raw = String(sr.stdout||'').trim();
+      if (raw) {
+        const j = JSON.parse(raw);
+        if (cpu === '?' && j?.cpu != null) cpu = String(j.cpu);
+        if (ram_gb === '?' && (j?.ram_gb != null || j?.memory_gb != null)) ram_gb = String(j.ram_gb ?? j.memory_gb);
+        if (disk_gb === '?' && j?.disk_gb != null) disk_gb = String(j.disk_gb);
+      }
+    } catch {}
+  }
+
+  // Fallback: live probe (best-effort)
+  if ((cpu === '?' || ram_gb === '?' || disk_gb === '?') && inst?.public_ip) {
+    try {
+      const sr = poolSsh(
+        inst,
+        `set -euo pipefail; `
+          + `CPU=$(nproc 2>/dev/null || echo '?'); `
+          + `RAM=$(free -m 2>/dev/null | awk '/Mem:/{printf "%.0f", $2/1024}' || echo '?'); `
+          + `DISK=$(df -BG / 2>/dev/null | awk 'NR==2{gsub(/G/,"",$2); print $2}' || echo '?'); `
+          + `echo "${CPU} ${RAM} ${DISK}"`,
+        { timeoutMs: 3500, tty: false, retries: 0 }
+      );
+      const parts = String(sr.stdout||'').trim().split(/\s+/);
+      if (parts[0] && cpu === '?') cpu = parts[0];
+      if (parts[1] && ram_gb === '?') ram_gb = parts[1];
+      if (parts[2] && disk_gb === '?') disk_gb = parts[2];
+    } catch {}
+  }
+
+  // Owner requirement: if still unknown, pin to 2c/2g/40g to avoid missing config in welcome.
+  if (cpu === '?') cpu = '2';
+  if (ram_gb === '?') ram_gb = '2';
+  if (disk_gb === '?') disk_gb = '40';
+
+  return { cpu, ram_gb, disk_gb };
+}
 
 function normalizeWaBase(waJid){
   try {
@@ -2249,15 +2310,10 @@ app.get('/api/wa/status', async (req, res) => {
 
                 const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
                 // Best-effort instance specs (avoid leaving {{vars}} unreplaced)
-                let cpu='?', ram_gb='?', disk_gb='?';
-                try {
-                  const m = jsonMeta(inst2.meta_json) || {};
-                  // cloud_reconcile writes memory as `memory` (GB) for Lighthouse pool instances
-                  if (m.cpu) cpu = String(m.cpu);
-                  if (m.ram_gb) ram_gb = String(m.ram_gb);
-                  if (m.disk_gb) disk_gb = String(m.disk_gb);
-                  if (ram_gb === '?' && m.memory) ram_gb = String(m.memory);
-                } catch {}
+                const specs = readInstanceSpecsBestEffort(inst2);
+                const cpu = specs.cpu;
+                const ram_gb = specs.ram_gb;
+                const disk_gb = specs.disk_gb;
 
                 // Fallback: query from the instance directly (fast, best-effort)
                 if (cpu === '?' || ram_gb === '?' || disk_gb === '?') {
