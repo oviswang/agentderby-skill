@@ -332,6 +332,10 @@ async function sendEmail({ apiKey, to, from, replyTo, subject, html, text }) {
       ],
     }),
   });
+  const xMsgId = resp.headers.get('x-message-id') || resp.headers.get('X-Message-Id') || resp.headers.get('x-message-id'.toLowerCase()) || null;
+  console.log('[support-pro-worker] sendgrid_status', resp.status);
+  if (xMsgId) console.log('[support-pro-worker] sendgrid_x_message_id', xMsgId);
+
   if (!resp.ok) {
     const t = await resp.text().catch(()=> '');
     throw new Error(`SendGrid error: ${resp.status} ${t}`);
