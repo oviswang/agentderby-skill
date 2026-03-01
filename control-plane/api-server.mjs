@@ -294,9 +294,13 @@ function probeInstanceWhatsappClean(db, instance) {
   try {
     db.prepare('UPDATE instances SET last_probe_at=? WHERE instance_id=?').run(ts, instance.instance_id);
     if (clean) {
-      db.prepare('UPDATE instances SET health_status=?, last_ok_at=? WHERE instance_id=?').run('READY', ts, instance.instance_id);
+      db.prepare(
+        'UPDATE instances SET health_status=?, last_ok_at=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
+      ).run('READY', ts, 'whatsapp_unlinked', 'probe_pull', detail, instance.instance_id);
     } else {
-      db.prepare('UPDATE instances SET health_status=? WHERE instance_id=?').run('DIRTY', instance.instance_id);
+      db.prepare(
+        'UPDATE instances SET health_status=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
+      ).run('DIRTY', 'whatsapp_linked', 'probe_pull', detail, instance.instance_id);
     }
   } catch {}
 
@@ -1328,13 +1332,15 @@ app.post('/api/pool/ready', (req, res) => {
       const text = String((probe.stdout || '') + (probe.stderr || '')).toLowerCase();
       const okGate = (probe.code === 0) && text.includes('healthcheck completed');
       if (!okGate) {
-        db.prepare('UPDATE instances SET health_status=?, last_probe_at=? WHERE instance_id=?')
-          .run('NEEDS_VERIFY', ts, instance_id);
+        db.prepare(
+          'UPDATE instances SET health_status=?, last_probe_at=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
+        ).run('NEEDS_VERIFY', ts, 'reverse_probe_failed', 'ready_push', null, instance_id);
         return send(res, 200, { ok:false, error:'reverse_probe_failed', instance_id });
       }
     } catch {
-      db.prepare('UPDATE instances SET health_status=?, last_probe_at=? WHERE instance_id=?')
-        .run('NEEDS_VERIFY', ts, instance_id);
+      db.prepare(
+        'UPDATE instances SET health_status=?, last_probe_at=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
+      ).run('NEEDS_VERIFY', ts, 'reverse_probe_error', 'ready_push', null, instance_id);
       return send(res, 200, { ok:false, error:'reverse_probe_error', instance_id });
     }
 
@@ -1347,8 +1353,9 @@ app.post('/api/pool/ready', (req, res) => {
       ready_report_private_ip: private_ip,
     };
 
-    db.prepare('UPDATE instances SET health_status=?, last_probe_at=?, last_ok_at=?, public_ip=COALESCE(?, public_ip), private_ip=COALESCE(?, private_ip), meta_json=? WHERE instance_id=?')
-      .run('READY', ts, ts, public_ip, private_ip, mergeMeta(inst.meta_json, patch), instance_id);
+    db.prepare(
+      'UPDATE instances SET health_status=?, last_probe_at=?, last_ok_at=?, health_reason=?, health_source=?, last_verify_evidence=?, public_ip=COALESCE(?, public_ip), private_ip=COALESCE(?, private_ip), meta_json=? WHERE instance_id=?'
+    ).run('READY', ts, ts, 'postboot_ok', 'ready_push', JSON.stringify({ checks: checks || null }), public_ip, private_ip, mergeMeta(inst.meta_json, patch), instance_id);
 
     // One-shot: invalidate token after success to prevent replay.
     try {
