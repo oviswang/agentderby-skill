@@ -3,7 +3,25 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 export function getMasterKeyPath() {
-  return process.env.BOTHOOK_MASTER_KEY_PATH || path.join(process.cwd(), 'control-plane', 'keys', 'master.key');
+  // IMPORTANT: master.key must be stable across restarts.
+  // Historical deployments accidentally created two possible locations:
+  // - <cwd>/control-plane/keys/master.key (old)
+  // - <cwd>/keys/master.key (new/desired)
+  // Prefer explicit env, then prefer whichever already exists to avoid decrypt failures.
+  const env = process.env.BOTHOOK_MASTER_KEY_PATH;
+  if (env) return env;
+
+  const cwd = process.cwd();
+  const pNew = path.join(cwd, 'keys', 'master.key');
+  const pOld = path.join(cwd, 'control-plane', 'keys', 'master.key');
+
+  try {
+    if (fs.existsSync(pNew)) return pNew;
+    if (fs.existsSync(pOld)) return pOld;
+  } catch {}
+
+  // Default: create at the new canonical path.
+  return pNew;
 }
 
 export function ensureMasterKey() {
