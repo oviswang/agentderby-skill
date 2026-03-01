@@ -15,6 +15,18 @@
 
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
+
+// seg1c: minimal verify/state-machine/audit wiring (ESM modules loaded from CommonJS)
+let __seg1cMods = null;
+async function seg1cLoadMods(){
+  if (__seg1cMods) return __seg1cMods;
+  const verify = await import(pathToFileURL(path.join(__dirname, 'lib', 'verify.mjs')).href);
+  const sm = await import(pathToFileURL(path.join(__dirname, 'lib', 'state-machine.mjs')).href);
+  const audit = await import(pathToFileURL(path.join(__dirname, 'lib', 'audit.mjs')).href);
+  __seg1cMods = { verify, sm, audit };
+  return __seg1cMods;
+}
 
 const DATA_DIR = process.env.SUPPORT_DATA_DIR || '/home/ubuntu/.openclaw/workspace/support';
 const TICKETS_FILE = path.join(DATA_DIR, 'tickets.jsonl');
@@ -308,6 +320,39 @@ async function main(){
 
     const entryId = stableEntryId(t);
     if (state.processedEntries[entryId]) continue; // already handled this specific submission
+
+    // seg1c: minimal state machine (wa E.164 validation only)
+    let ticketStateFrom = 'NEEDS_INFO';
+    let ticketStateTo = 'NEEDS_INFO';
+    let waNorm = null;
+    let waReason = 'wa_missing_or_invalid';
+    try {
+      const { verify, sm, audit } = await seg1cLoadMods();
+      waNorm = verify.normalizeE164(t.wa || '');
+      if (waNorm.ok) {
+        ticketStateTo = sm.nextState(ticketStateFrom, 'INFO_COMPLETE'); // -> VERIFIED
+        waReason = 'wa_ok';
+      } else {
+        ticketStateTo = 'NEEDS_INFO';
+        waReason = waNorm.error || 'wa_invalid';
+      }
+      audit.appendAudit({
+        dataDir: DATA_DIR,
+        record: {
+          ts: nowIso(),
+          ticket_id: id,
+          entry_id: entryId,
+          action: 'state',
+          from: ticketStateFrom,
+          to: ticketStateTo,
+          reason: waReason,
+          wa: t.wa || null,
+          wa_e164: (waNorm && waNorm.e164) ? waNorm.e164 : null,
+        }
+      });
+    } catch {
+      // audit best-effort
+    }
 
     const currentReplies = state.ticketReplies[id]?.count ?? 0;
     if (currentReplies >= 10) {

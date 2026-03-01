@@ -1,0 +1,7 @@
+{
+  "langName": "繁體中文",
+  "needsInfo": {
+    "subject": "[#{{ticket_id}}] BOTHook 支援 — 需要補齊資訊",
+    "body": "我們已收到你的訊息（工單號：{{ticket_id}}）。\n\n為了核驗並協助處理，請補齊：\n- WhatsApp 手機號碼（E.164，例如 +886...）\n- UUID / 交付連結\n\n你也可以直接回覆本郵件補齊以上資訊。"
+  }
+}
