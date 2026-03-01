@@ -130,7 +130,7 @@ function writeOpenAiAuthOnInstance(db, instance, { uuid } = {}) {
     const safeUuid = String(uuid || '').trim();
     if (!safeUuid) return { ok:false, error:'uuid_required' };
 
-    const row = db.prepare('SELECT ciphertext, iv, tag, alg FROM delivery_secrets WHERE provision_uuid=? AND kind=? LIMIT 1').get(safeUuid, 'openai_api_key');
+    const row = db.prepare('SELECT ciphertext, iv, tag, alg, meta_json FROM delivery_secrets WHERE provision_uuid=? AND kind=? LIMIT 1').get(safeUuid, 'openai_api_key');
     if (!row?.ciphertext || !row?.iv || !row?.tag) return { ok:false, error:'missing_secret' };
 
     // Fields are stored as blobs by better-sqlite3; normalize to Buffer.
