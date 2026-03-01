@@ -192,6 +192,12 @@ NODE`,
         .run(metaNew, tsCheck, safeUuid, 'openai_api_key');
     } catch {}
 
+    // If the user already verified the key via /api/key/verify (metaOld.verified_at exists),
+    // do NOT block cutover on a transient re-verify failure here. We still record the check error.
+    if (!verifyOk && !strongInvalid && metaOld?.verified_at) {
+      verifyOk = true;
+    }
+
     if (!verifyOk) {
       return { ok:false, error: strongInvalid ? 'key_invalid' : 'key_verify_inconclusive' };
     }
@@ -3249,7 +3255,24 @@ app.get('/api/key/status', (req, res) => {
     if (!row) return send(res, 200, { ok:true, uuid, hasKey:false, verified:false });
     let meta = {};
     try { meta = row.meta_json ? JSON.parse(row.meta_json) : {}; } catch { meta = {}; }
-    const verifiedAt = meta.verified_at || null;
+    let verifiedAt = meta.verified_at || null;
+
+    // Self-heal: if a verified event exists but meta_json was overwritten by a later re-check,
+    // treat the key as verified and restore verified_at.
+    if (!verifiedAt) {
+      try {
+        const ev = db.prepare("SELECT ts FROM events WHERE event_type='OPENAI_KEY_VERIFIED' AND payload_json LIKE ? ORDER BY ts DESC LIMIT 1")
+          .get(`%\"uuid\":\"${uuid}\"%`);
+        if (ev?.ts) {
+          verifiedAt = String(ev.ts);
+          const ts2 = nowIso();
+          const meta2 = JSON.stringify({ ...meta, verified_at: verifiedAt, verified_restored_at: ts2, verified_restored_via: 'key_status_self_heal' });
+          db.prepare('UPDATE delivery_secrets SET meta_json=?, updated_at=? WHERE provision_uuid=? AND kind=?')
+            .run(meta2, ts2, uuid, 'openai_api_key');
+        }
+      } catch {}
+    }
+
     return send(res, 200, { ok:true, uuid, hasKey:true, verified: Boolean(verifiedAt), verifiedAt });
   } catch {
     return send(res, 500, { ok:false, error:'server_error' });
