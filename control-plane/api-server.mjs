@@ -752,6 +752,8 @@ function tryCutoverDelivered(db, uuid, { reason } = {}) {
     if (inst2?.public_ip) {
       try { writeOpenAiAuthOnInstance(db, inst2, { uuid }); } catch {}
     }
+    // Reconcile instance lifecycle for delivered users.
+    try { db.prepare('UPDATE instances SET lifecycle_status=? WHERE instance_id=?').run('DELIVERED', d.instance_id); } catch {}
     return { ok:true, skip:'already_delivered' };
   }
 
@@ -765,6 +767,7 @@ function tryCutoverDelivered(db, uuid, { reason } = {}) {
         const row = db.prepare('SELECT meta_json FROM deliveries WHERE provision_uuid=?').get(uuid);
         const meta2 = mergeMeta(row?.meta_json || null, { delivered_at: ts, cutover_reason: reason || 'reconcile_marker' });
         db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE provision_uuid=?').run('DELIVERED', ts, meta2, uuid);
+        try { db.prepare('UPDATE instances SET lifecycle_status=? WHERE instance_id=?').run('DELIVERED', d.instance_id); } catch {}
         db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)').run(
           crypto.randomUUID(), ts, 'delivery', uuid, 'CUTOVER_DELIVERED_RECONCILED', JSON.stringify({ uuid, instance_id: d.instance_id, reason: reason || null })
         );
@@ -804,6 +807,7 @@ function tryCutoverDelivered(db, uuid, { reason } = {}) {
     const row = db.prepare('SELECT meta_json FROM deliveries WHERE provision_uuid=?').get(uuid);
     const meta2 = mergeMeta(row?.meta_json || null, { delivered_at: ts, cutover_reason: reason || null });
     db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE provision_uuid=?').run('DELIVERED', ts, meta2, uuid);
+    try { db.prepare('UPDATE instances SET lifecycle_status=? WHERE instance_id=?').run('DELIVERED', d.instance_id); } catch {}
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)').run(
       crypto.randomUUID(), ts, 'delivery', uuid, 'CUTOVER_DELIVERED', JSON.stringify({ uuid, instance_id: d.instance_id, reason: reason || null })
     );
