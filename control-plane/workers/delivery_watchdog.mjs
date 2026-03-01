@@ -239,7 +239,7 @@ async function main() {
     // Release allocation back to pool.
     db.exec('BEGIN IMMEDIATE');
     try {
-      db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
+      db.prepare('UPDATE deliveries SET status=?, instance_id=NULL, updated_at=?, meta_json=? WHERE delivery_id=?')
         .run('LINKING_TIMEOUT', ts, mergeMeta(chosen.delivery_meta, { timeout_stage: stage, timeout_at: ts }), delivery_id);
 
       db.prepare(
