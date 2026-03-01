@@ -2431,6 +2431,46 @@ app.get('/api/wa/status', async (req, res) => {
 
               if (welcome && (shouldSend || shouldRetry)) {
                 const ts = nowIso();
+
+                // Best-effort self-heal: if WA was just linked but the WhatsApp listener is not yet running/connected
+                // (common after pairing/logout conflicts), restart the gateway ONCE per QR generation window.
+                try {
+                  const metaNow = jsonMeta(d2.meta_json) || {};
+                  const lastAutoRestartAt = metaNow.welcome_unpaid_gateway_restart_at ? Date.parse(metaNow.welcome_unpaid_gateway_restart_at) : null;
+                  const allowAutoRestart = (!lastAutoRestartAt) || (qrGenAt && lastAutoRestartAt && qrGenAt > lastAutoRestartAt);
+                  if (allowAutoRestart) {
+                    let needRestart = false;
+                    try {
+                      const sr = poolSsh(inst2, `openclaw channels status --probe --json 2>/dev/null || true`, { timeoutMs: 6000, tty: false, retries: 0 });
+                      const raw = String(sr.stdout || '').trim();
+                      if (raw) {
+                        const j = JSON.parse(raw);
+                        const w = j?.channels?.whatsapp || null;
+                        if (!(w?.running === true && w?.connected === true)) needRestart = true;
+                      } else {
+                        needRestart = true;
+                      }
+                    } catch { needRestart = true; }
+
+                    if (needRestart) {
+                      try {
+                        poolSsh(inst2,
+                          `set -euo pipefail; sudo systemctl restart openclaw-gateway.service 2>/dev/null || true; sleep 2; echo restarted`,
+                          { timeoutMs: 20000, tty: false, retries: 0 }
+                        );
+                        const meta3 = mergeMeta(d2.meta_json, { welcome_unpaid_gateway_restart_at: ts });
+                        db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta3, ts, d2.delivery_id);
+                        try {
+                          db2.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                            crypto.randomUUID(), ts, 'delivery', d2.delivery_id, 'WA_GATEWAY_AUTO_RESTART',
+                            JSON.stringify({ uuid, instance_id: inst2.instance_id, reason: 'welcome_unpaid_probe_failed' })
+                          );
+                        } catch {}
+                      } catch {}
+                    }
+                  }
+                } catch {}
+
                 let payShortLink = '';
                 try {
                   const r = await fetch('http://127.0.0.1:18998/api/pay/link', {
