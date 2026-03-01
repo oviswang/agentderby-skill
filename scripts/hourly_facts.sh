@@ -4,9 +4,10 @@ set -euo pipefail
 cd /home/ubuntu/.openclaw/workspace
 
 NOW_LOCAL=$(date '+%Y-%m-%d %H:00 %Z')
-SINCE='1 hour ago'
+HOURS=${BOTHOOK_REPORT_HOURS:-1}
+SINCE="${HOURS} hour ago"
 
-echo "时间窗：过去 1 小时（截至 ${NOW_LOCAL}）"
+echo "时间窗：过去 ${HOURS} 小时（截至 ${NOW_LOCAL}）"
 echo
 
 echo "【事实源 0：Heartbeat 最近一次事件（Gateway）】"
@@ -27,11 +28,12 @@ if not paths:
     print('- tasks 目录无 T*.json')
     raise SystemExit(0)
 now=time.time()
+window_min=int(os.environ.get('BOTHOOK_REPORT_HOURS','1'))*60
 for p in paths:
     st=os.stat(p)
     j=json.load(open(p))
     age_min=(now-st.st_mtime)/60
-    touched = 'UPDATED_WITHIN_1H' if age_min <= 60 else 'stale'
+    touched = 'UPDATED_WITHIN_WINDOW' if age_min <= window_min else 'stale'
     print(f"- {os.path.basename(p)} {touched} mtime={time.strftime('%Y-%m-%d %H:%M:%S %z', time.localtime(st.st_mtime))} status={j.get('status')} progress_percent={j.get('progress_percent')} last_updated={j.get('last_updated')}")
     na=j.get('next_action')
     if na:
@@ -55,7 +57,7 @@ fi
 echo
 
 echo "【事实源 2：P0.2 证据文件（docs/_evidence_p0_2*，过去 1 小时）】"
-EVID=$(find p-site/docs -maxdepth 1 -type f -name '_evidence_p0_2_*' -mmin -60 -printf '%TY-%Tm-%Td %TH:%TM %p\n' 2>/dev/null | sort || true)
+EVID=$(find p-site/docs -maxdepth 1 -type f -name '_evidence_p0_2_*' -mmin -$((HOURS*60)) -printf '%TY-%Tm-%Td %TH:%TM %p\n' 2>/dev/null | sort || true)
 if [ -n "$EVID" ]; then
   echo "$EVID"
 else
@@ -80,18 +82,19 @@ echo
 
 echo "【事实源 3.1：本小时 Pool 补货/创建事件（SQLite events: POOL_INSTANCE_CREATED）】"
 python3 - <<'PY'
-import sqlite3, json
+import os, sqlite3, json
+hours=int(os.environ.get('BOTHOOK_REPORT_HOURS','1'))
 con=sqlite3.connect('control-plane/data/bothook.sqlite')
 cur=con.cursor()
 rows=cur.execute("""
   select ts, entity_id, payload_json
     from events
    where event_type='POOL_INSTANCE_CREATED'
-     and ts >= datetime('now','-1 hour')
+     and ts >= datetime('now', ?)
    order by ts asc
-""").fetchall()
+""", (f'-{hours} hours',)).fetchall()
 if not rows:
-    print('- 本小时无 POOL_INSTANCE_CREATED')
+    print(f'- 过去 {hours} 小时无 POOL_INSTANCE_CREATED')
 else:
     for ts, instance_id, payload_json in rows:
         try:
