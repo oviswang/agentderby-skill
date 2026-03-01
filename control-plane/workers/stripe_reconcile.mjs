@@ -78,7 +78,7 @@ async function main() {
   try { alertState = JSON.parse(fs.readFileSync(ALERT_STATE_PATH, 'utf8')); } catch {}
   const lastEventTs = alertState?.lastEventTs ? String(alertState.lastEventTs) : null;
 
-  // Process a small batch each run.
+  // --- (A) Subscription refresh (existing rows) ---
   const rows = db.prepare(
     `SELECT provider_sub_id
        FROM subscriptions
@@ -89,6 +89,13 @@ async function main() {
 
   let ok = 0;
   let fail = 0;
+
+  // --- (B) Payment confirm reconcile (when webhooks are delayed/missed) ---
+  // Scan recent checkout shortlinks and confirm payment via the control-plane endpoint.
+  // This backfills deliveries.status=PAID + subscriptions rows, then triggers /api/wa/status to send guide/cutover.
+  let confirmedPaid = 0;
+  let confirmedFail = 0;
+  let guideTriggered = 0;
 
   const upd = db.prepare(
     `UPDATE subscriptions
@@ -101,6 +108,57 @@ async function main() {
             updated_at=?
       WHERE provider_sub_id=?`
   );
+
+  // (B) confirm payment/cutover for recent checkout sessions
+  try {
+    const candidates = db.prepare(
+      `SELECT provision_uuid, created_at, meta_json
+         FROM shortlinks
+        WHERE kind='stripe_checkout'
+          AND created_at >= datetime('now','-24 hours')
+        ORDER BY datetime(created_at) DESC
+        LIMIT 30`
+    ).all();
+
+    for (const c of candidates) {
+      const uuid = String(c.provision_uuid || '').trim();
+      if (!uuid) continue;
+
+      // Skip if already paid/delivered.
+      try {
+        const d = db.prepare('SELECT status, wa_jid FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
+        const st = String(d?.status || '').toUpperCase();
+        if (st === 'DELIVERED' || st === 'DELIVERING' || st === 'PAID') continue;
+      } catch {}
+
+      // Use the authoritative confirm endpoint (it also creates PAYMENT_PAID funnel event).
+      try {
+        const r = await fetch(`http://127.0.0.1:18998/api/pay/confirm?uuid=${encodeURIComponent(uuid)}`);
+        const j = await r.json().catch(() => null);
+        if (r.ok && j?.ok && j?.paid === true) {
+          confirmedPaid++;
+
+          // Trigger /api/wa/status to send guide_key_paid (if linked + key not verified) or cutover (if verified).
+          try {
+            const s = await fetch(`http://127.0.0.1:18998/api/wa/status?uuid=${encodeURIComponent(uuid)}`);
+            if (s.ok) guideTriggered++;
+          } catch {}
+
+          // Audit event
+          try {
+            db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+              crypto.randomUUID(), ts, 'delivery', uuid, 'PAY_CONFIRM_RECONCILED', JSON.stringify({ uuid, via: 'stripe_reconcile' })
+            );
+          } catch {}
+        } else {
+          // Ignore "not paid"; count hard failures only.
+          if (!r.ok) confirmedFail++;
+        }
+      } catch {
+        confirmedFail++;
+      }
+    }
+  } catch {}
 
   for (const r of rows) {
     const id = String(r.provider_sub_id || '').trim();
@@ -150,10 +208,21 @@ async function main() {
     }
   } catch {}
 
-  const summary = { ok: true, ts, dbPath, scanned: rows.length, updated: ok, failed: fail };
+  const summary = {
+    ok: true,
+    ts,
+    dbPath,
+    scanned_subscriptions: rows.length,
+    updated_subscriptions: ok,
+    failed_subscriptions: fail,
+    scanned_checkout_shortlinks: 30,
+    confirmed_paid: confirmedPaid,
+    confirm_failed: confirmedFail,
+    wa_status_triggered: guideTriggered,
+  };
   console.log(JSON.stringify(summary, null, 2));
-  if (ok || fail) {
-    tgSend(`[bothook] stripe_reconcile: scanned=${rows.length} updated=${ok} failed=${fail}`);
+  if (ok || fail || confirmedPaid || confirmedFail) {
+    tgSend(`[bothook] stripe_reconcile: subs_scanned=${rows.length} subs_updated=${ok} subs_failed=${fail} paid_confirmed=${confirmedPaid} confirm_failed=${confirmedFail}`);
   }
 }
 
