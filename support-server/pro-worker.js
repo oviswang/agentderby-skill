@@ -176,6 +176,84 @@ function categoryNextStepsEn(category){
   }
 }
 
+function loadI18n(lang){
+  try {
+    const safe = String(lang||'').trim().toLowerCase();
+    if (!safe) return null;
+    const p = path.join(__dirname, 'i18n', safe + '.json');
+    if (!fs.existsSync(p)) return null;
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function tpl(str, vars){
+  let out = String(str||'');
+  for (const [k,v] of Object.entries(vars||{})) {
+    out = out.replace(new RegExp('\\{\\{\\s*'+k+'\\s*\\}\\}', 'g'), String(v));
+  }
+  return out;
+}
+
+function renderNeedsInfoReply(ticket, { reason, expectedE164 } = {}){
+  const lang = detectLang(ticket);
+  const id = ticket.ticket_id;
+  const i18n = loadI18n(lang);
+  if (i18n && i18n.needsInfo && i18n.needsInfo.subject && i18n.needsInfo.body) {
+    let extra = '';
+    if (reason === 'wa_not_bound') {
+      extra = '\n\n下一步：請先完成 WhatsApp 裝置關聯（Link）。完成後再回覆本郵件，我們才能核驗並協助處理。';
+    } else if (reason === 'wa_mismatch') {
+      extra = `\n\n核驗失敗：你填的 WhatsApp 手機號碼與此 UUID 綁定的號碼不一致。\n預期號碼：${expectedE164 || '（未知）'}\n請確認後再提交。`;
+    }
+    return {
+      lang,
+      subject: tpl(i18n.needsInfo.subject, { ticket_id: id }),
+      text: tpl(i18n.needsInfo.body, { ticket_id: id }) + extra,
+      html: null,
+      category: 'needs_info'
+    };
+  }
+
+  // fallback: English
+  const subject = `[#${id}] BOTHook Support — More info needed`;
+  const text = `We received your message (Ticket: ${id}).\n\nTo verify and help you safely, please reply with:\n- Your WhatsApp phone number (E.164, e.g. +1...)\n- Your UUID / delivery link\n\nReason: ${reason || 'needs_info'}${expectedE164 ? `\nExpected phone: ${expectedE164}` : ''}`;
+  return { lang, subject, text, html: null, category: 'needs_info' };
+}
+
+async function seg1eProcessTicketForTest(ticket){
+  // Offline simulation: compute audit records only.
+  const { verify, sm } = await seg1cLoadMods();
+  const id = ticket.ticket_id;
+  const entryId = stableEntryId(ticket);
+  let state = 'NEEDS_INFO';
+  const records = [];
+
+  const waNorm = verify.normalizeE164(ticket.wa || '');
+  if (!waNorm.ok) {
+    records.push({ ts: nowIso(), ticket_id: id, entry_id: entryId, action:'state', from:'NEEDS_INFO', to:'NEEDS_INFO', reason: waNorm.error || 'wa_invalid' });
+    return { state:'NEEDS_INFO', records, reply: renderNeedsInfoReply(ticket, { reason: waNorm.error || 'wa_invalid' }) };
+  }
+
+  state = sm.nextState(state, 'INFO_COMPLETE'); // VERIFIED
+  records.push({ ts: nowIso(), ticket_id: id, entry_id: entryId, action:'state', from:'NEEDS_INFO', to: state, reason:'wa_ok', wa_e164: waNorm.e164 });
+
+  const vres = await verify.verifyUuidWaBinding({ uuid: String(ticket.uuid||'').trim(), waE164: waNorm.e164 });
+  records.push({ ts: nowIso(), ticket_id: id, entry_id: entryId, action:'verify_uuid_wa', uuid: ticket.uuid||null, wa_e164: waNorm.e164, ok: !!vres.ok, verified: !!vres.verified, reason: vres.reason||'unknown', expectedE164: vres.expectedE164||null });
+
+  if (vres.ok && vres.verified) {
+    const prev = state;
+    state = sm.nextState(state, 'START'); // IN_PROGRESS
+    records.push({ ts: nowIso(), ticket_id: id, entry_id: entryId, action:'state', from: prev, to: state, reason:'verified_uuid_wa', expectedE164: vres.expectedE164||null, uuid: ticket.uuid||null });
+    return { state, records, reply: { lang: detectLang(ticket), subject:'', text:'', html:null, category:'in_progress' } };
+  }
+
+  // vres ok but not verified => NEEDS_INFO
+  records.push({ ts: nowIso(), ticket_id: id, entry_id: entryId, action:'state', from: state, to:'NEEDS_INFO', reason: vres.reason||'verify_failed', expectedE164: vres.expectedE164||null, uuid: ticket.uuid||null });
+  return { state:'NEEDS_INFO', records, reply: renderNeedsInfoReply(ticket, { reason: vres.reason||'verify_failed', expectedE164: vres.expectedE164||null }) };
+}
+
 function renderReply(ticket){
   const lang = detectLang(ticket);
   const id = ticket.ticket_id;
@@ -338,9 +416,14 @@ async function main(){
         waReason = waNorm.error || 'wa_invalid';
       }
 
-      // seg1d: verify uuid↔wa binding against control-plane DB
+      // seg1e: verify uuid↔wa binding against control-plane DB and drive state
+      let verifyReason = null;
+      let expectedE164 = null;
       if (ticketStateTo === 'VERIFIED') {
         const vres = await verify.verifyUuidWaBinding({ uuid: String(t.uuid||'').trim(), waE164: waNorm.e164 });
+        verifyReason = (vres && vres.reason) ? String(vres.reason) : 'unknown';
+        expectedE164 = (vres && vres.expectedE164) ? String(vres.expectedE164) : null;
+
         audit.appendAudit({
           dataDir: DATA_DIR,
           record: {
@@ -352,7 +435,8 @@ async function main(){
             wa_e164: waNorm.e164,
             ok: Boolean(vres && vres.ok),
             verified: Boolean(vres && vres.verified),
-            reason: (vres && vres.reason) || 'unknown'
+            reason: verifyReason,
+            expectedE164: expectedE164
           }
         });
 
@@ -368,11 +452,13 @@ async function main(){
               action: 'state',
               from: prev2,
               to: ticketStateTo,
-              reason: 'verified_uuid_wa'
+              reason: 'verified_uuid_wa',
+              uuid: t.uuid || null,
+              expectedE164: expectedE164
             }
           });
         } else {
-          // not verified or not bound -> require info/linking
+          // uuid_invalid/wa_invalid/wa_not_bound/wa_mismatch -> NEEDS_INFO
           const prev2 = ticketStateTo;
           ticketStateTo = 'NEEDS_INFO';
           audit.appendAudit({
@@ -384,12 +470,15 @@ async function main(){
               action: 'state',
               from: prev2,
               to: ticketStateTo,
-              reason: (vres && vres.reason) ? String(vres.reason) : 'verify_failed'
+              reason: verifyReason || 'verify_failed',
+              uuid: t.uuid || null,
+              expectedE164: expectedE164
             }
           });
         }
       }
 
+      // seg1e: Needs-info replies are generated later; this audit line is kept as final state snapshot.
       audit.appendAudit({
         dataDir: DATA_DIR,
         record: {
@@ -416,7 +505,15 @@ async function main(){
       continue;
     }
 
-    const { lang, subject, text, html, category } = renderReply(t);
+    // seg1e: choose reply based on computed state
+    let reply;
+    if (ticketStateTo === 'NEEDS_INFO') {
+      reply = renderNeedsInfoReply(t, { reason: verifyReason || waReason || 'needs_info', expectedE164 });
+    } else {
+      reply = renderReply(t);
+    }
+
+    const { lang, subject, text, html, category } = reply;
 
     // 1) send email
     await sendEmail({ apiKey, to: t.email, from, replyTo, subject, text, html });
@@ -475,3 +572,6 @@ main().catch((e) => {
   console.error('[support-pro-worker] error', e);
   process.exit(1);
 });
+
+// seg1e: offline test hook (no side effects unless invoked explicitly)
+module.exports._seg1eProcessTicketForTest = seg1eProcessTicketForTest;
