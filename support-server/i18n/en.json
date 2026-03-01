@@ -1,0 +1,7 @@
+{
+  "langName": "English",
+  "needsInfo": {
+    "subject": "[#{{ticket_id}}] BOTHook Support — More info needed",
+    "body": "We received your message (Ticket: {{ticket_id}}).\n\nTo verify and help you safely, please reply with:\n- Your WhatsApp phone number (E.164, e.g. +1...)\n- Your UUID / delivery link\n\nYou can reply to this email with the information above."
+  }
+}

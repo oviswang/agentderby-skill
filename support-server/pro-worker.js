@@ -102,11 +102,17 @@ function detectLang(ticket){
 
   if (pl === 'zh-hant' || pl === 'zh-hk' || pl === 'zh-mo') return 'zh-tw';
   if (pl.startsWith('zh-tw')) return 'zh-tw';
+  if (pl.startsWith('zh-cn') || pl.startsWith('zh-sg')) return 'zh';
+  if (pl === 'zh') return 'zh';
 
   if (hasI18n(pl)) return pl;
-  if (pl.startsWith('zh') && hasI18n('zh-tw')) return 'zh-tw';
 
-  // Extend later for more languages; for now default to English when no template exists.
+  if (pl.startsWith('zh')) {
+    if (hasI18n('zh-tw')) return 'zh-tw';
+    if (hasI18n('zh')) return 'zh';
+  }
+
+  // Default to English when no template exists.
   return 'en';
 }
 
