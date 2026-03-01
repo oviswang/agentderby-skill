@@ -147,7 +147,8 @@ const server = http.createServer(async (req, res) => {
       // - UUID: 0e74e886-...
       // - WhatsApp: +658...
       const uuidMatch = text.match(/\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i);
-      const waMatch = text.match(/\b(\+\d[\d\s-]{5,20}\d)\b/);
+      // Note: do not use \b before '+' (both are non-word); match +E.164-ish loosely then normalize.
+      const waMatch = text.match(/(\+\d[\d\s-]{5,20}\d)/);
       const uuid2 = uuidMatch ? uuidMatch[1] : '';
       const wa2 = waMatch ? waMatch[1].replace(/[\s-]/g, '') : '';
 
