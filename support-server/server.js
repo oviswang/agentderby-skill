@@ -143,11 +143,20 @@ const server = http.createServer(async (req, res) => {
       try { if (fs.existsSync(stateFile)) state = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch {}
       const lastLang = state.ticketReplies?.[ticketId]?.last_lang || 'en';
 
+      // Minimal field extraction from follow-up email body (user replies to needs-info):
+      // - UUID: 0e74e886-...
+      // - WhatsApp: +658...
+      const uuidMatch = text.match(/\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i);
+      const waMatch = text.match(/\b(\+\d[\d\s-]{5,20}\d)\b/);
+      const uuid2 = uuidMatch ? uuidMatch[1] : '';
+      const wa2 = waMatch ? waMatch[1].replace(/[\s-]/g, '') : '';
+
       const ticket = {
         ticket_id: ticketId,
         created_at: nowIso(),
         email: fromEmail,
-        uuid: '',
+        wa: wa2,
+        uuid: uuid2,
         message: `[email follow-up]\nSubject: ${subject}\n\n${text}`,
         page_lang: lastLang,
         status: 'followup',
