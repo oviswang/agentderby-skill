@@ -1159,15 +1159,28 @@ async function runPoolInitJob(job){
       await issueReadyToken(db, instX);
     } catch {}
 
+    // Ensure READY_REPORT.txt exists right before running postboot verify.
+    // This is required for the push-based READY report path inside postboot_verify.sh.
+    try {
+      const chk = poolSsh(inst, 'test -s /opt/bothook/READY_REPORT.txt && echo ok || echo missing', { timeoutMs: 12000, tty:false, retries: 0 });
+      if (!String(chk.stdout||'').includes('ok')) {
+        pushJobLog(job, 're-issue ready_report_token (pre-postboot; file missing)');
+        const instX = getInstanceById(db, job.instance_id);
+        await issueReadyToken(db, instX);
+      }
+    } catch {}
+
     // Ensure postboot verify has run (kick once)
     pushJobLog(job, 'kick postboot verify');
     poolSsh(inst, 'sudo systemctl start bothook-postboot-verify.service || true', { timeoutMs: 12000, tty:false, retries:0 });
 
     // Wait DB READY (from push)
     // Kick postboot verify periodically to self-heal transient failures (e.g. gateway port not yet listening).
+    // Also: pull /opt/bothook/evidence/postboot_verify.json as a fallback, because missing READY_REPORT.txt prevents push.
     pushJobLog(job, 'wait DB READY');
     const startWait = Date.now();
     let lastKick = Date.now();
+    let lastPull = 0;
     while (Date.now()-startWait < 10*60*1000) {
       const cur = getInstanceById(db, job.instance_id);
       if (String(cur.health_status||'') === 'READY') {
@@ -1176,6 +1189,27 @@ async function runPoolInitJob(job){
         pushJobLog(job, 'done: READY');
         return;
       }
+
+      // Fallback: pull the local postboot evidence and mark READY ourselves (we already have SSH trust).
+      // Rate-limit pulls to keep init cheap.
+      if (Date.now() - lastPull > 60*1000) {
+        lastPull = Date.now();
+        try {
+          const r = poolSsh(inst, 'sudo cat /opt/bothook/evidence/postboot_verify.json 2>/dev/null || echo missing', { timeoutMs: 12000, tty:false, retries:0 });
+          const txt = String(r.stdout||'').trim();
+          if (txt && txt !== 'missing') {
+            const j = JSON.parse(txt);
+            if (j && j.ok === true) {
+              db.prepare('UPDATE instances SET health_status=?, last_ok_at=? WHERE instance_id=?').run('READY', nowIso(), job.instance_id);
+              job.status='DONE';
+              job.endedAt=nowIso();
+              pushJobLog(job, 'done: READY (pulled postboot_verify.json)');
+              return;
+            }
+          }
+        } catch {}
+      }
+
       if (Date.now() - lastKick > 60*1000) {
         pushJobLog(job, 're-kick postboot verify');
         poolSsh(inst, 'sudo systemctl start bothook-postboot-verify.service || true', { timeoutMs: 12000, tty:false, retries:0 });
