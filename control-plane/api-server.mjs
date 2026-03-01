@@ -399,6 +399,27 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
     const st = String(updated.status || '');
     const needsAlloc = !updated.instance_id && ['QR_EXPIRED','CANCELED','LINKING_TIMEOUT','LINKING'].includes(st);
     if (needsAlloc) {
+      // Respect manual suppression: when do_not_reallocate=1, never allocate a new pool instance.
+      // This prevents stale/abandoned deliveries from repeatedly stealing pool machines.
+      const metaR = jsonMeta(updated.meta_json) || {};
+      if (Number(metaR.do_not_reallocate || 0) === 1) {
+        const ts = nowIso();
+        try {
+          db.prepare(
+            `INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json)
+             VALUES (?,?,?,?,?,?)`
+          ).run(
+            crypto.randomUUID(),
+            ts,
+            'delivery',
+            updated.delivery_id,
+            'PROVISION_REALLOCATE_SUPPRESSED',
+            JSON.stringify({ provision_uuid: uuid, delivery_id: updated.delivery_id, from_status: st, reason: 'do_not_reallocate' })
+          );
+        } catch {}
+        return updated;
+      }
+
       console.log('[bothook-api] reallocating instance for uuid', uuid, 'status', st, 'delivery_id', updated.delivery_id);
       // Re-enter allocation path by treating as non-existing.
       // (We allocate a clean instance and move status back to LINKING.)
