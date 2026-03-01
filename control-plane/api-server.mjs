@@ -1788,6 +1788,17 @@ app.post('/api/wa/start', async (req, res) => {
     const startPath = '/api/wa/start';
     const body = JSON.stringify({ uuid, force });
 
+
+
+    // Ensure user-machine provisioning server (18999) is running before delegating QR/login.
+    // Delivered-mode convergence may have disabled it; relink must be able to start it on-demand.
+    try {
+      poolSsh(
+        instance,
+        `set -euo pipefail; sudo systemctl start bothook-provision.service 2>/dev/null || true; echo provision_started`,
+        { timeoutMs: 8000, tty: false, retries: 0 }
+      );
+    } catch {}
     const rr = await poolFetch(instance, startPath, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -2248,21 +2259,30 @@ app.get('/api/wa/status', async (req, res) => {
         }
       }
     } catch {}
-    // If linked, restart services (gateway + provision) and close the tmux login session.
-    // This is required for the UI to reflect bound status and for welcome/onboarding messages to be delivered.
+    // If linked, restart services and close the tmux login session.
+    // NOTE: In DELIVERED mode we converge by keeping provision server OFF by default.
     if (claimConnected) {
       try {
         const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
-        poolSsh(
-          instance,
-          `set -euo pipefail; `
-          + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
-          + `sudo systemctl enable bothook-provision.service 2>/dev/null || true; `
-          + `sudo systemctl start bothook-provision.service 2>/dev/null || true; `
-          + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
-          + `echo services_restarted`,
-          { timeoutMs: 20000, tty: false, retries: 0 }
-        );
+        const delivered = String(delivery?.status || '') === 'DELIVERED';
+        const cmd = delivered
+          ? (
+              `set -euo pipefail; `
+              + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
+              + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
+              + `sudo systemctl stop bothook-provision.service 2>/dev/null || true; `
+              + `sudo systemctl disable bothook-provision.service 2>/dev/null || true; `
+              + `echo services_restarted_delivered`
+            )
+          : (
+              `set -euo pipefail; `
+              + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
+              + `sudo systemctl enable bothook-provision.service 2>/dev/null || true; `
+              + `sudo systemctl start bothook-provision.service 2>/dev/null || true; `
+              + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
+              + `echo services_restarted`
+            );
+        poolSsh(instance, cmd, { timeoutMs: 20000, tty: false, retries: 0 });
       } catch {}
     }
     // If connected + entitled, self-heal delivered cutover (auth/model/config) and send OpenAI key setup guide.
