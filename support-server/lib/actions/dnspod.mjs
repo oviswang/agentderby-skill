@@ -79,6 +79,44 @@ export async function dnspodDescribeRecordList({ secretId, secretKey, domain, of
   });
 }
 
+export async function dnspodModifyRecord({
+  secretId,
+  secretKey,
+  domain,
+  recordId,
+  subDomain,
+  recordType,
+  recordLine = '默认',
+  value,
+  ttl = 600,
+}) {
+  return dnspodCall({
+    secretId,
+    secretKey,
+    region: '',
+    action: 'ModifyRecord',
+    payloadObj: {
+      Domain: domain,
+      RecordId: recordId,
+      SubDomain: subDomain,
+      RecordType: recordType,
+      RecordLine: recordLine,
+      Value: value,
+      TTL: ttl,
+    },
+  });
+}
+
+export async function dnspodDeleteRecord({ secretId, secretKey, domain, recordId }) {
+  return dnspodCall({
+    secretId,
+    secretKey,
+    region: '',
+    action: 'DeleteRecord',
+    payloadObj: { Domain: domain, RecordId: recordId },
+  });
+}
+
 export async function dnspodUpsertRecord({
   secretId,
   secretKey,
@@ -100,20 +138,16 @@ export async function dnspodUpsertRecord({
 
   if (match && match.RecordId) {
     const old = { RecordId: match.RecordId, Value: match.Value, TTL: match.TTL, Line: match.Line, Type: match.Type, Name: match.Name };
-    const mod = await dnspodCall({
+    const mod = await dnspodModifyRecord({
       secretId,
       secretKey,
-      region: '',
-      action: 'ModifyRecord',
-      payloadObj: {
-        Domain: domain,
-        RecordId: match.RecordId,
-        SubDomain: subDomain,
-        RecordType: recordType,
-        RecordLine: recordLine,
-        Value: value,
-        TTL: ttl,
-      },
+      domain,
+      recordId: match.RecordId,
+      subDomain,
+      recordType,
+      recordLine,
+      value,
+      ttl,
     });
     return { mode: 'modify', old, result: mod };
   }

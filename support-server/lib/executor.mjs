@@ -27,29 +27,55 @@ export async function runPlan({
   appendJsonl(auditPath, { ts: nowIso(), action: 'plan_start', plan_id: plan.plan_id || null, ticket_id: ctx.ticket_id || null });
 
   const results = [];
-  for (let i = 0; i < (plan.steps || []).length; i++) {
-    const step = plan.steps[i];
-    const id = step.id || `step_${i+1}`;
+  const rollbacks = [];
 
-    appendJsonl(auditPath, sanitizeForAudit({ ts: nowIso(), action: 'step_start', step_id: id, type: step.type }));
+  try {
+    for (let i = 0; i < (plan.steps || []).length; i++) {
+      const step = plan.steps[i];
+      const id = step.id || `step_${i+1}`;
 
-    if (!actions[step.type]) {
-      const err = `unknown_step_type:${step.type}`;
-      appendJsonl(auditPath, { ts: nowIso(), action: 'step_error', step_id: id, error: err });
-      throw new Error(err);
+      appendJsonl(auditPath, sanitizeForAudit({ ts: nowIso(), action: 'step_start', step_id: id, type: step.type }));
+
+      if (!actions[step.type]) {
+        const err = `unknown_step_type:${step.type}`;
+        appendJsonl(auditPath, { ts: nowIso(), action: 'step_error', step_id: id, error: err });
+        throw new Error(err);
+      }
+
+      if (dryRun) {
+        appendJsonl(auditPath, { ts: nowIso(), action: 'step_dry_run', step_id: id });
+        results.push({ step_id: id, dry_run: true });
+        continue;
+      }
+
+      const out = await actions[step.type]({ step, ctx, evidenceDir, auditPath });
+      results.push({ step_id: id, out });
+      if (out && out.rollback && out.rollback.type) {
+        rollbacks.push(out.rollback);
+      }
+      appendJsonl(auditPath, { ts: nowIso(), action: 'step_ok', step_id: id });
     }
 
-    if (dryRun) {
-      appendJsonl(auditPath, { ts: nowIso(), action: 'step_dry_run', step_id: id });
-      results.push({ step_id: id, dry_run: true });
-      continue;
+    appendJsonl(auditPath, { ts: nowIso(), action: 'plan_ok', plan_id: plan.plan_id || null });
+    return results;
+  } catch (e) {
+    appendJsonl(auditPath, { ts: nowIso(), action: 'plan_failed', plan_id: plan.plan_id || null, error: String(e?.message || e) });
+
+    // best-effort rollback (reverse order)
+    for (let i = rollbacks.length - 1; i >= 0; i--) {
+      const rb = rollbacks[i];
+      const rbId = rb.id || `rb_${i+1}`;
+      try {
+        if (actions[rb.type]) {
+          appendJsonl(auditPath, { ts: nowIso(), action: 'rollback_start', rollback_id: rbId, type: rb.type });
+          await actions[rb.type]({ step: { id: rbId, type: rb.type, params: rb.params || {} }, ctx, evidenceDir, auditPath });
+          appendJsonl(auditPath, { ts: nowIso(), action: 'rollback_ok', rollback_id: rbId });
+        }
+      } catch (re) {
+        appendJsonl(auditPath, { ts: nowIso(), action: 'rollback_failed', rollback_id: rbId, error: String(re?.message || re) });
+      }
     }
 
-    const out = await actions[step.type]({ step, ctx, evidenceDir, auditPath });
-    results.push({ step_id: id, out });
-    appendJsonl(auditPath, { ts: nowIso(), action: 'step_ok', step_id: id });
+    throw e;
   }
-
-  appendJsonl(auditPath, { ts: nowIso(), action: 'plan_ok', plan_id: plan.plan_id || null });
-  return results;
 }

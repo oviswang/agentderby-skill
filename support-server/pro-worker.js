@@ -560,8 +560,36 @@ async function main(){
       if (maybePlanId) {
         const plan = getPlan({ dataDir: DATA_DIR, planId: maybePlanId });
         if (plan && plan.status === 'PENDING_CONFIRM') {
-          // Mark confirmed; executor integration for writes will run in later segment.
-          setPlanStatus({ dataDir: DATA_DIR, planId: maybePlanId, patch: { status: 'CONFIRMED', confirmed_at: nowIso(), ticket_id: id } });
+          // Mark confirmed
+          const nextPlan = setPlanStatus({ dataDir: DATA_DIR, planId: maybePlanId, patch: { status: 'CONFIRMED', confirmed_at: nowIso(), ticket_id: id } });
+
+          // Execute confirmed plan immediately (Phase3 S4)
+          try {
+            const tencentEnvPath = process.env.TENCENT_ENV || '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env';
+            const env = parseEnvFile(tencentEnvPath);
+            const secretId = env.TENCENTCLOUD_SECRET_ID || '';
+            const secretKey = env.TENCENTCLOUD_SECRET_KEY || '';
+            const { makeActions } = await import(pathToFileURL(path.join(__dirname, 'lib', 'actions', 'index.mjs')).href);
+            const { runPlan } = await import(pathToFileURL(path.join(__dirname, 'lib', 'executor.mjs')).href);
+
+            const evidenceDir = path.join(DATA_DIR, 'evidence', String(id), String(Date.now()), String(maybePlanId));
+            const auditPath = path.join(DATA_DIR, 'handled.jsonl');
+            const execDryRun = String(process.env.SUPPORT_EXECUTOR_DRY_RUN || '').trim() === '1';
+
+            await runPlan({ plan: nextPlan, ctx: { ticket_id: id }, actions: makeActions({ secretId, secretKey }), evidenceDir, auditPath, dryRun: execDryRun });
+            setPlanStatus({ dataDir: DATA_DIR, planId: maybePlanId, patch: { status: execDryRun ? 'EXECUTED_DRY_RUN' : 'EXECUTED', executed_at: nowIso() } });
+
+            // Reply: executed
+            const subject = `[#${id}] Execution completed (${maybePlanId})`;
+            const text = `Executed plan ${maybePlanId}.\n\nStatus: ${execDryRun ? 'dry-run' : 'ok'}.\nEvidence: ${evidenceDir}`;
+            await sendEmail({ apiKey, to: t.email, from, replyTo, subject, text, html: null });
+          } catch (e) {
+            setPlanStatus({ dataDir: DATA_DIR, planId: maybePlanId, patch: { status: 'FAILED', failed_at: nowIso(), error: String(e?.message || e) } });
+            const subject = `[#${id}] Execution failed (${maybePlanId})`;
+            const text = `Plan ${maybePlanId} failed. Error: ${String(e?.message || e)}`;
+            try { await sendEmail({ apiKey, to: t.email, from, replyTo, subject, text, html: null }); } catch {}
+          }
+
           // mark entry processed
           state.processedEntries[entryId] = { at: nowIso(), ticket_id: id, confirmed_plan: maybePlanId };
           saveState(state);
