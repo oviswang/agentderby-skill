@@ -337,6 +337,59 @@ async function main(){
         ticketStateTo = 'NEEDS_INFO';
         waReason = waNorm.error || 'wa_invalid';
       }
+
+      // seg1d: verify uuid↔wa binding against control-plane DB
+      if (ticketStateTo === 'VERIFIED') {
+        const vres = await verify.verifyUuidWaBinding({ uuid: String(t.uuid||'').trim(), waE164: waNorm.e164 });
+        audit.appendAudit({
+          dataDir: DATA_DIR,
+          record: {
+            ts: nowIso(),
+            ticket_id: id,
+            entry_id: entryId,
+            action: 'verify_uuid_wa',
+            uuid: t.uuid || null,
+            wa_e164: waNorm.e164,
+            ok: Boolean(vres && vres.ok),
+            verified: Boolean(vres && vres.verified),
+            reason: (vres && vres.reason) || 'unknown'
+          }
+        });
+
+        if (vres && vres.ok && vres.verified) {
+          const prev2 = ticketStateTo;
+          ticketStateTo = sm.nextState(ticketStateTo, 'START'); // VERIFIED -> IN_PROGRESS
+          audit.appendAudit({
+            dataDir: DATA_DIR,
+            record: {
+              ts: nowIso(),
+              ticket_id: id,
+              entry_id: entryId,
+              action: 'state',
+              from: prev2,
+              to: ticketStateTo,
+              reason: 'verified_uuid_wa'
+            }
+          });
+        } else {
+          // not verified or not bound -> require info/linking
+          const prev2 = ticketStateTo;
+          ticketStateTo = 'NEEDS_INFO';
+          audit.appendAudit({
+            dataDir: DATA_DIR,
+            record: {
+              ts: nowIso(),
+              ticket_id: id,
+              entry_id: entryId,
+              action: 'state',
+              from: prev2,
+              to: ticketStateTo,
+              reason: (vres && vres.reason) ? String(vres.reason) : 'verify_failed'
+            }
+          });
+        }
+      }
+
       audit.appendAudit({
         dataDir: DATA_DIR,
         record: {
