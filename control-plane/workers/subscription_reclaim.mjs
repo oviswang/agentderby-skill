@@ -2,12 +2,15 @@
 /**
  * subscription_reclaim.mjs
  *
- * Reclaim expired subscriptions and return instances to pool via reimage + pool init.
+ * Reclaim expired subscriptions.
  *
  * Policy:
  * - Grace for past_due/payment_failed: 24h from first observation (stored in deliveries.meta_json.payment_failed_since).
  * - End of access: current_period_end (preferred); fallback to cancel_at.
- * - Reclaim action: mark delivery + instance states, then ResetInstance, then call /api/ops/pool/init (init_only).
+ *
+ * Safety model (owner-confirmed):
+ * - This worker MUST NOT perform destructive actions automatically (no reimage / terminate).
+ * - It only marks states + notifies, moving instances to RECLAIM_PENDING for manual execution.
  *
  * Safety:
  * - Processes at most 1 instance per run.
@@ -22,6 +25,9 @@ const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 const API_BASE = process.env.BOTHOOK_API_BASE || 'http://127.0.0.1:18998';
 const TARGET_READY = parseInt(process.env.BOTHOOK_POOL_TARGET_READY || '5', 10);
 const GRACE_MS = 24 * 60 * 60 * 1000;
+
+// Instances moved to this lifecycle_status will not be allocated by the pool allocator.
+const RECLAIM_PENDING = 'RECLAIM_PENDING';
 
 function parseJson(s) {
   try { return s ? JSON.parse(s) : {}; } catch { return {}; }
@@ -119,7 +125,8 @@ function main() {
   const { db } = openDb();
   const ts = nowIso();
 
-  // Candidate: allocated instances with active delivery + a Stripe subscription row.
+  // Candidate: instances in ALLOCATED/DELIVERED with an active-ish delivery + a Stripe subscription row.
+  // (We include DELIVERED to ensure reclaim works for already delivered users too.)
   const rows = db.prepare(
     `SELECT
         i.instance_id,
@@ -140,7 +147,7 @@ function main() {
      FROM instances i
      JOIN deliveries d ON d.instance_id = i.instance_id
      JOIN subscriptions s ON s.user_id = d.user_id
-     WHERE i.lifecycle_status = 'ALLOCATED'
+     WHERE i.lifecycle_status IN ('ALLOCATED','DELIVERED')
        AND d.status IN ('ACTIVE','DELIVERED','PAID')
        AND s.provider = 'stripe'
      ORDER BY s.updated_at ASC
@@ -205,91 +212,48 @@ function main() {
   const user_id = decided.user_id;
 
   const readyNow = db.prepare(`SELECT COUNT(*) c FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='READY'`).get().c;
-  const shouldDestroy = readyNow >= TARGET_READY;
 
   // 1) Mark DB states (idempotent-ish)
+  // NOTE: no destructive cloud actions here. We only mark RECLAIM_PENDING.
   db.exec('BEGIN IMMEDIATE');
   try {
-    db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
-      .run('EXPIRED_RECLAIMING', ts, mergeMeta(decided.delivery_meta, { reclaim_reason: decided.reason, reclaim_started_at: ts, reclaim_plan: shouldDestroy ? 'destroy' : 'reimage_and_return_to_pool' }), delivery_id);
-
-    if (shouldDestroy) {
-      db.prepare(
-        `UPDATE instances
-            SET lifecycle_status='TERMINATING',
-                health_status='UNKNOWN',
-                assigned_user_id=NULL,
-                assigned_order_id=NULL,
-                assigned_at=NULL,
-                terminated_at=COALESCE(terminated_at, ?),
-                meta_json=?
-          WHERE instance_id=?`
-      ).run(ts, mergeMeta(decided.instance_meta, { reclaimed_from_user_id: user_id, reclaim_reason: decided.reason, reclaim_started_at: ts, reclaim_plan: 'destroy' }), instance_id);
-    } else {
-      db.prepare(
-        `UPDATE instances
-            SET lifecycle_status='IN_POOL',
-                health_status='NEEDS_VERIFY',
-                assigned_user_id=NULL,
-                assigned_order_id=NULL,
-                assigned_at=NULL,
-                meta_json=?
-          WHERE instance_id=?`
-      ).run(mergeMeta(decided.instance_meta, { reclaimed_from_user_id: user_id, reclaim_reason: decided.reason, reclaim_started_at: ts, reclaim_plan: 'reimage_and_return_to_pool' }), instance_id);
+    const dcur = db.prepare('SELECT status, meta_json FROM deliveries WHERE delivery_id=?').get(delivery_id);
+    const ist = String(dcur?.status || '').toUpperCase();
+    if (ist === 'EXPIRED_RECLAIMING' || ist === 'RECLAIM_PENDING') {
+      db.exec('COMMIT');
+      console.log(JSON.stringify({ ok:true, ts, action:'already_pending', instance_id, delivery_id, reason: decided.reason }, null, 2));
+      return;
     }
 
+    db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
+      .run('EXPIRED_RECLAIMING', ts, mergeMeta(decided.delivery_meta, { reclaim_reason: decided.reason, reclaim_started_at: ts, reclaim_plan: 'manual_reclaim_pending' }), delivery_id);
+
+    db.prepare(
+      `UPDATE instances
+          SET lifecycle_status=?,
+              health_status='NEEDS_VERIFY',
+              assigned_user_id=NULL,
+              assigned_order_id=NULL,
+              assigned_at=NULL,
+              meta_json=?
+        WHERE instance_id=?`
+    ).run(
+      RECLAIM_PENDING,
+      mergeMeta(decided.instance_meta, { reclaimed_from_user_id: user_id, reclaim_reason: decided.reason, reclaim_started_at: ts, reclaim_plan: 'manual_reclaim_pending' }),
+      instance_id
+    );
+
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-      .run(crypto.randomUUID(), ts, 'instance', instance_id, 'SUBSCRIPTION_RECLAIM_START', JSON.stringify({ delivery_id, user_id, reason: decided.reason, readyNow, targetReady: TARGET_READY, plan: shouldDestroy ? 'destroy' : 'reimage' }));
+      .run(crypto.randomUUID(), ts, 'instance', instance_id, 'SUBSCRIPTION_RECLAIM_PENDING', JSON.stringify({ delivery_id, user_id, reason: decided.reason, readyNow, targetReady: TARGET_READY, plan: 'manual' }));
     db.exec('COMMIT');
   } catch (e) {
     try { db.exec('ROLLBACK'); } catch {}
     throw e;
   }
 
-  if (shouldDestroy) {
-    // Two-step best-effort: stop -> check returnable -> terminate
-    try {
-      ensureStopped(instance_id);
-    } catch (e) {
-      console.error('[subscription_reclaim] stop failed (continuing)', String(e?.message || e));
-    }
-
-    let ret = null;
-    try { ret = returnable(instance_id); } catch {}
-
-    try {
-      terminate(instance_id);
-      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-        .run(crypto.randomUUID(), ts, 'instance', instance_id, 'SUBSCRIPTION_RECLAIM_TERMINATE_SENT', JSON.stringify({ returnable: ret }));
-    } catch (e) {
-      console.error('[subscription_reclaim] terminate failed', String(e?.message || e));
-      process.exit(3);
-    }
-
-    const out = { ok:true, ts, action:'destroy', instance_id, delivery_id, reason: decided.reason, readyNow, targetReady: TARGET_READY, returnable: ret };
-    console.log(JSON.stringify(out, null, 2));
-    tgSend(`[bothook] subscription_reclaim: destroy sent instance=${instance_id} returnable=${ret?.IsReturnable ?? ret?.isReturnable ?? 'unknown'}`);
-    return;
-  }
-
-  // Else: reimage and return to pool
-  try {
-    tccli(`tccli lighthouse ResetInstance --region ${REGION} --InstanceId ${instance_id} --BlueprintId ${BLUEPRINT_ID} --output json`);
-  } catch (e) {
-    console.error('[subscription_reclaim] reset failed', String(e?.message || e));
-    process.exit(3);
-  }
-
-  let job = null;
-  try {
-    job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
-  } catch (e) {
-    console.error('[subscription_reclaim] pool init trigger failed', String(e?.message || e));
-  }
-
-  const out = { ok:true, ts, action:'reimage', instance_id, delivery_id, reason: decided.reason, readyNow, targetReady: TARGET_READY, reset_blueprint_id: BLUEPRINT_ID, pool_init: job };
+  const out = { ok:true, ts, action:'mark_reclaim_pending', instance_id, delivery_id, reason: decided.reason, readyNow, targetReady: TARGET_READY };
   console.log(JSON.stringify(out, null, 2));
-  tgSend(`[bothook] subscription_reclaim: reimage+init triggered instance=${instance_id}`);
+  tgSend(`[bothook] subscription_reclaim: pending (manual) instance=${instance_id} delivery=${delivery_id} reason=${decided.reason}`);
 }
 
 main();
