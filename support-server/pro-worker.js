@@ -87,10 +87,26 @@ function hasHan(s){ return /[\u4E00-\u9FFF]/.test(s || ''); }
 
 function detectLang(ticket){
   // Policy: trust page_lang from the form; default to English if absent.
-  const pl = (ticket.page_lang || '').toString().trim().toLowerCase();
-  if (!pl) return 'en';
-  if (pl.startsWith('zh')) return 'zh';
-  // Extend later for more languages; for now only zh/en are supported.
+  // Normalization rules:
+  // - prefer an exact i18n file match if present (support-server/i18n/<lang>.json)
+  // - map common Traditional Chinese tags to zh-tw
+  const raw = (ticket.page_lang || '').toString().trim().toLowerCase();
+  if (!raw) return 'en';
+
+  const pl = raw.replace(/_/g, '-');
+  const i18nDir = path.join(__dirname, 'i18n');
+  const hasI18n = (lang) => {
+    try { return fs.existsSync(path.join(i18nDir, String(lang).toLowerCase() + '.json')); }
+    catch { return false; }
+  };
+
+  if (pl === 'zh-hant' || pl === 'zh-hk' || pl === 'zh-mo') return 'zh-tw';
+  if (pl.startsWith('zh-tw')) return 'zh-tw';
+
+  if (hasI18n(pl)) return pl;
+  if (pl.startsWith('zh') && hasI18n('zh-tw')) return 'zh-tw';
+
+  // Extend later for more languages; for now default to English when no template exists.
   return 'en';
 }
 
@@ -261,7 +277,7 @@ function renderReply(ticket){
   const category = summarizeCategory(ticket.message);
   const isFollowup = String(ticket.status || '').toLowerCase() === 'followup';
 
-  if (lang === 'zh') {
+  if (lang === 'zh' || lang === 'zh-tw') {
     const subject = `[#${id}] BOTHook 支持回复${isFollowup ? '（跟进）' : ''}`;
     const steps = categoryNextStepsZh(category);
     const text = `你好，\n\n我们已收到你的${isFollowup ? '补充信息' : '问题'}（工单号：${id}）。\n\n【问题分类】${category}\n\n【你提交的内容】\nEmail: ${ticket.email}${uuid ? `\nUUID: ${uuid}` : ''}\n\n${ticket.message}\n\n【建议与下一步】\n${steps.map((s,i)=>`${i+1}) ${s}`).join('\n')}\n\n你也可以继续补充：在联系表单里填写同一个 ticket_id（${id}），我们会把它作为同一工单跟进。\n\n— BOTHook Support`;
