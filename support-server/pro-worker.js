@@ -17,6 +17,32 @@ const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
+function parseEnvFile(p){
+  try {
+    const out = {};
+    const raw = fs.readFileSync(p, 'utf8');
+    for (const line of raw.split(/\r?\n/)) {
+      const t = String(line||'').trim();
+      if (!t || t.startsWith('#')) continue;
+      const i = t.indexOf('=');
+      if (i <= 0) continue;
+      const k = t.slice(0,i).trim();
+      const v = t.slice(i+1).trim();
+      out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function extractDomain(text){
+  const t = String(text||'');
+  const m = t.match(/\b([a-z0-9-]+\.)+[a-z]{2,24}\b/ig);
+  if (!m || !m.length) return '';
+  return m[0].toLowerCase();
+}
+
 // seg1c: minimal verify/state-machine/audit wiring (ESM modules loaded from CommonJS)
 let __seg1cMods = null;
 async function seg1cLoadMods(){
@@ -310,12 +336,50 @@ async function renderBillingCancelReply(ticket){
   }
 }
 
-function renderReply(ticket){
+async function renderReply(ticket){
   const lang = detectLang(ticket);
   const id = ticket.ticket_id;
   const uuid = ticket.uuid ? String(ticket.uuid).trim() : '';
   const category = summarizeCategory(ticket.message);
   const isFollowup = String(ticket.status || '').toLowerCase() === 'followup';
+  const domain = extractDomain(ticket.message);
+  if (category === 'domain/hosting' && domain) {
+    // Phase3 S2: read-only DNS diagnostics via Tencent DNSPod API.
+    // Note: this does NOT modify anything.
+    try {
+      const tencentEnvPath = process.env.TENCENT_ENV || '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env';
+      const env = parseEnvFile(tencentEnvPath);
+      const secretId = env.TENCENTCLOUD_SECRET_ID || '';
+      const secretKey = env.TENCENTCLOUD_SECRET_KEY || '';
+
+      if (secretId && secretKey) {
+        const execDryRun = String(process.env.SUPPORT_EXECUTOR_DRY_RUN || '').trim() === '1';
+        const { makeActions } = await import(pathToFileURL(path.join(__dirname, 'lib', 'actions', 'index.mjs')).href);
+        const { runPlan } = await import(pathToFileURL(path.join(__dirname, 'lib', 'executor.mjs')).href);
+
+        const evidenceDir = path.join(process.env.SUPPORT_DATA_DIR || '/home/ubuntu/.openclaw/workspace/support', 'evidence', String(ticket.ticket_id||'unknown'), String(Date.now()));
+        const auditPath = path.join(process.env.SUPPORT_DATA_DIR || '/home/ubuntu/.openclaw/workspace/support', 'handled.jsonl');
+
+        const plan = {
+          plan_id: `dns_ro_${ticket.ticket_id}_${Date.now()}`,
+          steps: [
+            { id: 'dnspod_record_list', type: 'dnspod.describe_record_list', params: { domain } },
+          ],
+        };
+
+        await runPlan({
+          plan,
+          ctx: { ticket_id: ticket.ticket_id, domain },
+          actions: makeActions({ secretId, secretKey }),
+          evidenceDir,
+          auditPath,
+          dryRun: execDryRun,
+        });
+      }
+    } catch {
+      // best-effort
+    }
+  }
 
   if (lang === 'zh' || lang === 'zh-tw') {
     const subject = `[#${id}] BOTHook 支持回复${isFollowup ? '（跟进）' : ''}`;
@@ -590,9 +654,9 @@ async function main(){
       // billing cancel: provide self-service portal shortlink (no Stripe write operations)
       if (summarizeCategory(t.message) === 'billing/cancel') {
         const r2 = await renderBillingCancelReply(t);
-        reply = r2 || renderReply(t);
+        reply = r2 || (await renderReply(t));
       } else {
-        reply = renderReply(t);
+        reply = await renderReply(t);
       }
     }
 
