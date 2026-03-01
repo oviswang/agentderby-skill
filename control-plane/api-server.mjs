@@ -1778,6 +1778,23 @@ app.post('/api/billing/cancel_link', async (req, res) => {
   }
 });
 
+function hasOtherActiveDeliveriesOnInstance(db, instanceId, uuid) {
+  try {
+    const rows = db.prepare(`
+      SELECT delivery_id, provision_uuid, status, updated_at
+      FROM deliveries
+      WHERE instance_id = ?
+        AND provision_uuid != ?
+        AND status IN ('LINKING','ACTIVE','BOUND_UNPAID','PAID','DELIVERING','DELIVERED')
+      ORDER BY datetime(updated_at) DESC
+      LIMIT 5
+    `).all(instanceId, uuid);
+    return rows || [];
+  } catch {
+    return [];
+  }
+}
+
 app.post('/api/wa/start', async (req, res) => {
   try {
     res.set('x-bothook-build', 'wa-start-alloc-v2-user-machine');
@@ -1809,13 +1826,19 @@ app.post('/api/wa/start', async (req, res) => {
         return send(res, 503, { ok:false, error:'no_provision_ready_instances' });
       }
 
+      // Extra guard: only consider instances that have no other non-terminal deliveries bound to them.
+      const conflictFree = provisionReady.filter((c) => !hasOtherActiveDeliveriesOnInstance(db, c.instance_id, uuid).length);
+
       let chosen = null;
-      for (const c of provisionReady) {
+      for (const c of conflictFree) {
         const inst = getInstanceById(db, c.instance_id);
         const probe = probeInstanceWhatsappClean(db, inst);
         if (probe.clean) { chosen = inst; break; }
       }
       if (!chosen) {
+        if (conflictFree.length !== provisionReady.length) {
+          return send(res, 503, { ok:false, error:'no_conflict_free_instances_available' });
+        }
         return send(res, 503, { ok:false, error:'no_clean_instances_available' });
       }
 
@@ -1853,6 +1876,28 @@ app.post('/api/wa/start', async (req, res) => {
 
     const instance = getInstanceById(db, delivery.instance_id);
     if (!instance?.public_ip) return send(res, 500, { ok: false, error: 'instance_missing_ip' });
+
+    // Safety: prevent multiple active deliveries from sharing one instance (causes WA/gateway flapping).
+    // If this happens, surface a 409 and require ops intervention rather than silently hijacking.
+    try {
+      const conflicts = hasOtherActiveDeliveriesOnInstance(db, instance.instance_id, uuid);
+      if (conflicts.length) {
+        try {
+          const ts = nowIso();
+          db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+            crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'INSTANCE_CONFLICT_DETECTED',
+            JSON.stringify({ uuid, instance_id: instance.instance_id, conflicts })
+          );
+        } catch {}
+        return send(res, 409, {
+          ok: false,
+          error: 'instance_conflict',
+          detail: `instance ${instance.instance_id} already has other active deliveries`,
+          conflicts,
+          instance_id: instance.instance_id,
+        });
+      }
+    } catch {}
 
     const force = Boolean(req.body?.force);
 
