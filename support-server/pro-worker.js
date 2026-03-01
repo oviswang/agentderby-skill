@@ -245,6 +245,22 @@ function tpl(str, vars){
   return out;
 }
 
+async function renderConfirmPlanReply(ticket, { planId, summaryLines } = {}){
+  const lang = detectLang(ticket);
+  const id = ticket.ticket_id;
+  const subject = (lang === 'zh' || lang === 'zh-tw')
+    ? `[#${id}] 请确认执行（${planId}）`
+    : `[#${id}] Please confirm execution (${planId})`;
+
+  const summary = (Array.isArray(summaryLines) ? summaryLines : []).join('\n');
+
+  const text = (lang === 'zh' || lang === 'zh-tw')
+    ? `我们可以帮你执行以下操作（可逆写）：\n\n${summary}\n\n如果你确认执行，请直接回复：\nCONFIRM ${planId}\n\n如不想执行，请忽略本邮件或回复 CANCEL。\n\n— BOTHook Support`
+    : `We can perform the following reversible changes for you:\n\n${summary}\n\nIf you confirm, reply with:\nCONFIRM ${planId}\n\nTo cancel, ignore this email or reply CANCEL.\n\n— BOTHook Support`;
+
+  return { lang, subject, text, html: null, category: 'confirm' };
+}
+
 function renderNeedsInfoReply(ticket, { reason, expectedE164 } = {}){
   const lang = detectLang(ticket);
   const id = ticket.ticket_id;
@@ -536,6 +552,25 @@ async function main(){
 
     const entryId = stableEntryId(t);
     if (state.processedEntries[entryId]) continue; // already handled this specific submission
+
+    // Phase3 S3: CONFIRM plan execution (write operations are gated by explicit confirm)
+    try {
+      const { extractConfirm, getPlan, setPlanStatus } = await import(pathToFileURL(path.join(__dirname, 'lib', 'plans.mjs')).href);
+      const maybePlanId = extractConfirm(String(t.message || ''));
+      if (maybePlanId) {
+        const plan = getPlan({ dataDir: DATA_DIR, planId: maybePlanId });
+        if (plan && plan.status === 'PENDING_CONFIRM') {
+          // Mark confirmed; executor integration for writes will run in later segment.
+          setPlanStatus({ dataDir: DATA_DIR, planId: maybePlanId, patch: { status: 'CONFIRMED', confirmed_at: nowIso(), ticket_id: id } });
+          // mark entry processed
+          state.processedEntries[entryId] = { at: nowIso(), ticket_id: id, confirmed_plan: maybePlanId };
+          saveState(state);
+          processed += 1;
+          if (processed >= MAX_PER_RUN) break;
+          continue;
+        }
+      }
+    } catch {}
 
     // seg1c: minimal state machine (wa E.164 validation only)
     let ticketStateFrom = 'NEEDS_INFO';
