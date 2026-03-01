@@ -2207,14 +2207,34 @@ app.get('/api/wa/welcome_unpaid_text', async (req, res) => {
       if (j?.ok && j?.payUrl) payShortLink = String(j.payUrl);
     } catch {}
 
-    // Specs (best-effort)
-    let cpu='?', ram_gb='?', disk_gb='?';
+    // Specs (best-effort). Never allow blanks; hard-fallback to default 2/2/40.
+    let cpu = '?', ram_gb = '?', disk_gb = '?';
     try {
-      const m = jsonMeta(inst.meta_json) || {};
-      if (m.cpu) cpu=String(m.cpu);
-      if (m.ram_gb) ram_gb=String(m.ram_gb);
-      if (m.disk_gb) disk_gb=String(m.disk_gb);
+      const specs = readInstanceSpecsBestEffort(inst);
+      cpu = String(specs.cpu || '').trim() || '?';
+      ram_gb = String(specs.ram_gb || '').trim() || '?';
+      disk_gb = String(specs.disk_gb || '').trim() || '?';
     } catch {}
+
+    if (cpu === '?' || ram_gb === '?' || disk_gb === '?') {
+      try {
+        const sr = poolSsh(inst, `set -euo pipefail; `
+          + `CPU=$(nproc 2>/dev/null || echo '?'); `
+          + `RAM=$(free -m 2>/dev/null | awk '/Mem:/{printf "%.0f", $2/1024}' || echo '?'); `
+          + `DISK=$(df -BG / 2>/dev/null | awk 'NR==2{gsub(/G/,"",$2); print $2}' || echo '?'); `
+          + `echo "${CPU} ${RAM} ${DISK}"`,
+          { timeoutMs: 6000, tty: false, retries: 0 }
+        );
+        const parts = String(sr.stdout||'').trim().split(/\s+/);
+        if (parts[0] && cpu === '?') cpu = parts[0];
+        if (parts[1] && ram_gb === '?') ram_gb = parts[1];
+        if (parts[2] && disk_gb === '?') disk_gb = parts[2];
+      } catch {}
+    }
+
+    if (cpu === '?') cpu = '2';
+    if (ram_gb === '?') ram_gb = '2';
+    if (disk_gb === '?') disk_gb = '40';
 
     let openclawVersion='';
     try {
