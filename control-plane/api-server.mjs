@@ -1241,19 +1241,29 @@ app.post('/api/ops/pool/init', (req, res) => {
     const instance_id = String(req.body?.instance_id || '').trim();
     const mode = String(req.body?.mode || 'init_only').trim();
     if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
-    if (poolInitBusy) return send(res, 429, { ok:false, error:'pool_init_busy' });
+    // Do not 429; enqueue and return QUEUED so callers can be fire-and-forget.
+    // poolInitBusy controls worker concurrency, not admission.
+    // (poolInitBusy is still exposed via /api/ops/pool/init/busy for suppressing cloud creates.)
     if (!['init_only','reimage_and_init'].includes(mode)) return send(res, 400, { ok:false, error:'bad_mode' });
 
     const job_id = crypto.randomUUID();
     const job = { job_id, instance_id, mode, status:'QUEUED', startedAt:null, endedAt:null, log:[] };
     poolInitJobs.set(job_id, job);
-    poolInitBusy = true;
+    const runner = async () => {
+      // Single-worker concurrency: run jobs one-by-one to avoid overloading cloud APIs / SSH and to keep logs linear.
+      while (true) {
+        // pick oldest QUEUED job
+        const next = [...poolInitJobs.values()].find(j => String(j?.status||'').toUpperCase() === 'QUEUED');
+        if (!next) break;
+        poolInitBusy = true;
+        try { await runPoolInitJob(next); } finally { poolInitBusy = false; }
+      }
+    };
 
-    setTimeout(async () => {
-      try { await runPoolInitJob(job); } finally { poolInitBusy = false; }
-    }, 0);
+    // Kick the runner (best-effort). If another request already kicked it, that's fine.
+    setTimeout(() => { runner().catch(()=>{}); }, 0);
 
-    return send(res, 200, { ok:true, job_id, status: job.status });
+    return send(res, 200, { ok:true, job_id, status: job.status, queued: true, busy: Boolean(poolInitBusy) });
   } catch {
     return send(res, 500, { ok:false, error:'server_error' });
   }
