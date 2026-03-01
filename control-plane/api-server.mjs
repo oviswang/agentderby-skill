@@ -1250,7 +1250,7 @@ async function runPoolInitJob(job){
     const boot = poolSsh(
       inst,
       // IMPORTANT: enforce pipefail so curl failures do not get masked by a successful `bash` exit.
-      `sudo bash -lc "set -euo pipefail; export DEBIAN_FRONTEND=noninteractive; curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors https://p.bothook.me/artifacts/${bootstrapVer}/bootstrap.sh | bash"`,
+      `sudo bash -lc "set -euo pipefail; export DEBIAN_FRONTEND=noninteractive; curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors https://p.bothook.me/artifacts/${bootstrapVer}/bootstrap.sh | ARTIFACT_BASE_URL=https://p.bothook.me/artifacts/${bootstrapVer} bash"`,
       { timeoutMs: 20*60*1000, tty:false, retries:0 }
     );
     if ((boot.code ?? 1) !== 0) throw new Error('bootstrap_failed');

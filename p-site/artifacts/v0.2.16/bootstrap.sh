@@ -5,7 +5,7 @@ set -euo pipefail
 # Goal: bring a fresh Ubuntu machine to a verifiable "provision-ready" state.
 # This version also installs Node.js + OpenClaw and provisions a system-level gateway unit.
 
-ARTIFACT_BASE_URL="${ARTIFACT_BASE_URL:-https://p.bothook.me/artifacts/v0.2.14}"
+ARTIFACT_BASE_URL="${ARTIFACT_BASE_URL:-https://p.bothook.me/artifacts/v0.2.16}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/bothook}"
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 
