@@ -20,7 +20,7 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 
 import { openDb, nowIso } from './lib/db.mjs';
 
@@ -1282,9 +1282,8 @@ async function runPoolInitJob(job){
 function spawnOpsWorkerBestEffort(){
   // Fire-and-forget: run worker loop in a separate process so API remains responsive.
   try {
-    const { spawn } = require('child_process');
     const env = { ...process.env, BOTHOOK_OPS_WORKER: '1' };
-    const p = spawn('/usr/bin/node', [__filename], { env, stdio: 'ignore', detached: true });
+    const p = spawn('/usr/bin/node', [new URL(import.meta.url).pathname], { env, stdio: 'ignore', detached: true });
     p.unref();
   } catch {}
 }
@@ -3299,7 +3298,6 @@ app.post('/api/wa/reset', async (req, res) => {
 async function runOpsWorkerLoop(){
   // Single-process worker loop. Use a lock file to avoid concurrent workers.
   const lockPath = '/tmp/bothook_ops_worker.lock';
-  const fs = require('fs');
   let fd = null;
   try {
     fd = fs.openSync(lockPath, 'wx');
