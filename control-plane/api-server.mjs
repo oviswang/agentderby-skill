@@ -1204,9 +1204,12 @@ async function runPoolInitJob(job){
           if (txt && txt !== 'missing') {
             const j = JSON.parse(txt);
             if (j && j.ok === true) {
-              db.prepare('UPDATE instances SET health_status=?, last_ok_at=? WHERE instance_id=?').run('READY', nowIso(), job.instance_id);
+              const ts = nowIso();
+              db.prepare(
+                'UPDATE instances SET health_status=?, last_ok_at=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
+              ).run('READY', ts, 'postboot_ok', 'init_pull', txt.slice(0, 2000), job.instance_id);
               job.status='DONE';
-              job.endedAt=nowIso();
+              job.endedAt=ts;
               pushJobLog(job, 'done: READY (pulled postboot_verify.json)');
               return;
             }
@@ -1231,7 +1234,9 @@ async function runPoolInitJob(job){
     pushJobLog(job, `error: ${e?.message || 'unknown'}`);
     try {
       const { db } = openDb();
-      db.prepare('UPDATE instances SET health_status=? WHERE instance_id=?').run('NEEDS_VERIFY', job.instance_id);
+      db.prepare(
+        'UPDATE instances SET health_status=?, health_reason=?, health_source=? WHERE instance_id=?'
+      ).run('NEEDS_VERIFY', String(e?.message || 'unknown'), 'init_worker', job.instance_id);
     } catch {}
   }
 }
