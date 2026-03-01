@@ -1,0 +1,7 @@
+{
+  "langName": "Tiếng Việt",
+  "needsInfo": {
+    "subject": "[#{{ticket_id}}] Hỗ trợ BOTHook — Cần thêm thông tin",
+    "body": "Chúng tôi đã nhận được tin nhắn của bạn (Ticket: {{ticket_id}}).\n\nĐể xác minh và hỗ trợ bạn một cách an toàn, vui lòng trả lời với:\n- Số WhatsApp theo định dạng E.164 (ví dụ: +84...)\n- UUID / liên kết bàn giao\n\nBạn có thể trả lời email này kèm các thông tin ở trên."
+  }
+}

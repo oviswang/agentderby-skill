@@ -1,0 +1,7 @@
+{
+  "langName": "Türkçe",
+  "needsInfo": {
+    "subject": "[#{{ticket_id}}] BOTHook Destek — Daha fazla bilgi gerekli",
+    "body": "Mesajınızı aldık (Ticket: {{ticket_id}}).\n\nGüvenli şekilde doğrulayıp yardımcı olabilmemiz için lütfen şu bilgileri yanıtlayın:\n- WhatsApp telefon numaranız (E.164 formatı, örn. +90...)\n- UUID / teslimat bağlantısı\n\nBu e-postaya yanıt vererek yukarıdaki bilgileri gönderebilirsiniz."
+  }
+}

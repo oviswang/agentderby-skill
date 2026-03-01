@@ -1,0 +1,7 @@
+{
+  "langName": "Français",
+  "needsInfo": {
+    "subject": "[#{{ticket_id}}] Support BOTHook — Informations supplémentaires requises",
+    "body": "Nous avons bien reçu votre message (Ticket : {{ticket_id}}).\n\nPour vérifier votre identité et vous aider en toute sécurité, merci de répondre avec :\n- Votre numéro WhatsApp au format E.164 (ex. +33...)\n- UUID / lien de livraison\n\nVous pouvez répondre à cet e-mail avec les informations ci-dessus."
+  }
+}

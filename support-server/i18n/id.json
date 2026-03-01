@@ -1,0 +1,7 @@
+{
+  "langName": "Bahasa Indonesia",
+  "needsInfo": {
+    "subject": "[#{{ticket_id}}] Dukungan BOTHook — Perlu info tambahan",
+    "body": "Kami telah menerima pesan Anda (Ticket: {{ticket_id}}).\n\nUntuk verifikasi dan membantu Anda dengan aman, mohon balas dengan:\n- Nomor WhatsApp Anda dalam format E.164 (mis. +62...)\n- UUID / tautan pengiriman\n\nAnda bisa membalas email ini dengan informasi di atas."
+  }
+}
