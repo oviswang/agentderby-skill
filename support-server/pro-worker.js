@@ -20,6 +20,7 @@ const { pathToFileURL } = require('url');
 // seg1c: minimal verify/state-machine/audit wiring (ESM modules loaded from CommonJS)
 let __seg1cMods = null;
 async function seg1cLoadMods(){
+  // NOTE: cache lives in __seg1cMods (avoid accidental typos like *seg1cMods)
   if (__seg1cMods) return __seg1cMods;
   const verify = await import(pathToFileURL(path.join(__dirname, 'lib', 'verify.mjs')).href);
   const sm = await import(pathToFileURL(path.join(__dirname, 'lib', 'state-machine.mjs')).href);
