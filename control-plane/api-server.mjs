@@ -1000,25 +1000,30 @@ async function waitPort22(ip, { timeoutMs=10*60*1000 } = {}){
   return false;
 }
 
-async function waitSshEcho(instance, { timeoutMs=12*60*1000 } = {}){
+async function waitSshEcho(instance, { timeoutMs=15*60*1000, phase='ssh' } = {}){
   // Harden: after reimage, SSH can be "half-up" for a while (port 22 open but handshake slow/reset).
-  // We treat this as transient and retry with backoff instead of failing fast.
+  // Strategy:
+  // - allow a longer total window
+  // - per-attempt timeout + retries
+  // - backoff
+  // - return diagnostic context
   const start = Date.now();
   let attempt = 0;
   let lastDetail = '';
+  let lastCode = null;
   while (Date.now()-start < timeoutMs) {
     attempt++;
-    // Allow a longer single-attempt timeout and internal retries.
-    const r = poolSsh(instance, 'echo ssh_ok', { timeoutMs: 20000, tty: false, retries: 2 });
+    const r = poolSsh(instance, 'echo ssh_ok', { timeoutMs: 25000, tty: false, retries: 3 });
+    lastCode = (r.code ?? null);
     const detail = String((r.stdout || '') + (r.stderr || '')).trim();
-    if (detail) lastDetail = detail.slice(-400);
-    if ((r.code ?? 1) === 0 && String(r.stdout||'').includes('ssh_ok')) return { ok: true, attempt, lastDetail };
+    if (detail) lastDetail = detail.slice(-600);
+    if ((r.code ?? 1) === 0 && String(r.stdout||'').includes('ssh_ok')) return { ok: true, attempt, lastDetail, lastCode, phase };
 
-    // Backoff (max 30s) to avoid thrashing the SSH daemon during boot.
-    const sleepMsX = Math.min(30000, 4000 + attempt * 1500);
+    // Backoff (max 45s) to avoid thrashing the SSH daemon during boot.
+    const sleepMsX = Math.min(45000, 5000 + attempt * 2000);
     await sleepMs(sleepMsX);
   }
-  return { ok: false, attempt, lastDetail };
+  return { ok: false, attempt, lastDetail, lastCode, phase };
 }
 
 async function associatePoolKey(instance_id){
@@ -1128,7 +1133,7 @@ async function runPoolInitJob(job){
     pushJobLog(job, 'wait port22');
     await waitPort22(inst.public_ip, { timeoutMs: 10*60*1000 });
     pushJobLog(job, 'wait ssh echo');
-    const sshWait = await waitSshEcho(inst, { timeoutMs: 12*60*1000 });
+    const sshWait = await waitSshEcho(inst, { timeoutMs: 15*60*1000, phase: 'post-reimage' });
     if (!sshWait.ok) {
       // Preserve debug context for diagnosis.
       pushJobLog(job, `ssh wait failed (attempts=${sshWait.attempt})`);
