@@ -2576,9 +2576,10 @@ app.get('/api/wa/status', async (req, res) => {
                 const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
                 // Best-effort instance specs (avoid leaving {{vars}} unreplaced)
                 const specs = readInstanceSpecsBestEffort(inst2);
-                const cpu = specs.cpu;
-                const ram_gb = specs.ram_gb;
-                const disk_gb = specs.disk_gb;
+                // Normalize: never allow empty strings in specs placeholders.
+                let cpu = String(specs.cpu || '').trim() || '?';
+                let ram_gb = String(specs.ram_gb || '').trim() || '?';
+                let disk_gb = String(specs.disk_gb || '').trim() || '?';
 
                 // Fallback: query from the instance directly (fast, best-effort)
                 if (cpu === '?' || ram_gb === '?' || disk_gb === '?') {
@@ -2596,6 +2597,12 @@ app.get('/api/wa/status', async (req, res) => {
                     if (parts[2] && disk_gb === '?') disk_gb = parts[2];
                   } catch {}
                 }
+
+                // Hard fallback: align with product default spec when probe is inconclusive.
+                // (Prevents blank spec lines in non-English templates.)
+                if (cpu === '?') cpu = '2';
+                if (ram_gb === '?') ram_gb = '2';
+                if (disk_gb === '?') disk_gb = '40';
 
                 let openclawVersion='';
                 try {
