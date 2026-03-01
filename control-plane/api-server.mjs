@@ -1000,14 +1000,25 @@ async function waitPort22(ip, { timeoutMs=10*60*1000 } = {}){
   return false;
 }
 
-async function waitSshEcho(instance, { timeoutMs=10*60*1000 } = {}){
+async function waitSshEcho(instance, { timeoutMs=12*60*1000 } = {}){
+  // Harden: after reimage, SSH can be "half-up" for a while (port 22 open but handshake slow/reset).
+  // We treat this as transient and retry with backoff instead of failing fast.
   const start = Date.now();
+  let attempt = 0;
+  let lastDetail = '';
   while (Date.now()-start < timeoutMs) {
-    const r = poolSsh(instance, 'echo ssh_ok', { timeoutMs: 8000, tty: false, retries: 0 });
-    if ((r.code ?? 1) === 0 && String(r.stdout||'').includes('ssh_ok')) return true;
-    await sleepMs(5000);
+    attempt++;
+    // Allow a longer single-attempt timeout and internal retries.
+    const r = poolSsh(instance, 'echo ssh_ok', { timeoutMs: 20000, tty: false, retries: 2 });
+    const detail = String((r.stdout || '') + (r.stderr || '')).trim();
+    if (detail) lastDetail = detail.slice(-400);
+    if ((r.code ?? 1) === 0 && String(r.stdout||'').includes('ssh_ok')) return { ok: true, attempt, lastDetail };
+
+    // Backoff (max 30s) to avoid thrashing the SSH daemon during boot.
+    const sleepMsX = Math.min(30000, 4000 + attempt * 1500);
+    await sleepMs(sleepMsX);
   }
-  return false;
+  return { ok: false, attempt, lastDetail };
 }
 
 async function associatePoolKey(instance_id){
@@ -1117,8 +1128,13 @@ async function runPoolInitJob(job){
     pushJobLog(job, 'wait port22');
     await waitPort22(inst.public_ip, { timeoutMs: 10*60*1000 });
     pushJobLog(job, 'wait ssh echo');
-    const sshOk = await waitSshEcho(inst, { timeoutMs: 10*60*1000 });
-    if (!sshOk) throw new Error('ssh_unreachable');
+    const sshWait = await waitSshEcho(inst, { timeoutMs: 12*60*1000 });
+    if (!sshWait.ok) {
+      // Preserve debug context for diagnosis.
+      pushJobLog(job, `ssh wait failed (attempts=${sshWait.attempt})`);
+      if (sshWait.lastDetail) pushJobLog(job, `ssh last: ${sshWait.lastDetail.replace(/\s+/g,' ').slice(0,200)}`);
+      throw new Error('ssh_unreachable');
+    }
 
     // Issue ready token (requires SSH to be actually usable).
     // Why here: issuing before SSH is ready causes READY_REPORT.txt to be missing, so postboot_verify cannot report READY.
