@@ -103,14 +103,28 @@ function sshProbe(ip) {
   try {
     const host = String(ip || '').trim();
     if (!host) return { ok: false, error: 'missing_ip' };
-    // Cheap probe: connect + run echo.
-    sh2(
+
+    // Probe in one SSH session to reduce latency.
+    // - ssh_ok: network + auth
+    // - has_openclaw: runtime presence
+    // - gateway_unit: systemd unit presence
+    const cmd =
       `ssh -i ${JSON.stringify(POOL_SSH_KEY)} `
       + `-o BatchMode=yes -o StrictHostKeyChecking=no `
       + `-o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null `
-      + `-o ConnectTimeout=5 ubuntu@${host} 'echo ok'`
-    );
-    return { ok: true };
+      + `-o ConnectTimeout=5 ubuntu@${host} `
+      + `'set -euo pipefail; `
+      + `echo ssh_ok; `
+      + `test -x /home/ubuntu/.npm-global/bin/openclaw && echo has_openclaw || echo no_openclaw; `
+      + `systemctl status openclaw-gateway.service >/dev/null 2>&1 && echo gateway_unit_ok || echo gateway_unit_missing'`;
+
+    const out = String(sh2(cmd) || '').trim();
+    const lines = out.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    const ok = lines.includes('ssh_ok');
+    const hasOpenclaw = lines.includes('has_openclaw');
+    const gatewayUnitOk = lines.includes('gateway_unit_ok');
+
+    return { ok, hasOpenclaw, gatewayUnitOk, raw: lines.slice(0, 10) };
   } catch (e) {
     return { ok: false, error: String(e?.message || e) };
   }
@@ -145,8 +159,10 @@ function main() {
       const renewFlag = it.RenewFlag || null;
       const instanceChargeType = it.InstanceChargeType || null;
 
-      // IN_POOL: enforce SSH key binding + SSH reachability as a READY gate.
+      // IN_POOL: enforce SSH key binding + SSH reachability + runtime presence as a READY gate.
       let desiredHealth = null;
+      let desiredReason = null;
+      let desiredSource = null;
       let sshOk = null;
       let renewFix = null;
 
@@ -180,9 +196,24 @@ function main() {
         if (pub && keyIds.includes(POOL_KEY_ID)) {
           const pr = sshProbe(pub);
           sshOk = Boolean(pr.ok);
-          desiredHealth = sshOk ? 'READY' : 'NEEDS_VERIFY';
+
+          if (!sshOk) {
+            desiredHealth = 'NEEDS_VERIFY';
+            desiredReason = 'ssh_fail';
+            desiredSource = 'cloud_reconcile';
+          } else if (!pr.hasOpenclaw || !pr.gatewayUnitOk) {
+            desiredHealth = 'NEEDS_VERIFY';
+            desiredReason = 'runtime_missing_openclaw';
+            desiredSource = 'cloud_reconcile';
+          } else {
+            desiredHealth = 'READY';
+            desiredReason = 'postboot_ok';
+            desiredSource = 'cloud_reconcile';
+          }
         } else {
           desiredHealth = 'NEEDS_VERIFY';
+          desiredReason = pub ? 'pool_key_missing' : 'missing_ip';
+          desiredSource = 'cloud_reconcile';
         }
       }
 
@@ -205,9 +236,11 @@ function main() {
                 zone=COALESCE(?,zone),
                 last_probe_at=?,
                 health_status=COALESCE(?, health_status),
+                health_reason=COALESCE(?, health_reason),
+                health_source=COALESCE(?, health_source),
                 meta_json=?
           WHERE instance_id=?`
-      ).run(pub, priv, bundle, blueprint, zone, ts, desiredHealth, meta2, instance_id);
+      ).run(pub, priv, bundle, blueprint, zone, ts, desiredHealth, desiredReason, desiredSource, meta2, instance_id);
       refreshed++;
     } catch (e) {
       fail++;
