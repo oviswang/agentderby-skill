@@ -127,10 +127,15 @@ const server = http.createServer(async (req, res) => {
       const fromEmail = (fromEmailMatch ? fromEmailMatch[1] : '').trim();
       if (!isEmail(fromEmail)) return send(res, 400, { ok: false, error: 'Invalid from email' });
 
-      // Extract ticket id BH-YYYYMMDD-XXXXXX from subject/body
-      const ticketIdMatch = (subject + '\n' + text).match(/\bBH-\d{8}-[A-Z0-9]{6}\b/);
+      // Extract ticket id from subject/body.
+      // Allow: BH-<A-Z0-9-> length 6..40 (e.g. BH-PH2-AC1), while keeping false positives low.
+      // Guard: require token marker "[#" OR explicit "Ticket" prefix nearby.
+      const blob = (subject + '\n' + text);
+      const ticketIdMatch = blob.match(/\[#(BH-[A-Z0-9-]{6,40})\]/i)
+        || blob.match(/\bTicket\s+(BH-[A-Z0-9-]{6,40})\b/i)
+        || blob.match(/\b(BH-\d{8}-[A-Z0-9]{6})\b/);
       if (!ticketIdMatch) return send(res, 200, { ok: true, ignored: true, reason: 'no_ticket_id' });
-      const ticketId = ticketIdMatch[0];
+      const ticketId = ticketIdMatch[1] || ticketIdMatch[0];
 
       // Load state to reuse last language for this ticket if present; default en.
       const stateFile = path.join(DATA_DIR, 'state.json');
