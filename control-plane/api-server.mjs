@@ -1967,6 +1967,10 @@ app.post('/api/wa/start', async (req, res) => {
     });
 
     if (rr.ok && rr.json) {
+      // After starting linking, proactively watch for WA becoming connected and trigger welcome.
+      // This removes the dependency on the frontend polling /api/wa/status.
+      try { startWelcomeWatch(uuid); } catch {}
+
       return send(res, 200, {
         ok: true,
         uuid,
@@ -2021,6 +2025,47 @@ function extractAsciiQrBlock(text) {
 
 const qrWatch = new Map();
 // qrWatch.get(uuid) => { lastHash, lastSeenAtMs, lastRestartAtMs }
+
+const welcomeWatch = new Map();
+// welcomeWatch.get(uuid) => { startedAtMs, timer }
+
+function startWelcomeWatch(uuid, { maxMs = 2 * 60 * 1000, intervalMs = 4000 } = {}) {
+  const u = String(uuid || '').trim();
+  if (!u) return;
+  if (welcomeWatch.has(u)) return;
+
+  const startedAtMs = Date.now();
+  const timer = setInterval(async () => {
+    try {
+      if (Date.now() - startedAtMs > maxMs) {
+        try { clearInterval(timer); } catch {}
+        welcomeWatch.delete(u);
+        return;
+      }
+
+      // Stop once welcome is confirmed sent.
+      try {
+        const { db } = openDb();
+        const d = db.prepare('SELECT meta_json FROM deliveries WHERE provision_uuid=? LIMIT 1').get(u);
+        const meta = jsonMeta(d?.meta_json) || {};
+        if (meta.welcome_unpaid_sent_at) {
+          try { clearInterval(timer); } catch {}
+          welcomeWatch.delete(u);
+          return;
+        }
+      } catch {}
+
+      // Trigger /api/wa/status internally; it contains the async welcome send logic.
+      try {
+        await fetch(`http://127.0.0.1:${PORT}/api/wa/status?uuid=${encodeURIComponent(u)}`);
+      } catch {}
+    } catch {}
+  }, intervalMs);
+
+  // do not hold the event loop open
+  try { timer.unref?.(); } catch {}
+  welcomeWatch.set(u, { startedAtMs, timer });
+}
 
 const qrCache = new Map();
 // qrCache.get(uuid) => { qrDataUrl, qrSeq, qrAt, cachedAtMs }
