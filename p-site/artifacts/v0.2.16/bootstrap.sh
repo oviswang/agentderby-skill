@@ -406,6 +406,10 @@ PY
   # If the service was already running and waiting, restart to pick up the new config.
   systemctl restart openclaw-gateway.service || true
 
+  # Suppress embedded-agent missing-key warnings (UX hardening).
+  # NOTE: patches OpenClaw dist bundles; errors remain in logs.
+  bash "$INSTALL_DIR/scripts/patch_openclaw_suppress_missing_key_warning.sh" || true
+
   # Ensure local login authority (pool stage). If control-plane takeover marker exists, remove it.
   rm -f /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true
 

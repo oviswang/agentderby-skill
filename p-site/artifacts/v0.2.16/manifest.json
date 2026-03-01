@@ -8,7 +8,7 @@
     },
     {
       "path": "bootstrap.sh",
-      "sha256": "63820fa6d6255d1dd2dd3f2f783ef0c3148d1ad27e83ec3020cf467dfbff5617",
+      "sha256": "ace6a3570427a62742b33990b37266301255c43cd9326215f7c9f46efc47f582",
       "bytes": 19168
     },
     {
@@ -145,6 +145,10 @@
       "path": "systemd/openclaw-gateway.service",
       "sha256": "35e9071b597cdb619088e23c901605af353d0ac7ac3d33602d6748c6698ac0be",
       "bytes": 764
+    },
+    {
+      "path": "scripts/patch_openclaw_suppress_missing_key_warning.sh",
+      "sha256": "9687cec2c98dccd6185f4fa16a88f4cdd8472bcf53009bde0bdfbf6cf666f00c"
     }
   ]
 }
