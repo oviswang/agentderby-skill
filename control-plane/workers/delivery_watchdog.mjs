@@ -102,7 +102,7 @@ function isPaid(db, delivery_status, delivery_meta_json, user_id) {
   return Boolean(m?.paid_at || m?.paid_confirmed_at || m?.payment_paid_at);
 }
 
-function main() {
+async function main() {
   const { db } = openDb();
   const ts = nowIso();
 
@@ -112,7 +112,7 @@ function main() {
   // Safety: clear at most 5 per run.
   try {
     const stale = db.prepare(
-      `SELECT d.delivery_id, d.instance_id, d.status, d.updated_at, d.meta_json AS delivery_meta,
+      `SELECT d.delivery_id, d.user_id, d.instance_id, d.status, d.updated_at, d.meta_json AS delivery_meta,
               COALESCE(i.lifecycle_status,'') AS lifecycle_status
          FROM deliveries d
          LEFT JOIN instances i ON i.instance_id = d.instance_id
@@ -264,11 +264,23 @@ function main() {
     return;
   }
 
-  // Stage B: reimage + return to pool via init
+  // Stage B: bound but unpaid. Safeguard: confirm payment before any action.
+  // We DO NOT auto-reimage here (L2). We release back to pool and raise an alert.
+  let confirmPaid = false;
+  try {
+    const j = await fetch(`${API_BASE}/api/pay/confirm?uuid=${encodeURIComponent(String(chosen.user_id || ''))}`).then(r => r.json()).catch(() => null);
+    confirmPaid = Boolean(j?.paid === true);
+  } catch { confirmPaid = false; }
+
+  if (confirmPaid) {
+    console.log(JSON.stringify({ ok:true, ts, action:'skip_paid_confirmed', stage, instance_id, delivery_id }, null, 2));
+    return;
+  }
+
   db.exec('BEGIN IMMEDIATE');
   try {
     db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
-      .run('PAYMENT_TIMEOUT', ts, mergeMeta(chosen.delivery_meta, { timeout_stage: stage, timeout_at: ts, reclaim_plan: 'reimage_and_return_to_pool' }), delivery_id);
+      .run('PAYMENT_TIMEOUT', ts, mergeMeta(chosen.delivery_meta, { timeout_stage: stage, timeout_at: ts, reclaim_plan: 'release_only_no_reimage' }), delivery_id);
 
     db.prepare(
       `UPDATE instances
@@ -279,34 +291,18 @@ function main() {
               assigned_at=NULL,
               meta_json=?
         WHERE instance_id=?`
-    ).run(mergeMeta(chosen.instance_meta, { reclaimed_by: 'delivery_watchdog', reclaimed_at: ts, timeout_stage: stage }), instance_id);
+    ).run(mergeMeta(chosen.instance_meta, { released_by: 'delivery_watchdog', released_at: ts, timeout_stage: stage }), instance_id);
 
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-      .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_PAYMENT_TIMEOUT_REIMAGE', JSON.stringify({ instance_id }));
+      .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_PAYMENT_TIMEOUT_RELEASE', JSON.stringify({ instance_id }));
     db.exec('COMMIT');
   } catch (e) {
     try { db.exec('ROLLBACK'); } catch {}
     throw e;
   }
 
-  // Cloud reimage
-  try {
-    tccli(`tccli lighthouse ResetInstance --region ${REGION} --InstanceId ${instance_id} --BlueprintId ${BLUEPRINT_ID} --output json`);
-  } catch (e) {
-    tgSend(`[bothook][watchdog][WARN] ResetInstance failed instance=${instance_id} delivery=${delivery_id}`);
-    throw e;
-  }
-
-  // Kick pool init
-  let job = null;
-  try {
-    job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
-  } catch {
-    job = { ok:false, error:'pool_init_trigger_failed' };
-  }
-
-  tgSend(`[bothook][watchdog] post-bind unpaid timeout (15m): reimage+init instance=${instance_id} delivery=${delivery_id}`);
-  console.log(JSON.stringify({ ok:true, ts, action:'reimage_and_init', stage, instance_id, delivery_id, job }, null, 2));
+  tgSend(`[bothook][watchdog] post-bind unpaid timeout (15m): released (no reimage) instance=${instance_id} delivery=${delivery_id}`);
+  console.log(JSON.stringify({ ok:true, ts, action:'release_no_reimage', stage, instance_id, delivery_id }, null, 2));
 }
 
 main();
