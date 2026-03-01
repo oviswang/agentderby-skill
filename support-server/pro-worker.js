@@ -339,6 +339,11 @@ async function sendEmail({ apiKey, to, from, replyTo, subject, html, text }) {
 }
 
 async function sendTelegram({ botToken, chatId, text }) {
+  const dryRun = String(process.env.SUPPORT_DRY_RUN || "").trim() === "1";
+  if (dryRun) {
+    console.log("[support-pro-worker][dry-run] telegram skipped");
+    return;
+  }
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
   const resp = await fetch(url, {
     method: 'POST',
