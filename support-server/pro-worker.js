@@ -413,6 +413,9 @@ async function main(){
     let ticketStateTo = 'NEEDS_INFO';
     let waNorm = null;
     let waReason = 'wa_missing_or_invalid';
+    // seg1f: keep these in outer scope for reply/audit
+    let verifyReason = null;
+    let expectedE164 = null;
     try {
       const { verify, sm, audit } = await seg1cLoadMods();
       waNorm = verify.normalizeE164(t.wa || '');
@@ -425,8 +428,6 @@ async function main(){
       }
 
       // seg1e: verify uuid↔wa binding against control-plane DB and drive state
-      let verifyReason = null;
-      let expectedE164 = null;
       if (ticketStateTo === 'VERIFIED') {
         const vres = await verify.verifyUuidWaBinding({ uuid: String(t.uuid||'').trim(), waE164: waNorm.e164 });
         verifyReason = (vres && vres.reason) ? String(vres.reason) : 'unknown';
