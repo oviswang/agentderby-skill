@@ -538,7 +538,10 @@ async function main(){
     }
 
     const currentReplies = state.ticketReplies[id]?.count ?? 0;
-    if (currentReplies >= 10) {
+    const maxReplies = 10;
+    const maxNeedsInfoReplies = parseInt(process.env.SUPPORT_MAX_NEEDS_INFO_REPLIES || '3', 10);
+
+    if (currentReplies >= maxReplies) {
       // mark entry as seen to avoid reprocessing
       state.processedEntries[entryId] = { at: nowIso(), skipped: 'reply_limit_reached', ticket_id: id };
       saveState(state);
@@ -554,6 +557,34 @@ async function main(){
     }
 
     const { lang, subject, text, html, category } = reply;
+
+    // B1: cap needs-info auto replies per ticket to avoid infinite loops.
+    // If cap reached, do not send another needs-info email; record audit and mark entry processed.
+    if (category === 'needs_info' && currentReplies >= maxNeedsInfoReplies) {
+      try {
+        const { audit } = await seg1cLoadMods();
+        audit.appendAudit({
+          dataDir: DATA_DIR,
+          record: {
+            ts: nowIso(),
+            ticket_id: id,
+            entry_id: entryId,
+            action: 'reply_suppressed',
+            category: 'needs_info',
+            reason: 'needs_info_cap_reached',
+            cap: maxNeedsInfoReplies,
+            current: currentReplies,
+            lang: detectLang(t),
+          }
+        });
+      } catch {}
+
+      state.processedEntries[entryId] = { at: nowIso(), skipped: 'needs_info_cap_reached', ticket_id: id };
+      saveState(state);
+      processed += 1;
+      if (processed >= MAX_PER_RUN) break;
+      continue;
+    }
 
     // seg1f: record needs-info reply intent in state + audit (idempotent by entryId)
     if (category === 'needs_info') {
@@ -629,6 +660,7 @@ async function main(){
       || notifyReason === 'wa_invalid'
       || notifyReason === 'wa_not_bound'
       || notifyReason === 'wa_mismatch'
+      || notifyReason === 'needs_info_cap_reached'
     );
 
     if (needsAttention) {
