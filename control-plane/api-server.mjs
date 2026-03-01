@@ -1249,10 +1249,30 @@ async function runPoolInitJob(job){
     pushJobLog(job, `run bootstrap ${bootstrapVer}`);
     const boot = poolSsh(
       inst,
-      `sudo bash -lc "export DEBIAN_FRONTEND=noninteractive; curl -fsSL https://p.bothook.me/artifacts/${bootstrapVer}/bootstrap.sh | bash"`,
+      // IMPORTANT: enforce pipefail so curl failures do not get masked by a successful `bash` exit.
+      `sudo bash -lc "set -euo pipefail; export DEBIAN_FRONTEND=noninteractive; curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors https://p.bothook.me/artifacts/${bootstrapVer}/bootstrap.sh | bash"`,
       { timeoutMs: 20*60*1000, tty:false, retries:0 }
     );
     if ((boot.code ?? 1) !== 0) throw new Error('bootstrap_failed');
+
+    // Post-bootstrap strong validation (do not allow fake READY).
+    // Ensure Node + OpenClaw + provision server are present. Provision may be inactive until started.
+    try {
+      const chk2 = poolSsh(inst,
+        `set -euo pipefail; `
+        + `command -v node >/dev/null; `
+        + `command -v openclaw >/dev/null; `
+        + `test -s /opt/bothook/provision/server.mjs; `
+        + `test -s /opt/bothook/bin/postboot_verify.sh; `
+        + `echo ok`,
+        { timeoutMs: 20000, tty:false, retries:0 }
+      );
+      if (!String(chk2.stdout||'').includes('ok')) {
+        throw new Error('bootstrap_validate_failed');
+      }
+    } catch {
+      throw new Error('bootstrap_validate_failed');
+    }
 
     // Wait reboot
     pushJobLog(job, 'wait reboot ssh');
