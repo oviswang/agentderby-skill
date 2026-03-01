@@ -128,7 +128,9 @@ async function main() {
     let cleared = 0;
     for (const r of stale) {
       const lc = String(r.lifecycle_status || '');
-      if (lc && lc !== 'IN_POOL' && lc !== 'WORKSTATION_MASTER') continue;
+      // Never touch the workstation/master instance.
+      if (lc === 'WORKSTATION_MASTER') continue;
+      if (lc && lc !== 'IN_POOL') continue;
 
       const st = String(r.status || '');
       const meta = parseJson(r.delivery_meta);
@@ -188,7 +190,7 @@ async function main() {
   // Candidates: allocated deliveries that are not paid.
   const rows = db.prepare(
     `SELECT
-        d.delivery_id, d.user_id, d.instance_id, d.status as delivery_status, d.created_at as delivery_created_at,
+        d.delivery_id, d.provision_uuid, d.user_id, d.instance_id, d.status as delivery_status, d.created_at as delivery_created_at,
         d.bound_at, d.meta_json as delivery_meta,
         i.lifecycle_status, i.health_status, i.assigned_at, i.meta_json as instance_meta
      FROM deliveries d
@@ -268,8 +270,11 @@ async function main() {
   // We DO NOT auto-reimage here (L2). We release back to pool and raise an alert.
   let confirmPaid = false;
   try {
-    const j = await fetch(`${API_BASE}/api/pay/confirm?uuid=${encodeURIComponent(String(chosen.user_id || ''))}`).then(r => r.json()).catch(() => null);
-    confirmPaid = Boolean(j?.paid === true);
+    const u = String(chosen.provision_uuid || chosen.user_id || '').trim();
+    if (u) {
+      const j = await fetch(`${API_BASE}/api/pay/confirm?uuid=${encodeURIComponent(u)}`).then(r => r.json()).catch(() => null);
+      confirmPaid = Boolean(j?.paid === true);
+    }
   } catch { confirmPaid = false; }
 
   if (confirmPaid) {
