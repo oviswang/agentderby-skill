@@ -46,6 +46,11 @@ function getDeliveryLang(delivery){
 }
 function deliveryEntitled(db, delivery){
   try {
+    // Legacy paid flow: some rows are marked PAID without a corresponding subscriptions row.
+    // Treat delivery.status=PAID as entitled (non-expired) for relink/key-setup guidance.
+    const st0 = String(delivery?.status || '').toUpperCase();
+    if (st0 === 'PAID' || st0 === 'DELIVERING' || st0 === 'DELIVERED') return true;
+
     const uid = String(delivery?.user_id || '').trim();
     if (!uid) return false;
     const sub = db.prepare(
