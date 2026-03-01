@@ -1109,7 +1109,15 @@ async function runPoolInitJob(job){
     const inst = getInstanceById(db, job.instance_id);
     if (!inst.public_ip) throw new Error('missing_public_ip');
 
-    // Issue ready token
+    // Wait SSH
+    pushJobLog(job, 'wait port22');
+    await waitPort22(inst.public_ip, { timeoutMs: 10*60*1000 });
+    pushJobLog(job, 'wait ssh echo');
+    const sshOk = await waitSshEcho(inst, { timeoutMs: 10*60*1000 });
+    if (!sshOk) throw new Error('ssh_unreachable');
+
+    // Issue ready token (requires SSH to be actually usable).
+    // Why here: issuing before SSH is ready causes READY_REPORT.txt to be missing, so postboot_verify cannot report READY.
     pushJobLog(job, 'issue ready_report_token');
     await issueReadyToken(db, inst);
 
@@ -1124,13 +1132,6 @@ async function runPoolInitJob(job){
       pushJobLog(job, 're-issue ready_report_token (file missing)');
       await issueReadyToken(db, inst);
     }
-
-    // Wait SSH
-    pushJobLog(job, 'wait port22');
-    await waitPort22(inst.public_ip, { timeoutMs: 10*60*1000 });
-    pushJobLog(job, 'wait ssh echo');
-    const sshOk = await waitSshEcho(inst, { timeoutMs: 10*60*1000 });
-    if (!sshOk) throw new Error('ssh_unreachable');
 
     // Bootstrap
     const bootstrapVer = String(process.env.BOTHOOK_BOOTSTRAP_VER || 'v0.2.8');
@@ -1147,17 +1148,20 @@ async function runPoolInitJob(job){
     const sshBack = await waitSshEcho(inst, { timeoutMs: 15*60*1000 });
     if (!sshBack) throw new Error('ssh_not_back_after_reboot');
 
-    // Ensure postboot verify has run (kick once)
-    pushJobLog(job, 'kick postboot verify');
-    poolSsh(inst, 'sudo systemctl start bothook-postboot-verify.service || true', { timeoutMs: 12000, tty:false, retries:0 });
-
-    // Refresh ready token right before we start waiting.
-    // Rationale: end-to-end init (reset+bootstrap+reboot+verify) can exceed a short token TTL.
+    // Refresh ready token after bootstrap.
+    // Rationale:
+    // - bootstrap writes /opt/bothook and can race with our earlier token write
+    // - token TTL may be exceeded during long init
+    // - postboot_verify only reports READY if /opt/bothook/READY_REPORT.txt exists
     try {
-      pushJobLog(job, 'refresh ready_report_token (pre-wait)');
+      pushJobLog(job, 'refresh ready_report_token (post-bootstrap)');
       const instX = getInstanceById(db, job.instance_id);
       await issueReadyToken(db, instX);
     } catch {}
+
+    // Ensure postboot verify has run (kick once)
+    pushJobLog(job, 'kick postboot verify');
+    poolSsh(inst, 'sudo systemctl start bothook-postboot-verify.service || true', { timeoutMs: 12000, tty:false, retries:0 });
 
     // Wait DB READY (from push)
     // Kick postboot verify periodically to self-heal transient failures (e.g. gateway port not yet listening).
