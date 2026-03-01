@@ -307,6 +307,14 @@ function renderReply(ticket){
 }
 
 async function sendEmail({ apiKey, to, from, replyTo, subject, html, text }) {
+  const dryRun = String(process.env.SUPPORT_DRY_RUN || '').trim() === '1';
+  if (dryRun) {
+    // Print reply for acceptance tests; do not send.
+    console.log('[support-pro-worker][dry-run] subject:', subject);
+    console.log('[support-pro-worker][dry-run] text:', String(text || '').slice(0, 1200));
+    return;
+  }
+
   const resp = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: {
@@ -320,7 +328,7 @@ async function sendEmail({ apiKey, to, from, replyTo, subject, html, text }) {
       subject,
       content: [
         { type: 'text/plain', value: text },
-        { type: 'text/html', value: html },
+        ...(html ? [{ type: 'text/html', value: html }] : []),
       ],
     }),
   });
@@ -515,7 +523,40 @@ async function main(){
 
     const { lang, subject, text, html, category } = reply;
 
-    // 1) send email
+    // seg1f: record needs-info reply intent in state + audit (idempotent by entryId)
+    if (category === 'needs_info') {
+      try {
+        // Track per-ticket reply rounds (cap remains enforced by currentReplies check above)
+        state.ticketReplies[id] = {
+          count: currentReplies + 1,
+          last_at: nowIso(),
+          last_lang: lang,
+          last_category: category,
+          last_subject: String(subject || '').slice(0, 200),
+        };
+        saveState(state);
+
+        const { audit } = await seg1cLoadMods();
+        audit.appendAudit({
+          dataDir: DATA_DIR,
+          record: {
+            ts: nowIso(),
+            ticket_id: id,
+            entry_id: entryId,
+            action: 'reply_needs_info',
+            lang,
+            reason: verifyReason || waReason || 'needs_info',
+            expectedE164: expectedE164 || null,
+            uuid: t.uuid || null,
+            wa: t.wa || null,
+            subject: String(subject || '').slice(0, 120),
+            text_len: String(text || '').length,
+          }
+        });
+      } catch {}
+    }
+
+    // 1) send email (or dry-run print)
     await sendEmail({ apiKey, to: t.email, from, replyTo, subject, text, html });
 
     // 2) update state + logs
