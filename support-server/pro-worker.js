@@ -618,21 +618,35 @@ async function main(){
     saveState(state);
     appendHandled({ ...result, message: t.message });
 
-    // 3) notify owner telegram
-    const tgText = [
-      `[support] ticket ${id} replied (${result.reply_index}/10)`,
-      `email: ${t.email}`,
-      t.uuid ? `uuid: ${t.uuid}` : null,
-      `category: ${category}`,
-      `lang: ${lang}`,
-      `---`,
-      `question:`,
-      String(t.message || '').slice(0, 1200),
-      `---`,
-      `result: auto-replied via SendGrid`,
-    ].filter(Boolean).join('\n');
+    // 3) notify owner telegram (noise-reduced)
+    // Policy: notify only for errors or cases likely needing manual attention.
+    const notifyReason = verifyReason || waReason || null;
+    const needsAttention = (
+      notifyReason === 'sqlite3_error'
+      || notifyReason === 'sqlite3_failed'
+      || notifyReason === 'spawn_failed'
+      || notifyReason === 'uuid_invalid'
+      || notifyReason === 'wa_invalid'
+      || notifyReason === 'wa_not_bound'
+      || notifyReason === 'wa_mismatch'
+    );
 
-    await sendTelegram({ botToken, chatId: ownerChatId, text: tgText });
+    if (needsAttention) {
+      const tgText = [
+        `[support] ticket ${id} needs attention (${result.reply_index}/10)`,
+        `reason: ${notifyReason}`,
+        `email: ${t.email}`,
+        t.uuid ? `uuid: ${t.uuid}` : null,
+        `category: ${category}`,
+        `lang: ${lang}`,
+        expectedE164 ? `expectedE164: ${expectedE164}` : null,
+        `---`,
+        `question:`,
+        String(t.message || '').slice(0, 1200),
+      ].filter(Boolean).join('\n');
+
+      await sendTelegram({ botToken, chatId: ownerChatId, text: tgText });
+    }
 
     processed += 1;
     if (processed >= MAX_PER_RUN) break;
