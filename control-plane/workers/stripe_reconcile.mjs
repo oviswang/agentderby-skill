@@ -96,6 +96,7 @@ async function main() {
   let confirmedPaid = 0;
   let confirmedFail = 0;
   let guideTriggered = 0;
+  let scannedCheckout = 0;
 
   const upd = db.prepare(
     `UPDATE subscriptions
@@ -119,6 +120,7 @@ async function main() {
         ORDER BY datetime(created_at) DESC
         LIMIT 30`
     ).all();
+    scannedCheckout = Array.isArray(candidates) ? candidates.length : 0;
 
     for (const c of candidates) {
       const uuid = String(c.provision_uuid || '').trim();
@@ -144,10 +146,12 @@ async function main() {
             if (s.ok) guideTriggered++;
           } catch {}
 
-          // Audit event
+          // Audit event (attach to delivery_id when available)
           try {
+            const drow = db.prepare('SELECT delivery_id FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
+            const deliveryId = drow?.delivery_id || uuid;
             db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-              crypto.randomUUID(), ts, 'delivery', uuid, 'PAY_CONFIRM_RECONCILED', JSON.stringify({ uuid, via: 'stripe_reconcile' })
+              crypto.randomUUID(), ts, 'delivery', String(deliveryId), 'PAY_CONFIRM_RECONCILED', JSON.stringify({ uuid, delivery_id: deliveryId, via: 'stripe_reconcile' })
             );
           } catch {}
         } else {
@@ -215,13 +219,15 @@ async function main() {
     scanned_subscriptions: rows.length,
     updated_subscriptions: ok,
     failed_subscriptions: fail,
-    scanned_checkout_shortlinks: 30,
+    scanned_checkout_shortlinks: scannedCheckout,
     confirmed_paid: confirmedPaid,
     confirm_failed: confirmedFail,
     wa_status_triggered: guideTriggered,
   };
   console.log(JSON.stringify(summary, null, 2));
-  if (ok || fail || confirmedPaid || confirmedFail) {
+  // Notify only when there's something that needs attention or when we actually confirmed paid.
+  // Avoid spamming Telegram every run just because subscriptions were refreshed.
+  if (fail || confirmedPaid || confirmedFail) {
     tgSend(`[bothook] stripe_reconcile: subs_scanned=${rows.length} subs_updated=${ok} subs_failed=${fail} paid_confirmed=${confirmedPaid} confirm_failed=${confirmedFail}`);
   }
 }
