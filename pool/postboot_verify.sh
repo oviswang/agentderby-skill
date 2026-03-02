@@ -108,8 +108,9 @@ PY
   echo "openai_key_missing" > "$EVID_DIR/openai_key_missing" 2>/dev/null || true
   touch "$MARKER" 2>/dev/null || true
 
-  # Optional hardening: restrict unsolicited DMs until key is configured (best-effort, do not fail the script).
-  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set channels.whatsapp.dmPolicy allowlist >/dev/null 2>&1 || true
+  # Optional hardening: keep WhatsApp responsive even before key is configured.
+  # NOTE: do NOT set dmPolicy=allowlist without allowFrom; it makes the OpenClaw config invalid and breaks the gateway.
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set channels.whatsapp.dmPolicy all >/dev/null 2>&1 || true
   sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true
 }
 
