@@ -34,10 +34,10 @@ fix_config_if_needed(){
       chown ubuntu:ubuntu "$p" 2>/dev/null || true
       chmod 600 "$p" 2>/dev/null || true
     fi
-  fi
 
-  # Apply doctor fixes (best-effort) to keep schema-valid config.
-  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw doctor --fix >/dev/null 2>&1 || true
+    # Apply doctor fixes ONLY when we actually detect this risky config shape.
+    sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw doctor --fix >/dev/null 2>&1 || true
+  fi
 }
 
 # NEW: ensure agent baseline does not crash due to missing auth store.
@@ -108,11 +108,13 @@ PY
   echo "openai_key_missing" > "$EVID_DIR/openai_key_missing" 2>/dev/null || true
   touch "$MARKER" 2>/dev/null || true
 
-  # Optional hardening: keep WhatsApp responsive even before key is configured.
-  # NOTE: do NOT set dmPolicy=allowlist without allowFrom; it makes the OpenClaw config invalid and breaks the gateway.
-  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set channels.whatsapp.dmPolicy open >/dev/null 2>&1 || true
-  sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true
+  # Optional hardening: keep config valid even before key is configured.
+  # Do not restart the gateway here (restart storms). Just ensure policy is safe.
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set channels.whatsapp.dmPolicy pairing >/dev/null 2>&1 || true
+  NEED_GATEWAY_RESTART=1
 }
+
+NEED_GATEWAY_RESTART=0
 
 fix_config_if_needed
 ensure_agent_baseline
@@ -130,26 +132,31 @@ if sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null
   autoreply_loaded=true
 else
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-autoreply >/dev/null 2>&1 || true
-  sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true
-  # Retry a short window: gateway reload + plugin activation may take a few seconds.
-  for _ in $(seq 1 10); do
+  NEED_GATEWAY_RESTART=1
+  # Retry a short window: plugin activation may take a few seconds.
+  for _ in $(seq 1 3); do
     if sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply.*loaded'; then
       autoreply_loaded=true
       break
     fi
-    sleep 2
+    sleep 3
   done
 fi
 if [ "$autoreply_loaded" != true ]; then
   ok=false; errs+=("autoreply plugin not loaded");
 fi
 
+# If we changed config/plugins, restart the gateway once (avoid multiple restarts).
+if [ "${NEED_GATEWAY_RESTART:-0}" = "1" ]; then
+  sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true
+fi
+
 # Check ports (18789 can be briefly unavailable after reboot; retry a short window)
 port18789_ok=false
-for _ in $(seq 1 12); do
+for _ in $(seq 1 6); do
   if port_listen 18789; then port18789_ok=true; break; fi
   sleep 5
-  done
+done
 if [ "$port18789_ok" != true ]; then ok=false; errs+=("port 18789 not listening"); fi
 
 # Provision healthz
