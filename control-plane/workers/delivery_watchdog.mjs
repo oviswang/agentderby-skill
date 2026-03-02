@@ -210,7 +210,7 @@ async function main() {
     `SELECT
         d.delivery_id, d.provision_uuid, d.user_id, d.instance_id, d.status as delivery_status, d.created_at as delivery_created_at,
         d.bound_at, d.meta_json as delivery_meta,
-        i.lifecycle_status, i.health_status, i.assigned_at, i.meta_json as instance_meta
+        i.public_ip, i.lifecycle_status, i.health_status, i.assigned_at, i.meta_json as instance_meta
      FROM deliveries d
      JOIN instances i ON i.instance_id = d.instance_id
      WHERE i.lifecycle_status = 'ALLOCATED'
