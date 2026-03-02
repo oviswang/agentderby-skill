@@ -1454,6 +1454,40 @@ app.get('/api/ops/pool/init/busy', (req, res) => {
   }
 });
 
+// Ops: clear OpenClaw auth on a pool instance (used to ensure smoke-test keys never linger on pool machines).
+// NOTE: This does not touch control-plane delivery_secrets; caller should delete secrets separately if desired.
+app.post('/api/ops/pool/clear-auth', (req, res) => {
+  try {
+    const instance_id = String(req.body?.instance_id || '').trim();
+    if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
+    if (instance_id === 'lhins-npsqfxvn') return send(res, 403, { ok:false, error:'forbidden_master_host' });
+
+    const { db } = openDb();
+    const inst = getInstanceById(db, instance_id);
+    if (!inst?.public_ip) return send(res, 404, { ok:false, error:'instance_not_found_or_missing_ip' });
+
+    const ts = nowIso();
+    // Clear auth store (this is where writeOpenAiAuthOnInstance writes).
+    const remote = `set -euo pipefail; `
+      + `AGENT_DIR=/home/ubuntu/.openclaw/agents/main/agent; `
+      + `sudo rm -f "$AGENT_DIR/auth-profiles.json"; `
+      + `sudo rm -f /opt/bothook/DELIVERED.json 2>/dev/null || true; `
+      + `echo cleared`;
+
+    const r = poolSsh(inst, remote, { timeoutMs: 15000, tty: false, retries: 0 });
+    const ok = (r.code ?? 1) === 0;
+
+    try {
+      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+        .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_AUTH_CLEARED', JSON.stringify({ instance_id, ok, ssh_code: r.code ?? null }));
+    } catch {}
+
+    return send(res, 200, { ok:true, instance_id, cleared: ok, ssh_code: r.code ?? null });
+  } catch (e) {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 
 // Pool READY report (push): called by pool instances after they finish bootstrap + verification.
 // Auth: short-lived instance-scoped token stored in instances.meta_json.ready_report_token.
