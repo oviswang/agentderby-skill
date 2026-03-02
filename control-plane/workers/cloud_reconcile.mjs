@@ -100,39 +100,53 @@ function ensureAutoRenew(instance_id, currentFlag, instanceChargeType) {
 }
 
 function sshProbe(ip) {
+  const host = String(ip || '').trim();
+  if (!host) return { ok: false, error: 'missing_ip' };
+
+  // IMPORTANT: use a dedicated known_hosts for machine-to-machine probes.
+  // Policy: accept-new (learn first-seen keys), but do NOT ignore changes.
+  const KNOWN_HOSTS = process.env.BOTHOOK_POOL_KNOWN_HOSTS || '/tmp/bothook_pool_known_hosts';
+
+  const probeCmd = (connectTimeoutSec) =>
+    `ssh -i ${JSON.stringify(POOL_SSH_KEY)} `
+    + `-o BatchMode=yes -o StrictHostKeyChecking=accept-new `
+    + `-o UserKnownHostsFile=${JSON.stringify(KNOWN_HOSTS)} -o GlobalKnownHostsFile=/dev/null `
+    + `-o UpdateHostKeys=yes -o HashKnownHosts=no `
+    + `-o ConnectTimeout=${connectTimeoutSec} ubuntu@${host} `
+    + `'set -euo pipefail; `
+    + `echo ssh_ok; `
+    + `test -x /home/ubuntu/.npm-global/bin/openclaw && echo has_openclaw || echo no_openclaw; `
+    + `systemctl status openclaw-gateway.service >/dev/null 2>&1 && echo gateway_unit_ok || echo gateway_unit_missing'`;
+
+  const parse = (out) => {
+    const lines = String(out || '').trim().split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    return {
+      ok: lines.includes('ssh_ok'),
+      hasOpenclaw: lines.includes('has_openclaw'),
+      gatewayUnitOk: lines.includes('gateway_unit_ok'),
+      raw: lines.slice(0, 10)
+    };
+  };
+
+  // Attempt 1: fast probe
   try {
-    const host = String(ip || '').trim();
-    if (!host) return { ok: false, error: 'missing_ip' };
-
-    // Probe in one SSH session to reduce latency.
-    // - ssh_ok: network + auth
-    // - has_openclaw: runtime presence
-    // - gateway_unit: systemd unit presence
-    // IMPORTANT: use a dedicated known_hosts for machine-to-machine probes.
-    // This avoids false ssh_fail caused by the operator's ~/.ssh/known_hosts (e.g. host key rotations).
-    // Policy: accept-new (learn first-seen keys), but do NOT ignore changes.
-    const KNOWN_HOSTS = process.env.BOTHOOK_POOL_KNOWN_HOSTS || '/tmp/bothook_pool_known_hosts';
-
-    const cmd =
-      `ssh -i ${JSON.stringify(POOL_SSH_KEY)} `
-      + `-o BatchMode=yes -o StrictHostKeyChecking=accept-new `
-      + `-o UserKnownHostsFile=${JSON.stringify(KNOWN_HOSTS)} -o GlobalKnownHostsFile=/dev/null `
-      + `-o UpdateHostKeys=yes -o HashKnownHosts=no `
-      + `-o ConnectTimeout=5 ubuntu@${host} `
-      + `'set -euo pipefail; `
-      + `echo ssh_ok; `
-      + `test -x /home/ubuntu/.npm-global/bin/openclaw && echo has_openclaw || echo no_openclaw; `
-      + `systemctl status openclaw-gateway.service >/dev/null 2>&1 && echo gateway_unit_ok || echo gateway_unit_missing'`;
-
-    const out = String(sh2(cmd) || '').trim();
-    const lines = out.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-    const ok = lines.includes('ssh_ok');
-    const hasOpenclaw = lines.includes('has_openclaw');
-    const gatewayUnitOk = lines.includes('gateway_unit_ok');
-
-    return { ok, hasOpenclaw, gatewayUnitOk, raw: lines.slice(0, 10) };
+    const out = sh2(probeCmd(5));
+    const r = parse(out);
+    if (r.ok) return r;
   } catch (e) {
-    return { ok: false, error: String(e?.message || e) };
+    const msg = String(e?.stderr || e?.message || e);
+    // Host key mismatch: clear our dedicated known_hosts entry and retry once.
+    if (msg.includes('REMOTE HOST IDENTIFICATION HAS CHANGED') || msg.includes('Host key verification failed')) {
+      try { sh2(`ssh-keygen -f ${JSON.stringify(KNOWN_HOSTS)} -R ${JSON.stringify(host)} >/dev/null 2>&1 || true`); } catch {}
+    }
+  }
+
+  // Attempt 2: slightly longer timeout (handles transient network jitter)
+  try {
+    const out2 = sh2(probeCmd(8));
+    return parse(out2);
+  } catch (e2) {
+    return { ok: false, error: String(e2?.stderr || e2?.message || e2) };
   }
 }
 
@@ -141,7 +155,7 @@ function main() {
   const ts = nowIso();
 
   const rows = db.prepare(
-    `SELECT instance_id, lifecycle_status, meta_json
+    `SELECT instance_id, lifecycle_status, health_status, health_reason, meta_json
        FROM instances
       WHERE lifecycle_status IN ('IN_POOL','ALLOCATED')
       ORDER BY last_probe_at ASC NULLS FIRST, instance_id
@@ -213,7 +227,10 @@ function main() {
             desiredSource = 'cloud_reconcile';
           } else {
             desiredHealth = 'READY';
-            desiredReason = 'postboot_ok';
+            // If previously marked ssh_fail, explicitly record recovery.
+            const prevH = String(r.health_status || '');
+            const prevR = String(r.health_reason || '');
+            desiredReason = (prevH === 'NEEDS_VERIFY' && prevR === 'ssh_fail') ? 'ssh_recovered' : 'postboot_ok';
             desiredSource = 'cloud_reconcile';
           }
         } else {
@@ -241,12 +258,13 @@ function main() {
                 blueprint_id=COALESCE(?,blueprint_id),
                 zone=COALESCE(?,zone),
                 last_probe_at=?,
+                last_ok_at=CASE WHEN ?='READY' THEN ? ELSE last_ok_at END,
                 health_status=COALESCE(?, health_status),
                 health_reason=COALESCE(?, health_reason),
                 health_source=COALESCE(?, health_source),
                 meta_json=?
           WHERE instance_id=?`
-      ).run(pub, priv, bundle, blueprint, zone, ts, desiredHealth, desiredReason, desiredSource, meta2, instance_id);
+      ).run(pub, priv, bundle, blueprint, zone, ts, desiredHealth, ts, desiredHealth, desiredReason, desiredSource, meta2, instance_id);
       refreshed++;
     } catch (e) {
       fail++;
