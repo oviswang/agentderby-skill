@@ -204,6 +204,11 @@ async function main() {
   let stage = null;
 
   for (const r of rows) {
+    // Hard skip: if ops has marked this delivery as "do not reallocate" / closed out,
+    // watchdog must not keep touching it (prevents release/reallocate loops).
+    const dm = jsonMeta(r.delivery_meta);
+    if (dm?.do_not_reallocate === 1 || dm?.closed_out_at || dm?.closed_out_reason) continue;
+
     if (isPaid(db, r.delivery_status, r.delivery_meta, r.user_id)) continue;
 
     // Stage A: not bound yet
