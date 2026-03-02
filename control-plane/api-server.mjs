@@ -1399,9 +1399,22 @@ async function runPoolInitJob(job){
     pushJobLog(job, `error: ${e?.message || 'unknown'}`);
     try {
       const { db } = openDb();
-      db.prepare(
-        'UPDATE instances SET health_status=?, health_reason=?, health_source=? WHERE instance_id=?'
-      ).run('NEEDS_VERIFY', String(e?.message || 'unknown'), 'init_worker', job.instance_id);
+      // Do not mark DELIVERED instances as NEEDS_VERIFY from pool init failures.
+      // Pool init worker is only authoritative for IN_POOL/DELIVERING readiness.
+      const cur = getInstanceById(db, job.instance_id);
+      const ls = String(cur?.lifecycle_status || '');
+      if (ls === 'IN_POOL' || ls === 'DELIVERING') {
+        db.prepare(
+          'UPDATE instances SET health_status=?, health_reason=?, health_source=? WHERE instance_id=?'
+        ).run('NEEDS_VERIFY', String(e?.message || 'unknown'), 'init_worker', job.instance_id);
+      } else {
+        try {
+          db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+            crypto.randomUUID(), nowIso(), 'instance', job.instance_id, 'POOL_INIT_SKIPPED_NON_POOL_INSTANCE',
+            JSON.stringify({ instance_id: job.instance_id, lifecycle_status: ls, error: String(e?.message || 'unknown') })
+          );
+        } catch {}
+      }
     } catch {}
   }
 }
