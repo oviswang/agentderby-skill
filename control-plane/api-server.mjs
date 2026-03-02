@@ -3758,12 +3758,21 @@ app.post('/api/ops/smoke/run', async (req, res) => {
     const instance_id = String(req.body?.instance_id || '').trim();
     const lang = String(req.body?.lang || 'en').trim().toLowerCase();
     const key = String(req.body?.openai_key || '').trim();
+    const targetE164Raw = String(req.body?.target_e164 || '').trim();
     if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
     if (!key) return send(res, 400, { ok:false, error:'openai_key_required' });
     if (instance_id === 'lhins-npsqfxvn') return send(res, 403, { ok:false, error:'forbidden_master_host' });
 
     const uuid = crypto.randomUUID();
-    const wa_jid = `sim:1${sha256Hex(uuid).slice(0,10).replace(/\D/g,'0')}@s.whatsapp.net`;
+    // Target: either simulated (default) or a real WhatsApp recipient.
+    // If target_e164 is provided (e.g. +6586...), send for real; otherwise use simulated jid.
+    let wa_jid = `sim:1${sha256Hex(uuid).slice(0,10).replace(/\D/g,'0')}@s.whatsapp.net`;
+    if (targetE164Raw) {
+      const e164 = '+' + targetE164Raw.replace(/\D+/g, '');
+      if (!/^\+\d{6,20}$/.test(e164)) return send(res, 400, { ok:false, error:'bad_target_e164' });
+      const digits = e164.slice(1);
+      wa_jid = `${digits}@s.whatsapp.net`;
+    }
     const ts0 = nowIso();
     const { db } = openDb();
 
@@ -3884,7 +3893,7 @@ app.post('/api/ops/smoke/run', async (req, res) => {
       );
     } catch {}
 
-    // Return instance back to pool
+    // Return instance back to pool (best-effort, but we must not leave it allocated).
     try {
       const tsEnd = nowIso();
       db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=NULL, assigned_at=NULL WHERE instance_id=?').run('IN_POOL', instance_id);
@@ -3893,7 +3902,7 @@ app.post('/api/ops/smoke/run', async (req, res) => {
       );
     } catch {}
 
-    return send(res, 200, { ok:true, uuid, instance_id, lang, delivered });
+    return send(res, 200, { ok:true, uuid, instance_id, lang, delivered, target: wa_jid.startsWith('sim:') ? 'simulated' : 'real', wa_jid });
   } catch (e) {
     return send(res, 500, { ok:false, error: e?.message || 'server_error' });
   }
