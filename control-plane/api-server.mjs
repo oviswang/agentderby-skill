@@ -2689,8 +2689,11 @@ app.get('/api/wa/status', async (req, res) => {
           let trulyConnected = false;
           try {
             const sr = poolSsh(instance, `openclaw channels status --probe --json 2>/dev/null || true`, { timeoutMs: 3500, tty: false, retries: 0 });
-            const raw = String(sr.stdout || '').trim();
-            if (raw) {
+            const raw0 = String(sr.stdout || '').trim();
+            if (raw0) {
+              // `openclaw ... --json` may include plugin banner lines before the JSON.
+              const i = raw0.indexOf('{');
+              const raw = i >= 0 ? raw0.slice(i) : raw0;
               const j = JSON.parse(raw);
               const w = j?.channels?.whatsapp || null;
               if (w?.connected === true && w?.running === true) trulyConnected = true;
