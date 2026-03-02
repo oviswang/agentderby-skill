@@ -2861,17 +2861,30 @@ app.get('/api/wa/status', async (req, res) => {
                   pay_short_link: payShortLink
                 });
 
-                const rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
-                const ok = (rr2.code ?? 1) === 0;
+                // Ensure autoreply plugin is enabled on the user machine (repeat welcome until paid).
+                try { poolSsh(inst2, `openclaw plugins enable bothook-wa-autoreply 2>/dev/null || true`, { timeoutMs: 8000, tty: false, retries: 0 }); } catch {}
+
+                // Send welcome. If it fails, do a single fast self-heal (restart gateway) and retry once.
+                let rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
+                let ok = (rr2.code ?? 1) === 0;
+                if (!ok) {
+                  try {
+                    poolSsh(inst2, `sudo systemctl restart openclaw-gateway.service 2>/dev/null || true; echo restarted`, { timeoutMs: 20000, tty: false, retries: 0 });
+                  } catch {}
+                  rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
+                  ok = (rr2.code ?? 1) === 0;
+                }
+
                 const patch = ok
                   ? { welcome_unpaid_sent_at: ts, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: true }
                   : { welcome_unpaid_last_attempt_at: ts, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: false };
                 const meta2 = mergeMeta(d2.meta_json, patch);
                 db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts, d2.delivery_id);
                 try {
+                  const detail = (String(rr2.stderr || rr2.stdout || '')).replace(/\s+/g, ' ').slice(0, 300);
                   db2.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
                     crypto.randomUUID(), ts, 'delivery', d2.delivery_id, ok ? 'WELCOME_UNPAID_SENT' : 'WELCOME_UNPAID_SEND_FAILED',
-                    JSON.stringify({ uuid, instance_id: inst2.instance_id, exit_code: rr2.code ?? null })
+                    JSON.stringify({ uuid, instance_id: inst2.instance_id, exit_code: rr2.code ?? null, detail })
                   );
                 } catch {}
               }
@@ -2918,6 +2931,9 @@ app.get('/api/wa/status', async (req, res) => {
               if (shouldSend || shouldRetry) {
                 const ts = nowIso();
                 const msg = renderTpl(guide, { uuid });
+                // Ensure autoreply plugin is enabled on the user machine.
+                try { poolSsh(inst2, `openclaw plugins enable bothook-wa-autoreply 2>/dev/null || true`, { timeoutMs: 8000, tty: false, retries: 0 }); } catch {}
+
                 const rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
                 const ok = (rr2.code ?? 1) === 0;
                 const patch = ok
@@ -2928,7 +2944,7 @@ app.get('/api/wa/status', async (req, res) => {
                 try {
                   db2.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
                     crypto.randomUUID(), ts, 'delivery', d2.delivery_id, ok ? 'GUIDE_KEY_SENT' : 'GUIDE_KEY_SEND_FAILED',
-                    JSON.stringify({ uuid, instance_id: inst2.instance_id, exit_code: rr2.code ?? null })
+                    JSON.stringify({ uuid, instance_id: inst2.instance_id, exit_code: rr2.code ?? null, detail: (String(rr2.stderr || rr2.stdout || '')).replace(/\s+/g,' ').slice(0,300) })
                   );
                 } catch {}
               }
