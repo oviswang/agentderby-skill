@@ -248,7 +248,7 @@ async function main() {
               let ok2 = false;
               let detail = '';
               try {
-                const out = sshCmd(ip, "set -euo pipefail; openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply.*loaded' || (openclaw plugins enable bothook-wa-autoreply >/dev/null 2>&1 || true); sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true; ss -ltn 2>/dev/null | grep -q ':18789' && echo ok || echo noport");
+                const out = sshCmd(ip, "set -euo pipefail; openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply.*loaded' || (openclaw plugins enable bothook-wa-autoreply >/dev/null 2>&1 || true); openclaw models set openai/gpt-5.2 >/dev/null 2>&1 || true; sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true; ss -ltn 2>/dev/null | grep -q ':18789' && echo ok || echo noport");
                 detail = String(out || '').trim().slice(0, 300);
                 ok2 = detail.includes('ok');
               } catch (e) {

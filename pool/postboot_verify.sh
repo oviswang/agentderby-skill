@@ -161,9 +161,15 @@ export CHK_TMUX=$([ -x /usr/bin/tmux ] && echo 1 || echo 0)
 export CHK_AUTH_PROFILES=$([ -f /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json ] && echo 1 || echo 0)
 export CHK_AUTOREPLY_LOADED=$([ "$autoreply_loaded" = true ] && echo 1 || echo 0)
 
-# Default model check (best-effort)
+# Default model check + repair (best-effort)
 MODEL_PRIMARY=$(sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config get agents.defaults.model.primary 2>/dev/null || true)
 MODEL_PRIMARY=$(echo "$MODEL_PRIMARY" | tr -d '\r' | tail -n 1)
+if [[ "$MODEL_PRIMARY" != "openai/gpt-5.2" ]]; then
+  # Drift can happen after upgrades/doctor; enforce user-facing default.
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw models set openai/gpt-5.2 >/dev/null 2>&1 || true
+  MODEL_PRIMARY=$(sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config get agents.defaults.model.primary 2>/dev/null || true)
+  MODEL_PRIMARY=$(echo "$MODEL_PRIMARY" | tr -d '\r' | tail -n 1)
+fi
 export CHK_DEFAULT_MODEL_OK=$([ "$MODEL_PRIMARY" = "openai/gpt-5.2" ] && echo 1 || echo 0)
 
 checks_json=$(python3 - <<'PY'
