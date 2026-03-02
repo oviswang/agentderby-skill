@@ -3802,30 +3802,23 @@ app.post('/api/ops/smoke/run', async (req, res) => {
     d = getDeliveryByUuid(db, uuid);
 
     // (1) Welcome (BOUND_UNPAID)
-    let welcomeMsg = '';
-    try {
-      // reuse the same renderer logic as /api/wa/welcome_unpaid_text (inline by HTTP call to our own server)
-      const r = await fetch(`http://127.0.0.1:18998/api/wa/welcome_unpaid_text?uuid=${encodeURIComponent(uuid)}`);
-      const j = await r.json();
-      welcomeMsg = String(j?.message || j?.msg || j?.text || j?.welcome || j?.data || '');
-      // The endpoint above currently returns {ok:true, message:...} further down in file; be defensive.
-      if (!welcomeMsg && j?.ok && typeof j?.message === 'string') welcomeMsg = j.message;
-      if (!welcomeMsg && j?.ok && typeof j?.msg === 'string') welcomeMsg = j.msg;
-    } catch {}
-
-    if (!welcomeMsg) {
-      // Fallback: call renderer directly by hitting the same endpoint again and reading raw text.
-      try {
-        const r = await fetch(`http://127.0.0.1:18998/api/wa/welcome_unpaid_text?uuid=${encodeURIComponent(uuid)}`);
-        const t = await r.text();
-        welcomeMsg = t;
-      } catch {}
-    }
-
-    // If the endpoint returns JSON, it should contain a rendered message. If not, treat as failure.
-    if (!welcomeMsg || welcomeMsg.includes('welcome_unpaid_missing') || welcomeMsg.includes('unknown_uuid')) {
-      return send(res, 500, { ok:false, error:'welcome_render_failed', uuid, instance_id, lang });
-    }
+    // Do NOT call back into HTTP (can deadlock under some server configurations). Render directly.
+    const promptsW = loadWaPrompts(lang) || loadWaPrompts('en') || {};
+    const welcomeTpl = String(promptsW.welcome_unpaid || '').trim();
+    if (!welcomeTpl) return send(res, 500, { ok:false, error:'welcome_unpaid_missing', uuid, lang });
+    const pLinkW = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
+    const welcomeMsg = renderTpl(welcomeTpl, {
+      uuid,
+      region: inst.region || '',
+      public_ip: inst.public_ip || '',
+      cpu: '2',
+      ram_gb: '2',
+      disk_gb: '40',
+      openclaw_version: '',
+      p_link: pLinkW,
+      pay_countdown_minutes: 15,
+      pay_short_link: ''
+    });
 
     const rrW = sendSelfChatOnInstance(inst, welcomeMsg, { toJid: wa_jid });
     const recW = recordSmokeMessage(db, { uuid, delivery_id: d.delivery_id, instance_id, kind:'welcome_unpaid', lang, text: welcomeMsg, sendResult: rrW });
@@ -3851,25 +3844,41 @@ app.post('/api/ops/smoke/run', async (req, res) => {
     const recG = recordSmokeMessage(db, { uuid, delivery_id: d.delivery_id, instance_id, kind:'guide_key_paid', lang, text: guideMsg, sendResult: rrG });
     if (!recG.ok) return send(res, 500, { ok:false, error:'guide_contains_forbidden', uuid, forbidden_hits: recG.forbidden_hits });
 
-    // (3) Verify key (real OpenAI call) + store encrypted key in DB
-    const kv = await fetch('http://127.0.0.1:18998/api/key/verify', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ uuid, provider: 'openai', key })
-    });
-    const kvj = await kv.json();
-    if (!kvj?.ok || kvj?.verified !== true) {
-      // Record the user-visible failure message if provided (must not contain system warnings).
-      const failMsg = String(kvj?.message || kvj?.detail || kvj?.error || 'key_verify_failed');
+    // (3) Verify key (real OpenAI call) + store encrypted key in DB (do NOT call back into HTTP)
+    const vr = await verifyOpenAiKey(key, { timeoutMs: 10000 });
+    if (!vr.ok) {
+      const failMsg = 'key_invalid';
       recordSmokeMessage(db, { uuid, delivery_id: d.delivery_id, instance_id, kind:'key_verify_failed', lang, text: failMsg, sendResult: { code: 0, stdout: 'simulated', stderr: '' } });
-      return send(res, 200, { ok:true, uuid, instance_id, lang, verified:false, verify_error: kvj?.error || 'key_invalid' });
+      return send(res, 200, { ok:true, uuid, instance_id, lang, verified:false, verify_error: vr.error || 'key_invalid' });
     }
 
-    const keyOkMsg = String(kvj?.message || '').trim();
-    if (keyOkMsg) {
-      const recK = recordSmokeMessage(db, { uuid, delivery_id: d.delivery_id, instance_id, kind:'key_verified_success', lang, text: keyOkMsg, sendResult: { code: 0, stdout: 'simulated', stderr: '' } });
-      if (!recK.ok) return send(res, 500, { ok:false, error:'key_success_message_contains_forbidden', uuid, forbidden_hits: recK.forbidden_hits });
+    // Upsert secret (encrypted)
+    try {
+      const { ciphertext, iv, tag, alg } = encryptAesGcm(Buffer.from(key, 'utf8'));
+      const tsKey = nowIso();
+      const secretId = `${uuid}:openai_api_key`;
+      db.prepare(
+        `INSERT INTO delivery_secrets(secret_id, provision_uuid, kind, ciphertext, iv, tag, alg, created_at, updated_at, meta_json)
+         VALUES (?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(secret_id) DO UPDATE SET ciphertext=excluded.ciphertext, iv=excluded.iv, tag=excluded.tag, alg=excluded.alg, updated_at=excluded.updated_at, meta_json=excluded.meta_json`
+      ).run(secretId, uuid, 'openai_api_key', ciphertext, iv, tag, alg, tsKey, tsKey, JSON.stringify({ verified_at: tsKey }));
+      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+        crypto.randomUUID(), tsKey, 'delivery', d.delivery_id, 'OPENAI_KEY_VERIFIED', JSON.stringify({ uuid })
+      );
+    } catch {}
+
+    // Record key-verified success message (localized)
+    let keyOkMsg = '';
+    try {
+      const promptsK = loadWaPrompts(lang) || loadWaPrompts('en') || {};
+      const tpl = String(promptsK.key_verified_success || '').trim();
+      if (tpl) keyOkMsg = renderTpl(tpl, { uuid });
+    } catch {}
+    if (!keyOkMsg) {
+      keyOkMsg = '[bothook] OpenAI Key verified ✅\n\nWe’re finishing delivery cutover (takes ~1–2 minutes and includes a service restart).\n\nPlease wait 1 minute, then send: "hi"';
     }
+    const recK = recordSmokeMessage(db, { uuid, delivery_id: d.delivery_id, instance_id, kind:'key_verified_success', lang, text: keyOkMsg, sendResult: { code: 0, stdout: 'simulated', stderr: '' } });
+    if (!recK.ok) return send(res, 500, { ok:false, error:'key_success_message_contains_forbidden', uuid, forbidden_hits: recK.forbidden_hits });
 
     // (4) Cutover + finalize delivery
     try { tryCutoverDelivered(db, uuid, { reason: 'smoke' }); } catch {}
