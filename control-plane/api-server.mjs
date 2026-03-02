@@ -3076,10 +3076,11 @@ app.get('/api/pay/confirm', async (req, res) => {
         const ts2 = nowIso();
         const lang = getDeliveryLang(d2);
         const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
-        const guide = prompts.guide_key_paid;
-        if (!guide) return;
+        const guide = (prompts && prompts.guide_key_paid) ? String(prompts.guide_key_paid) : '';
 
-        const msg = renderTpl(guide, { uuid: String(uuid) });
+        const pLink = `https://p.bothook.me/p/${encodeURIComponent(String(uuid))}?lang=${encodeURIComponent(String(lang||'en'))}`;
+        const fallback = `[bothook] Payment received ✅\n\nNext: paste your OpenAI API key here as ONE line starting with sk- (self-chat only).\nLink: ${pLink}`;
+        const msg = guide ? renderTpl(guide, { uuid: String(uuid), p_link: pLink }) : fallback;
         const rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
         const ok2 = (rr2.code ?? 1) === 0;
 
