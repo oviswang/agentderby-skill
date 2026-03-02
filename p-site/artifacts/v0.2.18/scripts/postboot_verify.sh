@@ -124,10 +124,8 @@ PY
 
   # Do NOT restart the gateway here (can cause restart storms). Just ensure the config stays valid.
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set channels.whatsapp.dmPolicy pairing >/dev/null 2>&1 || true
-  NEED_GATEWAY_RESTART=1
+  # NOTE: we no longer restart gateway from postboot_verify (avoid CPU storms).
 }
-
-NEED_GATEWAY_RESTART=0
 
 fix_config_if_needed
 ensure_agent_baseline
@@ -137,31 +135,15 @@ send_openai_key_guide_if_missing
 if ! svc_active openclaw-gateway.service; then ok=false; errs+=("openclaw-gateway.service not active"); fi
 if ! svc_active bothook-provision.service; then ok=false; errs+=("bothook-provision.service not active"); fi
 
-# Critical UX gate: autoreply plugin must be enabled so users always get welcome/guide prompts.
-# This is a HARD gate for pool readiness: if autoreply cannot be loaded, do NOT report READY.
+# Critical UX gate: autoreply plugin must be loaded so users always get welcome/guide prompts.
+# HARD gate for pool readiness.
+# Use a cheap marker written by the plugin itself to avoid expensive `openclaw plugins list` loops.
 autoreply_loaded=false
-if sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply' \
-  && sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply.*loaded'; then
+if [ -f /opt/bothook/evidence/autoreply_loaded ]; then
   autoreply_loaded=true
-else
-  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-autoreply >/dev/null 2>&1 || true
-  NEED_GATEWAY_RESTART=1
-  # Retry a short window: plugin activation may take a few seconds.
-  for _ in $(seq 1 3); do
-    if sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply.*loaded'; then
-      autoreply_loaded=true
-      break
-    fi
-    sleep 3
-  done
 fi
 if [ "$autoreply_loaded" != true ]; then
-  ok=false; errs+=("autoreply plugin not loaded");
-fi
-
-# If we changed config/plugins, restart the gateway once (avoid multiple restarts).
-if [ "${NEED_GATEWAY_RESTART:-0}" = "1" ]; then
-  sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true
+  ok=false; errs+=("autoreply marker missing: /opt/bothook/evidence/autoreply_loaded");
 fi
 
 # Check ports (18789 can be briefly unavailable after reboot; retry a short window)
