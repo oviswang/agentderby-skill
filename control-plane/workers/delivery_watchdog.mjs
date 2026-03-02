@@ -241,7 +241,14 @@ async function main() {
   const delivery_id = String(chosen.delivery_id);
 
   if (stage === 'A_PRE_BIND_5M') {
-    // Release allocation back to pool.
+    // Pre-bind timeout: sanitize WA state (no reimage) then release allocation back to pool.
+    let sanitize = null;
+    try {
+      sanitize = postJson(`${API_BASE}/api/ops/pool/wa-sanitize`, { instance_id });
+    } catch {
+      sanitize = { ok:false, error:'wa_sanitize_call_failed' };
+    }
+
     db.exec('BEGIN IMMEDIATE');
     try {
       db.prepare('UPDATE deliveries SET status=?, instance_id=NULL, updated_at=?, meta_json=? WHERE delivery_id=?')
@@ -259,15 +266,15 @@ async function main() {
       ).run(mergeMeta(chosen.instance_meta, { released_by: 'delivery_watchdog', released_at: ts, timeout_stage: stage }), instance_id);
 
       db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-        .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_LINKING_TIMEOUT_RELEASE', JSON.stringify({ instance_id }));
+        .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_LINKING_TIMEOUT_RELEASE', JSON.stringify({ instance_id, sanitize }));
       db.exec('COMMIT');
     } catch (e) {
       try { db.exec('ROLLBACK'); } catch {}
       throw e;
     }
 
-    tgSend(`[bothook][watchdog] pre-bind timeout (5m): released instance=${instance_id} delivery=${delivery_id}`);
-    console.log(JSON.stringify({ ok:true, ts, action:'release', stage, instance_id, delivery_id }, null, 2));
+    tgSend(`[bothook][watchdog] pre-bind timeout (5m): sanitized+released (no reimage) instance=${instance_id} delivery=${delivery_id}`);
+    console.log(JSON.stringify({ ok:true, ts, action:'sanitize_and_release_no_reimage', stage, instance_id, delivery_id, sanitize }, null, 2));
     return;
   }
 
