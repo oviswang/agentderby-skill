@@ -1560,6 +1560,8 @@ app.post('/api/ops/pool/wa-sanitize', (req, res) => {
 `+
 `sudo rm -f /opt/bothook/DELIVERED.json 2>/dev/null || true;
 `+
+`sudo rm -f /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true;
+`+
 `echo 'step:cleared_auth:ok';
 `+
 `# Start provision if present
@@ -2715,6 +2717,8 @@ app.get('/api/wa/status', async (req, res) => {
               + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
               + `sudo systemctl stop bothook-provision.service 2>/dev/null || true; `
               + `sudo systemctl disable bothook-provision.service 2>/dev/null || true; `
+              + `sudo mkdir -p /opt/bothook 2>/dev/null || true; `
+              + `sudo touch /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true; `
               + `echo services_restarted_delivered`
             )
           : (
