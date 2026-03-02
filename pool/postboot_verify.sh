@@ -122,16 +122,25 @@ if ! svc_active openclaw-gateway.service; then ok=false; errs+=("openclaw-gatewa
 if ! svc_active bothook-provision.service; then ok=false; errs+=("bothook-provision.service not active"); fi
 
 # Critical UX gate: autoreply plugin must be enabled so users always get welcome/guide prompts.
-# Best-effort repair: enable it if found disabled.
+# This is a HARD gate for pool readiness: if autoreply cannot be loaded, do NOT report READY.
 autoreply_loaded=false
-if sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply' && sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply.*loaded'; then
+if sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply' \
+  && sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply.*loaded'; then
   autoreply_loaded=true
 else
   sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-autoreply >/dev/null 2>&1 || true
   sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true
-  if sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply.*loaded'; then
-    autoreply_loaded=true
-  fi
+  # Retry a short window: gateway reload + plugin activation may take a few seconds.
+  for _ in $(seq 1 10); do
+    if sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply.*loaded'; then
+      autoreply_loaded=true
+      break
+    fi
+    sleep 2
+  done
+fi
+if [ "$autoreply_loaded" != true ]; then
+  ok=false; errs+=("autoreply plugin not loaded");
 fi
 
 # Check ports (18789 can be briefly unavailable after reboot; retry a short window)
