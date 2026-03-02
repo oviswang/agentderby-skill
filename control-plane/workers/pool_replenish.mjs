@@ -20,10 +20,22 @@ import { execSync } from 'node:child_process';
 import { openDb, nowIso } from '../lib/db.mjs';
 
 const API_BASE = process.env.BOTHOOK_API_BASE || 'http://127.0.0.1:18998';
-const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
+// Default region is only used as a fallback; pool replenisher can operate cross-region.
+const DEFAULT_REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 // Lighthouse API version (recommended by tccli help)
 const API_VERSION = process.env.BOTHOOK_CLOUD_API_VERSION || '2020-03-24';
 const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || 'lhbp-1l4ptuvm';
+
+// Region selection policy:
+// - BOTHOOK_POOL_REGIONS=auto_non_cn (default): discover all Lighthouse regions and exclude China regions.
+// - BOTHOOK_POOL_REGIONS=<comma-separated>: only consider these regions.
+// - BOTHOOK_POOL_REGIONS=single: use DEFAULT_REGION only.
+const POOL_REGIONS_MODE = String(process.env.BOTHOOK_POOL_REGIONS || 'auto_non_cn').trim();
+const POOL_REGIONS_EXPLICIT = POOL_REGIONS_MODE.includes(',')
+  ? POOL_REGIONS_MODE.split(',').map(s=>s.trim()).filter(Boolean)
+  : [];
+const REGION_CACHE_PATH = process.env.BOTHOOK_POOL_REGION_CACHE_PATH || '/tmp/bothook_region_cache.json';
+const REGION_CACHE_TTL_MS = parseInt(process.env.BOTHOOK_POOL_REGION_CACHE_TTL_MS || String(6*60*60*1000), 10);
 
 // Bundle selection policy:
 // - Prefer dynamic cheapest bundle list from DescribeBundles (filtered by CPU/MEM/MAX_PRICE)
@@ -44,7 +56,8 @@ const MAX_PRICE_CNY = parseFloat(process.env.BOTHOOK_POOL_MAX_PRICE_CNY || '50')
 const BUNDLE_ALLOWLIST = (process.env.BOTHOOK_POOL_BUNDLE_ALLOWLIST || '').split(',').map(s=>s.trim()).filter(Boolean);
 const BUNDLE_CACHE_PATH = process.env.BOTHOOK_POOL_BUNDLE_CACHE_PATH || '/tmp/bothook_bundle_cache.json';
 const BUNDLE_CACHE_TTL_MS = parseInt(process.env.BOTHOOK_POOL_BUNDLE_CACHE_TTL_MS || String(30*60*1000), 10);
-const ZONES = (process.env.BOTHOOK_POOL_ZONES || 'ap-singapore-1,ap-singapore-3').split(',').map(s=>s.trim()).filter(Boolean);
+// Zones are optional; in cross-region mode we default to not specifying Zones.
+const ZONES = (process.env.BOTHOOK_POOL_ZONES || '').split(',').map(s=>s.trim()).filter(Boolean);
 
 const TARGET_READY = parseInt(process.env.BOTHOOK_POOL_TARGET_READY || '5', 10);
 const CAP_TOTAL = parseInt(process.env.BOTHOOK_POOL_CAP_TOTAL || '20', 10);
@@ -108,6 +121,52 @@ function chooseZone() {
   return ZONES[i];
 }
 
+function getRegionsFromCache() {
+  try {
+    const j = JSON.parse(fs.readFileSync(REGION_CACHE_PATH, 'utf8'));
+    if (!j?.ts || !Array.isArray(j.regions)) return null;
+    if ((Date.now() - Date.parse(j.ts)) > REGION_CACHE_TTL_MS) return null;
+    return j.regions.map(String).map(s=>s.trim()).filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+function setRegionsCache(regions) {
+  try {
+    fs.writeFileSync(REGION_CACHE_PATH, JSON.stringify({ ts: new Date().toISOString(), regions }, null, 2));
+  } catch {}
+}
+
+function listNonChinaRegions() {
+  const cached = getRegionsFromCache();
+  if (cached?.length) return cached;
+
+  const txt = tccli(`tccli lighthouse DescribeRegions --version ${API_VERSION} --output json`);
+  const j = JSON.parse(txt);
+  const rs = j.RegionSet || j.Regions || [];
+
+  // Tencent CN Lighthouse regions (not exhaustive, but covers common ones)
+  const china = new Set(['ap-guangzhou','ap-shanghai','ap-beijing','ap-chengdu','ap-nanjing','ap-chongqing']);
+  const out = [];
+  for (const r of rs) {
+    const rid = String(r?.Region || r?.RegionId || r?.RegionName || '').trim();
+    if (!rid) continue;
+    if (china.has(rid)) continue;
+    out.push(rid);
+  }
+  const regions = Array.from(new Set(out)).sort();
+  if (regions.length) setRegionsCache(regions);
+  return regions;
+}
+
+function pickCreateRegions() {
+  if (POOL_REGIONS_EXPLICIT.length) return POOL_REGIONS_EXPLICIT;
+  if (POOL_REGIONS_MODE === 'single') return [DEFAULT_REGION];
+  // default
+  return listNonChinaRegions();
+}
+
 function getBundlesFromCache() {
   try {
     const j = JSON.parse(fs.readFileSync(BUNDLE_CACHE_PATH, 'utf8'));
@@ -117,19 +176,23 @@ function getBundlesFromCache() {
     // Backward compatible:
     // - v1: { ts, bundles: [bundleId,...] }
     // - v2: { ts, bundles: [{ bundleId, price }, ...] }
-    if (Array.isArray(j.bundles) && j.bundles.length && typeof j.bundles[0] === 'string') {
-      return j.bundles
+      if (Array.isArray(j.bundles) && j.bundles.length && typeof j.bundles[0] === 'string') {
+      const out = j.bundles
         .map((bundleId) => ({ bundleId: String(bundleId || '').trim(), price: null }))
         .filter((x) => x.bundleId);
+      out._region = String(j.region || '').trim() || null;
+      return out;
     }
 
     if (Array.isArray(j.bundles) && j.bundles.length && typeof j.bundles[0] === 'object') {
-      return j.bundles
+      const out = j.bundles
         .map((x) => ({
           bundleId: String(x?.bundleId || '').trim(),
           price: (typeof x?.price === 'number' && Number.isFinite(x.price)) ? x.price : null
         }))
         .filter((x) => x.bundleId);
+      out._region = String(j.region || '').trim() || null;
+      return out;
     }
 
     return null;
@@ -138,18 +201,19 @@ function getBundlesFromCache() {
   }
 }
 
-function setBundlesCache(bundlesDetailed) {
+function setBundlesCache(region, bundlesDetailed) {
   try {
     // bundlesDetailed: [{ bundleId, price }]
-    fs.writeFileSync(BUNDLE_CACHE_PATH, JSON.stringify({ ts: new Date().toISOString(), bundles: bundlesDetailed }, null, 2));
+    fs.writeFileSync(BUNDLE_CACHE_PATH, JSON.stringify({ ts: new Date().toISOString(), region, bundles: bundlesDetailed }, null, 2));
   } catch {}
 }
 
-function pickCheapestBundlesDetailed() {
+function pickCheapestBundlesDetailed(region) {
   const cached = getBundlesFromCache();
-  if (cached?.length) return cached;
+  // Cache is per-region; if cache contains a different region, ignore.
+  if (cached?.length && cached._region && cached._region === region) return cached;
 
-  const txt = tccli(`tccli lighthouse DescribeBundles --region ${REGION} --version ${API_VERSION} --output json`);
+  const txt = tccli(`tccli lighthouse DescribeBundles --region ${region} --version ${API_VERSION} --output json`);
   const j = JSON.parse(txt);
   const bs = j.BundleSet || [];
   const cand = [];
@@ -173,8 +237,26 @@ function pickCheapestBundlesDetailed() {
   cand.sort((a,b)=> (a.price-b.price) || (a.cpu-b.cpu) || (a.mem-b.mem) || a.bundleId.localeCompare(b.bundleId));
 
   const bundlesDetailed = cand.map(x => ({ bundleId: x.bundleId, price: x.price }));
-  if (bundlesDetailed.length) setBundlesCache(bundlesDetailed);
+  if (bundlesDetailed.length) setBundlesCache(region, bundlesDetailed);
   return bundlesDetailed;
+}
+
+function pickCheapestBundleAcrossRegions(regions) {
+  const out = [];
+  for (const region of regions) {
+    try {
+      const detailed = pickCheapestBundlesDetailed(region);
+      if (!detailed?.length) continue;
+      // cheapest first by construction
+      const first = detailed[0];
+      if (!first?.bundleId) continue;
+      out.push({ region, bundleId: first.bundleId, price: first.price });
+    } catch {
+      // ignore region failures; keep going
+    }
+  }
+  out.sort((a,b) => (Number(a.price||1e18) - Number(b.price||1e18)) || String(a.region).localeCompare(String(b.region)));
+  return out[0] || null;
 }
 
 function main() {
@@ -284,14 +366,17 @@ function main() {
     return;
   }
 
-  // Create one new instance
-  const zone = chooseZone();
+  // Create one new instance (cross-region, cheapest)
   const name = `bothook-pool-${ts.replace(/[:.]/g,'-')}`;
   const clientToken = crypto.randomUUID();
 
+  const regions = pickCreateRegions();
+  const pick = pickCheapestBundleAcrossRegions(regions) || null;
+  const chosenRegion = pick?.region || DEFAULT_REGION;
+
   // Candidate bundles (sorted cheapest first) — do NOT hardcode a default.
   // This avoids manual intervention when bundle stock/discount changes.
-  const cheapestDetailed = pickCheapestBundlesDetailed();
+  const cheapestDetailed = pickCheapestBundlesDetailed(chosenRegion);
   const cheapest = cheapestDetailed.map(x => x.bundleId);
   const priceByBundle = new Map(cheapestDetailed.map(x => [x.bundleId, x.price]));
 
@@ -305,18 +390,19 @@ function main() {
 
   let resp = null;
   let usedBundle = null;
+  let usedZone = null;
 
-  // Try zone rotation too (some zones may be out of stock)
+  // Zones: optional. If BOTHOOK_POOL_ZONES provided, try those first.
+  const zone = chooseZone();
   const zonesToTry = (zone ? [zone, ...ZONES] : [...ZONES]).filter(Boolean)
     .filter((v, i, a) => a.indexOf(v) === i)
     .slice(0, 3);
 
   for (const bundleId of bundlesToTry) {
-    for (const z of zonesToTry.length ? zonesToTry : [null]) {
+    for (const z of (zonesToTry.length ? zonesToTry : [null])) {
       const payload = {
         BundleId: bundleId,
         BlueprintId: BLUEPRINT_ID,
-        // Pool policy: default auto-renew ON (monthly) to avoid cloud-expiry vs subscription mismatch.
         InstanceChargePrepaid: { Period: 1, RenewFlag: 'NOTIFY_AND_AUTO_RENEW' },
         InstanceName: name,
         InstanceCount: 1,
@@ -327,17 +413,17 @@ function main() {
       const tmp = `/tmp/bothook_create_${clientToken}.json`;
       fs.writeFileSync(tmp, JSON.stringify(payload));
       try {
-        const json = tccli(`tccli lighthouse CreateInstances --region ${REGION} --version ${API_VERSION} --cli-input-json file://${tmp} --output json`);
+        const json = tccli(`tccli lighthouse CreateInstances --region ${chosenRegion} --version ${API_VERSION} --cli-input-json file://${tmp} --output json`);
         resp = JSON.parse(json);
         usedBundle = bundleId;
+        usedZone = z || null;
         break;
       } catch (e) {
         const s = String(e?._stderr || e?.message || e);
         if (s.includes('InstanceQuotaLimitExceeded') || s.includes('LimitExceeded')) {
-          // try next zone/bundle
           continue;
         }
-        tgSend(`[bothook][WARN] pool create failed bundle=${bundleId} zone=${z||''}: ${s.slice(0,180)}`);
+        tgSend(`[bothook][WARN] pool create failed region=${chosenRegion} bundle=${bundleId} zone=${z||''}: ${s.slice(0,180)}`);
         throw e;
       } finally {
         try { fs.unlinkSync(tmp); } catch {}
@@ -372,8 +458,8 @@ function main() {
   ).run(
     instance_id,
     'tencent_lighthouse',
-    REGION,
-    zone,
+    chosenRegion,
+    usedZone || null,
     usedBundle || null,
     BLUEPRINT_ID,
     'IN_POOL',
@@ -389,11 +475,11 @@ function main() {
       'instance',
       instance_id,
       'POOL_INSTANCE_CREATED',
-      JSON.stringify({ bundle_id: usedBundle || null, bundle_price_cny: usedPrice, blueprint_id: BLUEPRINT_ID, zone, request_id: resp.RequestId })
+      JSON.stringify({ bundle_id: usedBundle || null, bundle_price_cny: usedPrice, blueprint_id: BLUEPRINT_ID, region: chosenRegion, zone: usedZone || null, request_id: resp.RequestId })
     );
 
   const job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
-  console.log(JSON.stringify({ ok:true, ts, action:'create_and_init', instance_id, zone, bundle_id: usedBundle || null, bundle_price_cny: usedPrice, job, manual }, null, 2));
+  console.log(JSON.stringify({ ok:true, ts, action:'create_and_init', instance_id, region: chosenRegion, zone: usedZone || null, bundle_id: usedBundle || null, bundle_price_cny: usedPrice, job, manual }, null, 2));
 }
 
 main();

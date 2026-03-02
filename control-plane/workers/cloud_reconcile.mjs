@@ -37,7 +37,8 @@ function tgSend(text) {
   } catch { return false; }
 }
 
-const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
+// Default region is a fallback; we primarily use the per-instance region stored in DB.
+const DEFAULT_REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 const POOL_KEY_ID = process.env.BOTHOOK_POOL_KEY_ID || 'lhkp-q1oc3vdz';
 const POOL_SSH_KEY = process.env.BOTHOOK_POOL_SSH_KEY || '/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519';
 const EXPECT_RENEW_FLAG = process.env.BOTHOOK_POOL_EXPECT_RENEW_FLAG || 'NOTIFY_AND_AUTO_RENEW';
@@ -63,18 +64,20 @@ function mergeMeta(oldMetaStr, patch) {
   return JSON.stringify({ ...m, ...patch });
 }
 
-function describe(instance_id) {
-  const text = tccli(`tccli lighthouse DescribeInstances --region ${REGION} --InstanceIds '["${instance_id}"]' --output json`);
+function describe(region, instance_id) {
+  const reg = String(region || '').trim() || DEFAULT_REGION;
+  const text = tccli(`tccli lighthouse DescribeInstances --region ${reg} --InstanceIds '["${instance_id}"]' --output json`);
   const j = JSON.parse(text);
   const it = (j.InstanceSet || [])[0];
   if (!it) throw new Error('instance_not_found');
   return it;
 }
 
-function associateKey(instance_id) {
+function associateKey(region, instance_id) {
   // Allow duplicate binds as ok.
   try {
-    tccli(`tccli lighthouse AssociateInstancesKeyPairs --region ${REGION} --InstanceIds '["${instance_id}"]' --KeyIds '["${POOL_KEY_ID}"]' --output json`);
+    const reg = String(region || '').trim() || DEFAULT_REGION;
+    tccli(`tccli lighthouse AssociateInstancesKeyPairs --region ${reg} --InstanceIds '["${instance_id}"]' --KeyIds '["${POOL_KEY_ID}"]' --output json`);
     return { ok: true };
   } catch (e) {
     const msg = String(e?.stderr || e?.message || e);
@@ -84,14 +87,15 @@ function associateKey(instance_id) {
   }
 }
 
-function ensureAutoRenew(instance_id, currentFlag, instanceChargeType) {
+function ensureAutoRenew(region, instance_id, currentFlag, instanceChargeType) {
   // Only meaningful for PREPAID instances.
   if (String(instanceChargeType || '').toUpperCase() !== 'PREPAID') return { ok: true, skipped: true };
   const cur = String(currentFlag || '').trim();
   if (!cur) return { ok: true, skipped: true };
   if (cur === EXPECT_RENEW_FLAG) return { ok: true, already: true };
   try {
-    tccli(`tccli lighthouse ModifyInstancesRenewFlag --region ${REGION} --InstanceIds '["${instance_id}"]' --RenewFlag ${EXPECT_RENEW_FLAG} --output json`);
+    const reg = String(region || '').trim() || DEFAULT_REGION;
+    tccli(`tccli lighthouse ModifyInstancesRenewFlag --region ${reg} --InstanceIds '["${instance_id}"]' --RenewFlag ${EXPECT_RENEW_FLAG} --output json`);
     return { ok: true, changed: true, from: cur, to: EXPECT_RENEW_FLAG };
   } catch (e) {
     const msg = String(e?.stderr || e?.message || e);
@@ -155,7 +159,7 @@ function main() {
   const ts = nowIso();
 
   const rows = db.prepare(
-    `SELECT instance_id, lifecycle_status, health_status, health_reason, meta_json
+    `SELECT instance_id, region, lifecycle_status, health_status, health_reason, meta_json
        FROM instances
       WHERE lifecycle_status IN ('IN_POOL','ALLOCATED')
       ORDER BY last_probe_at ASC NULLS FIRST, instance_id
@@ -168,8 +172,9 @@ function main() {
 
   for (const r of rows) {
     const instance_id = String(r.instance_id);
+    const region = String(r.region || '').trim() || DEFAULT_REGION;
     try {
-      const it = describe(instance_id);
+      const it = describe(region, instance_id);
       const pub = (it.PublicAddresses || [])[0] || null;
       const priv = (it.PrivateAddresses || [])[0] || null;
       const bundle = it.BundleId || null;
@@ -188,7 +193,7 @@ function main() {
 
       if (String(r.lifecycle_status) === 'IN_POOL') {
         // Ensure PREPAID instances are set to auto-renew (policy).
-        renewFix = ensureAutoRenew(instance_id, renewFlag, instanceChargeType);
+        renewFix = ensureAutoRenew(region, instance_id, renewFlag, instanceChargeType);
         if (renewFix?.changed) {
           db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
             .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_AUTORENEW_FIXED', JSON.stringify(renewFix));
@@ -198,7 +203,7 @@ function main() {
         }
 
         if (!keyIds.includes(POOL_KEY_ID)) {
-          const rr = associateKey(instance_id);
+          const rr = associateKey(region, instance_id);
           if (rr.ok) {
             keyfix++;
             db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
@@ -206,7 +211,7 @@ function main() {
 
             // Refresh keyIds after bind (best-effort).
             try {
-              const it2 = describe(instance_id);
+              const it2 = describe(region, instance_id);
               keyIds = (((it2.LoginSettings || {}).KeyIds || []).map(String)) || keyIds;
             } catch {}
           }
