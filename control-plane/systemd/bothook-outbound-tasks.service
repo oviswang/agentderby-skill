@@ -1,0 +1,19 @@
+[Unit]
+Description=BOTHook outbound welcome/guide sender (retry queue worker)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/.openclaw/workspace
+Environment=BOTHOOK_DB_PATH=/home/ubuntu/.openclaw/workspace/control-plane/data/bothook.sqlite
+Environment=BOTHOOK_OUTBOUND_WORKER=1
+ExecStart=/usr/bin/node /home/ubuntu/.openclaw/workspace/control-plane/api-server.mjs
+
+# Hardening (keep minimal; worker needs SSH + local FS)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
