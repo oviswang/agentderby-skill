@@ -399,10 +399,12 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
     const st = String(updated.status || '');
     const needsAlloc = !updated.instance_id && ['QR_EXPIRED','CANCELED','LINKING_TIMEOUT','LINKING'].includes(st);
     if (needsAlloc) {
-      // Respect manual suppression: when do_not_reallocate=1, never allocate a new pool instance.
-      // This prevents stale/abandoned deliveries from repeatedly stealing pool machines.
+      // Respect ops/manual suppression: when do_not_reallocate=1 (or closed_out markers exist),
+      // never allocate a new pool instance. This prevents stale/abandoned deliveries from
+      // repeatedly stealing pool machines and also stops noisy reallocation attempts.
       const metaR = jsonMeta(updated.meta_json) || {};
-      if (Number(metaR.do_not_reallocate || 0) === 1) {
+      const suppressed = Number(metaR.do_not_reallocate || 0) === 1 || Boolean(metaR.closed_out_at || metaR.closed_out_reason);
+      if (suppressed) {
         const ts = nowIso();
         try {
           db.prepare(
@@ -414,7 +416,7 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
             'delivery',
             updated.delivery_id,
             'PROVISION_REALLOCATE_SUPPRESSED',
-            JSON.stringify({ provision_uuid: uuid, delivery_id: updated.delivery_id, from_status: st, reason: 'do_not_reallocate' })
+            JSON.stringify({ provision_uuid: uuid, delivery_id: updated.delivery_id, from_status: st, reason: suppressed && Number(metaR.do_not_reallocate||0)===1 ? 'do_not_reallocate' : 'closed_out' })
           );
         } catch {}
         return updated;
