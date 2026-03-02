@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hook me to bots — BOTHook</title>
+  <meta name="description" content="bothook 提供一种更简单的方式来使用 OpenClaw：由我们帮你完成部署与交付，把机器人直接带到你已经在用的聊天软件里。" />
+  <link rel="icon" href="/assets/logo.jpg" />
+  <link rel="preload" href="/assets/logo.jpg" as="image" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="canonical" href="https://bothook.me/zh/" />
+  <link rel="alternate" hreflang="en" href="https://bothook.me/" />
+  <link rel="alternate" hreflang="zh" href="https://bothook.me/zh/" />
+</head>
+<body>
+  <div class="banner" id="langBanner" aria-live="polite">
+    <div class="inner card" style="padding:8px 10px;">
+      <div id="langBannerText">要查看英文版本吗？</div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button id="langBannerSwitch" type="button">切换</button>
+        <button id="langBannerDismiss" type="button">暂不</button>
+      </div>
+    </div>
+  </div>
+
+  <header class="header">
+    <a class="brand" href="/zh/" aria-label="BOTHook 首页">
+      <img src="/assets/logo.jpg" alt="BOTHook logo" />
+      <strong>BOTHook</strong>
+    </a>
+    <div class="langWrap">
+      <a class="langbtn" href="#" id="langBtn" aria-haspopup="menu" aria-expanded="false">
+        <span aria-hidden="true">🌐</span>
+        <span id="langLabel">中文</span>
+      </a>
+      <div class="langPanel" id="langPanel" role="menu" aria-label="Language">
+        <a class="langItem" href="/" data-locale="en" role="menuitem"><span class="native">English</span><span class="en">English</span></a>
+        <a class="langItem" href="/zh/" data-locale="zh" role="menuitem"><span class="native">中文</span><span class="en">Chinese</span></a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="content-wrap" id="contentWrap">
+      <section class="hero">
+        <div class="card">
+          <div class="kicker">Hook me to bots</div>
+          <h1 class="h1">更简单地使用 OpenClaw。</h1>
+          <p class="p">bothook 做的事情很简单：我们帮你把 <a href="https://openclaw.ai" target="_blank" rel="noopener noreferrer">OpenClaw</a> 机器人部署好，并把它直接带到你已经在用的聊天软件里。</p>
+          <p class="p">无需注册。无需配置。无需任何技术背景。</p>
+
+          <div class="ctaRow">
+            <a class="cta primary wide" href="https://p.bothook.me/" id="ctaPrimary">开始使用</a>
+          </div>
+
+          <p class="p" style="margin-top:14px; font-size:13px;">网站只用于起步、付款与查看状态。机器人就绪后，你几乎不需要再回来。</p>
+        </div>
+
+        <div class="card" style="padding:0; display:flex;">
+          <div class="demoFrame" aria-label="WhatsApp linking animation">
+            <iframe class="demoIframe" src="/assets/wa-linking-demo.html?lang=zh" title="WhatsApp device linking demo" loading="lazy" referrerpolicy="no-referrer"></iframe>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid2">
+        <div class="card">
+          <h2 class="h2">bothook.me 是什么？</h2>
+          <p class="p">bothook 提供一种更简单的方式来使用 OpenClaw：它不会改变 OpenClaw，也不要求你自己安装、维护任何东西。</p>
+          <p class="p">机器人会直接出现在你已经在用的聊天软件里。你只需要开始聊天。</p>
+        </div>
+        <div class="card">
+          <h2 class="h2">bothook 实际做了什么</h2>
+          <p class="p">bothook 不会创造一个新机器人，也不会在 OpenClaw 上再叠一层复杂系统。</p>
+          <p class="p"><strong>它只做一件事：</strong>替你把 OpenClaw 配好，并交付到你的聊天软件里。</p>
+        </div>
+      </section>
+
+      <section class="grid2">
+        <div class="card">
+          <h2 class="h2">使用体验是什么样的</h2>
+          <ul class="list">
+            <li>你不会在网站里“使用机器人”。</li>
+            <li>你不需要学习新的界面。</li>
+            <li>像平常一样打开你的聊天软件。</li>
+            <li>开始对话。</li>
+            <li>你已经在用 OpenClaw 了。</li>
+          </ul>
+          <p class="p" style="margin-top:12px;">你可以在 WhatsApp、Telegram 或 Discord 里和它聊天——就在那里完成。</p>
+        </div>
+        <div class="card">
+          <h2 class="h2">适合谁（以及不适合谁）</h2>
+          <div class="split">
+            <div>
+              <div class="label">适合你，如果你</div>
+              <ul class="list">
+                <li>想用 OpenClaw，而不是学习如何安装它</li>
+                <li>更喜欢在聊天软件里把事情做完</li>
+                <li>在意“使用效果”而不是“运行维护”</li>
+              </ul>
+            </div>
+            <div>
+              <div class="label">不太适合你，如果你</div>
+              <ul class="list">
+                <li>希望完全掌控安装与运行环境</li>
+                <li>需要深度的底层定制</li>
+                <li>享受搭建、维护和排错的过程</li>
+              </ul>
+            </div>
+          </div>
+          <p class="p" style="margin-top:12px;"><strong>一句话边界：</strong>bothook 适合“想用机器人”的人，不适合“想造机器人”的人。</p>
+        </div>
+      </section>
+
+      <section class="card" style="margin-top:18px;">
+        <h2 class="h2">常见问题</h2>
+        <details class="faq">
+          <summary>需要注册账号吗？</summary>
+          <div>不需要。没有注册，也没有登录。</div>
+        </details>
+        <details class="faq">
+          <summary>需要我自己安装或配置吗？</summary>
+          <div>不需要。bothook 会替你完成 OpenClaw 的准备与交付。</div>
+        </details>
+        <details class="faq">
+          <summary>我在哪里使用机器人？</summary>
+          <div>在你已经在用的聊天软件里，例如 WhatsApp、Telegram 或 Discord。</div>
+        </details>
+        <details class="faq">
+          <summary>以后还需要经常回到网站吗？</summary>
+          <div>不需要。网站主要用于起步、支付，以及查看状态/账单。</div>
+        </details>
+        <details class="faq">
+          <summary>如果我不续费会怎样？</summary>
+          <div>到期后机器人会自然停止运行，不需要你做额外清理。</div>
+        </details>
+        <details class="faq">
+          <summary>bothook 会改动 OpenClaw 吗？</summary>
+          <div>不会。bothook 只是让 OpenClaw 更容易开始使用。</div>
+        </details>
+      </section>
+
+      <section class="card" style="margin-top:18px;">
+        <h2 class="h2">总结</h2>
+        <p class="p">bothook 是一种更简单的 OpenClaw 使用方式。它不改变 OpenClaw 的工作方式——只是把它更直接地交付给你。</p>
+        <p class="p">你不需要理解它如何运行，你只需要开始聊天。</p>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footerRow">
+      <div>© <span id="year"></span> BOTHook.</div>
+      <nav class="footerLinks" aria-label="Footer">
+        <a href="/zh/contact.html">联系</a>
+        <span class="dot">·</span>
+        <a href="/zh/terms.html">条款</a>
+        <span class="dot">·</span>
+        <a href="/zh/privacy.html">隐私</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+    const wrap = document.getElementById('contentWrap');
+    const year = document.getElementById('year');
+    year.textContent = new Date().getFullYear();
+
+    // Fade-in on mount
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { wrap.style.opacity = '1'; });
+    });
+
+    function openPanel(open){
+      const p = document.getElementById('langPanel');
+      const b = document.getElementById('langBtn');
+      if (open) { p.classList.add('open'); b.setAttribute('aria-expanded','true'); }
+      else { p.classList.remove('open'); b.setAttribute('aria-expanded','false'); }
+    }
+
+    document.getElementById('langBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      const p = document.getElementById('langPanel');
+      openPanel(!p.classList.contains('open'));
+    });
+
+    // Fade transition on language switch
+    document.querySelectorAll('.langItem').forEach(a => {
+      a.addEventListener('click', (e) => {
+        const href = a.getAttribute('href');
+        if (!href) return;
+        e.preventDefault();
+        wrap.classList.add('is-transitioning');
+        setTimeout(() => { location.href = href; }, 150);
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.langWrap')) openPanel(false);
+    });
+
+    // Browser language suggestion banner (first visit only).
+    const dismissed = localStorage.getItem('bothook_lang_banner_dismissed');
+    if (!dismissed) {
+      const navLang = (navigator.language || 'en').toLowerCase();
+      const cur = 'zh';
+      const best = navLang.startsWith('en') ? 'en' : null;
+      if (best && best !== cur) {
+        const banner = document.getElementById('langBanner');
+        const text = document.getElementById('langBannerText');
+        const sw = document.getElementById('langBannerSwitch');
+        const dis = document.getElementById('langBannerDismiss');
+        text.textContent = 'View this page in English?';
+        banner.style.display = 'block';
+        sw.onclick = () => { localStorage.setItem('bothook_lang_banner_dismissed','1'); location.href = '/'; };
+        dis.onclick = () => { localStorage.setItem('bothook_lang_banner_dismissed','1'); banner.style.display = 'none'; };
+      }
+    }
+  </script>
+</body>
+</html>

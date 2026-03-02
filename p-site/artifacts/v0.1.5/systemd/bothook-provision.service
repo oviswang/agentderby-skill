@@ -1,0 +1,22 @@
+[Unit]
+Description=BOTHook Provisioning Server (Baileys)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bothook/provision
+Environment=PROVISION_DATA_DIR=/opt/bothook/provision/data
+Environment=PROVISION_PORT=18999
+ExecStart=/usr/bin/node /opt/bothook/provision/server.mjs
+Restart=always
+RestartSec=2
+
+# Hardening (minimal, adjust when tested)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

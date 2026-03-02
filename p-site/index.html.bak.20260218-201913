@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BOTHook Provisioning</title>
+  <meta name="description" content="Provisioning page for WhatsApp device linking." />
+  <link rel="icon" href="https://bothook.me/assets/logo.jpg" />
+  <style>
+    :root{--bg:#0b1220;--card:#111a2e;--text:#e8eefc;--muted:#a9b6d6;--accent:#57a6ff;--shadow:0 10px 30px rgba(0,0,0,.35)}
+    *{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,"Helvetica Neue",Arial;background:radial-gradient(900px 450px at 20% 10%, rgba(87,166,255,.18), transparent 60%),radial-gradient(700px 400px at 90% 30%, rgba(90,255,209,.12), transparent 55%),var(--bg);color:var(--text)}
+    a{color:inherit}
+    .wrap{max-width:920px;margin:0 auto;padding:26px 18px 60px}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+    .brand img{width:36px;height:36px;border-radius:10px;box-shadow:var(--shadow);object-fit:cover;background:#fff}
+    .card{background:rgba(255,255,255,.04);border-radius:18px;padding:18px 18px;box-shadow:var(--shadow)}
+    h1{margin:16px 0 10px;font-size:28px;line-height:1.15}
+    p{margin:10px 0;color:var(--muted);line-height:1.6}
+    .uuid{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:14px;background:rgba(255,255,255,.06);padding:10px 12px;border-radius:14px;word-break:break-all;color:rgba(232,238,252,.95)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    button{border:0;border-radius:14px;padding:10px 12px;background:rgba(255,255,255,.06);color:var(--text);cursor:pointer}
+    button.primary{background:linear-gradient(135deg, rgba(87,166,255,.95), rgba(90,255,209,.9));color:#071221;font-weight:700}
+    .hint{font-size:12px;color:rgba(169,182,214,.85)}
+    @media (max-width:860px){.row{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <a class="brand" href="https://bothook.me/" aria-label="BOTHook home">
+        <img src="https://bothook.me/assets/logo.jpg" alt="BOTHook" />
+        <strong>BOTHook</strong>
+      </a>
+      <a href="https://bothook.me/" class="hint">Back to bothook.me</a>
+    </div>
+
+    <h1>Provisioning</h1>
+    <p>This page creates a unique provisioning session. You’ll use it to link WhatsApp on the next step.</p>
+
+    <div class="card">
+      <div class="hint">Provisioning UUID</div>
+      <div class="uuid" id="uuid">Generating…</div>
+      <div class="btns">
+        <button class="primary" id="copyBtn" type="button">Copy UUID</button>
+        <button id="newBtn" type="button">Generate new</button>
+      </div>
+      <p class="hint">Keep this UUID — it will be used to match the WhatsApp linking session to your order.</p>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <div class="hint">Next step</div>
+        <p>When the WhatsApp QR is ready, you’ll scan it from WhatsApp → Linked devices.</p>
+        <p class="hint">(The QR rendering step will be wired to OpenClaw in the next iteration.)</p>
+      </div>
+      <div class="card">
+        <div class="hint">Support</div>
+        <p>If you’re stuck, contact us via the form on <a href="https://bothook.me/contact.html">bothook.me</a> and include your UUID.</p>
+      </div>
+    </div>
+
+    <script>
+      function uuidv4(){
+        // RFC4122-ish v4 (good enough for client-side session id)
+        const b = crypto.getRandomValues(new Uint8Array(16));
+        b[6] = (b[6] & 0x0f) | 0x40;
+        b[8] = (b[8] & 0x3f) | 0x80;
+        const s = [...b].map(x=>x.toString(16).padStart(2,'0')).join('');
+        return `${s.slice(0,8)}-${s.slice(8,12)}-${s.slice(12,16)}-${s.slice(16,20)}-${s.slice(20)}`;
+      }
+
+      const el = document.getElementById('uuid');
+      const copyBtn = document.getElementById('copyBtn');
+      const newBtn = document.getElementById('newBtn');
+
+      function setUuid(u){
+        el.textContent = u;
+        // Keep stable per tab unless user regenerates
+        history.replaceState(null,'',`/?uuid=${encodeURIComponent(u)}`);
+      }
+
+      const params = new URLSearchParams(location.search);
+      const existing = params.get('uuid');
+      setUuid(existing || uuidv4());
+
+      // Locale auto-follow: zh -> /zh/, else default en.
+      // Respect explicit user preference if present.
+      const pref = localStorage.getItem('bothook_lang_pref');
+      const navLang = (navigator.language || '').toLowerCase();
+      const best = pref ? pref : (navLang.startsWith('zh') ? 'zh' : 'en');
+      if (best === 'zh' && location.pathname === '/') {
+        location.replace('/zh/' + location.search);
+      }
+
+      copyBtn.addEventListener('click', async () => {
+        const u = el.textContent;
+        try {
+          await navigator.clipboard.writeText(u);
+          copyBtn.textContent = 'Copied';
+          setTimeout(()=>copyBtn.textContent='Copy UUID', 900);
+        } catch {
+          // fallback
+          const ta = document.createElement('textarea');
+          ta.value = u; document.body.appendChild(ta);
+          ta.select(); document.execCommand('copy'); ta.remove();
+          copyBtn.textContent = 'Copied';
+          setTimeout(()=>copyBtn.textContent='Copy UUID', 900);
+        }
+      });
+
+      newBtn.addEventListener('click', () => setUuid(uuidv4()));
+    </script>
+  </div>
+</body>
+</html>

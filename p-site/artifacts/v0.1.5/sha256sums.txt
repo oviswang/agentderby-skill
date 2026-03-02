@@ -1,0 +1,7 @@
+d8b1176fdf2259cd60c75ddba724aa7d679e93c1cd469e55b47a28ed1963e328  ./scripts/openclaw-gateway-start.sh
+6933513d3bc2aa8d4ee4e230cefe3c7a5933b26316af897f4cd65c925252526f  ./scripts/healthcheck.sh
+4194120b0bf5f2903bee9747b6cc8ee13b4f53014445c2e65fb587a77e50a8c3  ./systemd/bothook-provision.service
+a7ea0b674506e5fd00e8ef76be3dce950a6183f1f7e76c038301dcd94f05f0f8  ./systemd/openclaw-gateway.service
+f615aaad33c9c629ec358b9770a81b67aa4a761b32ea898beefa2b144b56936c  ./bootstrap.sh
+92aae042425b378f55ca3ab09ece968fb5ad44f5276baea0938b831610c62d73  ./README.md
+ff49cf50cacd5afd36f45fdb7a0c54fcae48dc2bbf0f8a564769f2022e627faa  ./manifest.json

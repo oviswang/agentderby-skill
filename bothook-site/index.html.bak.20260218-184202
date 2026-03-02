@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BOTHook</title>
+  <meta name="description" content="BOTHook — language switching that feels Apple-grade." />
+  <link rel="icon" href="/assets/logo.jpg" />
+  <link rel="preload" href="/assets/logo.jpg" as="image" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="banner" id="langBanner" aria-live="polite">
+    <div class="inner card" style="padding:8px 10px;">
+      <div id="langBannerText">View this page in another language?</div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button id="langBannerSwitch" type="button">Switch</button>
+        <button id="langBannerDismiss" type="button">Not now</button>
+      </div>
+    </div>
+  </div>
+
+  <header class="header">
+    <a class="brand" href="/" aria-label="BOTHook home">
+      <img src="/assets/logo.jpg" alt="BOTHook logo" />
+      <strong>BOTHook</strong>
+    </a>
+    <a class="langbtn" href="#" id="langBtn" aria-haspopup="menu" aria-expanded="false">
+      <span aria-hidden="true">🌐</span>
+      <span id="langLabel">English</span>
+    </a>
+  </header>
+
+  <main class="main">
+    <div class="content-wrap" id="contentWrap">
+      <section class="hero">
+        <div class="card">
+          <h1 class="h1">Apple‑grade language switching for your website.</h1>
+          <p class="p">BOTHook is a multilingual experience enhancement module: calm transitions, polished language UI, and intentional RTL layout.</p>
+          <div class="ctaRow">
+            <a class="cta primary" href="#" id="ctaPrimary">Get BOTHook</a>
+            <a class="cta ghost" href="#" id="ctaSecondary">Contact</a>
+          </div>
+          <p class="p" style="margin-top:14px; font-size:13px;">This is a minimal landing page. More locales + payment flow will be integrated next.</p>
+        </div>
+        <div>
+          <img class="logoLarge" src="/assets/logo.jpg" alt="BOTHook" />
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    © <span id="year"></span> BOTHook. All rights reserved.
+  </footer>
+
+  <script>
+    // Minimal scaffolding for the “Apple-grade” spec on a static site.
+    // - 150ms fade-out then URL switch; 150ms fade-in on load.
+    const wrap = document.getElementById('contentWrap');
+    const year = document.getElementById('year');
+    year.textContent = new Date().getFullYear();
+
+    // Fade-in on mount
+    wrap.style.opacity = '0';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { wrap.style.opacity = '1'; });
+    });
+
+    // Locale list (placeholder). We'll replace with the real 12 locales later.
+    const locales = [
+      { code: 'en', native: 'English', en: 'English' },
+      { code: 'ja', native: '日本語', en: 'Japanese' },
+      { code: 'zh-Hans', native: '中文（简体）', en: 'Simplified' },
+      { code: 'zh-Hant', native: '繁體中文', en: 'Traditional' },
+      { code: 'ar', native: 'العربية', en: 'Arabic', rtl: true },
+    ];
+
+    function currentLocale(){
+      const p = location.pathname;
+      // expected future: /{locale}/
+      const m = p.match(/^\/([^\/]+)\//);
+      return m ? m[1] : 'en';
+    }
+
+    function setDirForLocale(code){
+      document.documentElement.dir = (code === 'ar') ? 'rtl' : 'ltr';
+    }
+
+    setDirForLocale(currentLocale());
+
+    // Language switcher (minimal). We'll make it Apple-like with a dropdown panel later.
+    const btn = document.getElementById('langBtn');
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      // For now, cycle locales to demonstrate fade behavior.
+      const cur = currentLocale();
+      const idx = locales.findIndex(l => l.code === cur);
+      const next = locales[(idx + 1) % locales.length].code;
+      // 150ms fade-out
+      wrap.classList.add('is-transitioning');
+      setTimeout(() => {
+        // Static site: switch by URL (will be created later). For now, just simulate by query.
+        const url = (next === 'en') ? '/' : `/${next}/`;
+        location.href = url;
+      }, 150);
+    });
+
+    // Browser language suggestion banner (first visit only, minimal).
+    const dismissed = localStorage.getItem('bothook_lang_banner_dismissed');
+    if (!dismissed) {
+      const navLang = (navigator.language || 'en').toLowerCase();
+      const supported = locales.map(l => l.code.toLowerCase());
+      const best = supported.find(c => navLang.startsWith(c.toLowerCase())) || null;
+      const cur = currentLocale().toLowerCase();
+      if (best && best !== cur) {
+        const banner = document.getElementById('langBanner');
+        const text = document.getElementById('langBannerText');
+        const sw = document.getElementById('langBannerSwitch');
+        const dis = document.getElementById('langBannerDismiss');
+        const label = locales.find(l => l.code.toLowerCase() === best)?.native || best;
+        text.textContent = `View this page in ${label}?`;
+        banner.style.display = 'block';
+        sw.onclick = () => { localStorage.setItem('bothook_lang_banner_dismissed','1'); location.href = (best==='en')?'/':`/${best}/`; };
+        dis.onclick = () => { localStorage.setItem('bothook_lang_banner_dismissed','1'); banner.style.display = 'none'; };
+      }
+    }
+  </script>
+</body>
+</html>
