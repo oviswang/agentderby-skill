@@ -1,0 +1,18 @@
+[Unit]
+Description=BOTHook diag: bound-but-no-welcome scan
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/.openclaw/workspace
+Environment=BOTHOOK_DB_PATH=/home/ubuntu/.openclaw/workspace/control-plane/data/bothook.sqlite
+Environment=BOTHOOK_WELCOME_GAP_WINDOW_MIN=30
+Environment=BOTHOOK_WELCOME_GAP_LIMIT=80
+ExecStart=/usr/bin/node /home/ubuntu/.openclaw/workspace/control-plane/workers/welcome_gap_diag.mjs
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run BOTHook welcome-gap diag every 5 minutes
+
+[Timer]
+OnBootSec=2m
+OnUnitActiveSec=5m
+AccuracySec=20s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
