@@ -3779,19 +3779,37 @@ app.post('/api/ops/smoke/run', async (req, res) => {
     const inst = getInstanceById(db, instance_id);
     if (!inst?.public_ip) return send(res, 404, { ok:false, error:'instance_not_found_or_missing_ip' });
 
-    // Allocate delivery onto the chosen instance.
-    let d = getOrCreateDeliveryForUuid(db, uuid, { preferredLang: lang });
+    // Create a smoke delivery bound to the chosen instance WITHOUT using the normal allocation path.
+    // Rationale: allocation requires provision_ready pool stock; for smoke we want to pin to a specific instance.
+    const delivery_id = crypto.randomUUID();
+    const meta2 = JSON.stringify({ smoke: true, smoke_started_at: ts0, smoke_lang: lang, preferred_lang: lang });
 
     db.exec('BEGIN IMMEDIATE');
     try {
-      const meta2 = mergeMeta(d.meta_json, { smoke: true, smoke_started_at: ts0, smoke_lang: lang });
-      db.prepare('UPDATE deliveries SET instance_id=?, status=?, wa_jid=?, bound_at=?, updated_at=?, user_lang=?, meta_json=? WHERE delivery_id=?')
-        .run(instance_id, 'BOUND_UNPAID', wa_jid, ts0, ts0, lang, meta2, d.delivery_id);
+      db.prepare(
+        'INSERT INTO deliveries(delivery_id, order_id, user_id, instance_id, status, provision_uuid, created_at, updated_at, meta_json, wa_jid, wa_e164, bound_at, user_lang) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+      ).run(
+        delivery_id,
+        null,
+        uuid,
+        instance_id,
+        'BOUND_UNPAID',
+        uuid,
+        ts0,
+        ts0,
+        meta2,
+        wa_jid,
+        wa_jid.startsWith('sim:') ? null : ('+' + String(wa_jid).split('@')[0].replace(/\D+/g,'')),
+        ts0,
+        lang
+      );
+
       db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=?, assigned_at=? WHERE instance_id=?')
         .run('DELIVERING', uuid, ts0, instance_id);
+
       db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-        crypto.randomUUID(), ts0, 'delivery', d.delivery_id, 'SMOKE_BOUND_SIMULATED',
-        JSON.stringify({ uuid, instance_id, wa_jid, lang })
+        crypto.randomUUID(), ts0, 'delivery', delivery_id, 'SMOKE_BOUND_SIMULATED',
+        JSON.stringify({ uuid, delivery_id, instance_id, wa_jid, lang })
       );
       db.exec('COMMIT');
     } catch (e) {
@@ -3799,7 +3817,7 @@ app.post('/api/ops/smoke/run', async (req, res) => {
       throw e;
     }
 
-    d = getDeliveryByUuid(db, uuid);
+    const d = db.prepare('SELECT * FROM deliveries WHERE delivery_id=?').get(delivery_id);
 
     // (1) Welcome (BOUND_UNPAID)
     // Do NOT call back into HTTP (can deadlock under some server configurations). Render directly.
