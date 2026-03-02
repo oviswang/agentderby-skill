@@ -1278,8 +1278,9 @@ async function runPoolInitJob(job){
     }
 
     // Bootstrap
-    // Bootstrap artifacts version. Default to /artifacts/latest to pick up published fixes automatically.
-    const bootstrapVer = String(process.env.BOTHOOK_BOOTSTRAP_VER || 'latest');
+    // Bootstrap artifacts version.
+    // HARD RULE: always use /artifacts/latest for pool (re)image/init to ensure the newest fixes (e.g. autoreply hard gate) are applied.
+    const bootstrapVer = 'latest';
     pushJobLog(job, `run bootstrap ${bootstrapVer}`);
     const boot = poolSsh(
       inst,
