@@ -1,0 +1,18 @@
+[Unit]
+Description=BOTHook Subscription Reclaim Executor (terminate RECLAIM_PENDING)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/.openclaw/workspace/control-plane
+Environment=BOTHOOK_DB_PATH=/home/ubuntu/.openclaw/workspace/control-plane/data/bothook.sqlite
+Environment=BOTHOOK_API_BASE=http://127.0.0.1:18998
+Environment=BOTHOOK_CLOUD_REGION=ap-singapore
+Environment=BOTHOOK_RECLAIM_EXEC_DELAY_MS=1800000
+EnvironmentFile=/home/ubuntu/.openclaw/credentials/stripe.env
+Environment=PATH=/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=TELEGRAM_ENV=/home/ubuntu/.openclaw/credentials/telegram.env
+ExecStart=/usr/bin/flock -n /tmp/bothook-subscription-reclaim-executor.lock /usr/bin/node /home/ubuntu/.openclaw/workspace/control-plane/workers/reclaim_executor.mjs

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run BOTHook Subscription Reclaim Executor every 15 minutes
+
+[Timer]
+OnBootSec=6min
+OnUnitActiveSec=15min
+RandomizedDelaySec=30
+Unit=bothook-subscription-reclaim-executor.service
+
+[Install]
+WantedBy=timers.target
