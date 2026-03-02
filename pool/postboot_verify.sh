@@ -8,6 +8,8 @@ set -euo pipefail
 EVID_DIR="/opt/bothook/evidence"
 OUT="$EVID_DIR/postboot_verify.json"
 mkdir -p "$EVID_DIR"
+chown ubuntu:ubuntu "$EVID_DIR" 2>/dev/null || true
+chmod 775 "$EVID_DIR" 2>/dev/null || true
 
 now(){ date -u +%Y-%m-%dT%H:%M:%SZ; }
 
