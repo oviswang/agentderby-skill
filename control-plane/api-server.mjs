@@ -97,8 +97,12 @@ function getAttributionForUuid(db, uuid){
 function sendSelfChatOnInstance(instance, text, { toJid } = {}){
   // Prefer loopback send endpoint (does not depend on CLI JSON output).
   // NOTE: `toJid` should be a WhatsApp JID like "6581...@s.whatsapp.net".
+  // SMOKE/SIM: allow a non-deliverable simulated jid prefix (e.g. "sim:...") to bypass real WhatsApp sending.
   const t = String(text || '').trim();
   const to = String(toJid || '').trim();
+  if (to && to.startsWith('sim:')) {
+    return { code: 0, stdout: 'simulated', stderr: '' };
+  }
   if (to) {
     // Send directly to self via WhatsApp target e164 derived from jid.
     // Use base64 to avoid shell quoting issues with newlines/UTF-8.
@@ -1492,6 +1496,38 @@ app.post('/api/ops/pool/clear-auth', (req, res) => {
 // Ops: sanitize WhatsApp provisioning state on a pool instance so the next user can generate a fresh QR.
 // Policy: no reimage. We stop provision service (if present), clear PROVISION_DATA_DIR contents, clear auth-profiles/DELIVERED markers,
 // restart provision service, and probe /healthz. Any failure leaves the instance in NEEDS_VERIFY for further repair.
+function smokeForbiddenHits(text){
+  const s = String(text || '');
+  const hits = [];
+  const patterns = [
+    /No API key found for provider/i,
+    /auth-profiles\.json/i,
+    /openclaw\s+(channels|gateway|plugins|models)\b/i,
+    /\[gateway\]/i,
+    /stack trace|stacktrace/i,
+  ];
+  for (const p of patterns) {
+    try { if (p.test(s)) hits.push(String(p)); } catch {}
+  }
+  return hits;
+}
+
+function recordSmokeMessage(db, { uuid, delivery_id, instance_id, kind, lang, text, sendResult }){
+  try {
+    const ts = nowIso();
+    const msg = String(text || '');
+    const hits = smokeForbiddenHits(msg);
+    db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json)
+                VALUES (?,?,?,?,?,?)`).run(
+      crypto.randomUUID(), ts, 'delivery', delivery_id || uuid, 'SMOKE_MESSAGE_RECORDED',
+      JSON.stringify({ uuid, delivery_id, instance_id, kind, lang, sha256: sha256Hex(msg), forbidden_hits: hits, send_code: sendResult?.code ?? null, send_detail: String(sendResult?.stderr || sendResult?.stdout || '').slice(0,300), text: msg })
+    );
+    return { ok: hits.length === 0, forbidden_hits: hits };
+  } catch {
+    return { ok: false, forbidden_hits: ['record_failed'] };
+  }
+}
+
 app.post('/api/ops/pool/wa-sanitize', (req, res) => {
   try {
     const instance_id = String(req.body?.instance_id || '').trim();
@@ -3714,6 +3750,154 @@ app.get('/api/delivery/status', (req, res) => {
 });
 
 
+
+// Ops: mark QR generated (A-stage start)
+app.post('/api/ops/smoke/run', async (req, res) => {
+  try {
+    // IMPORTANT: do not log request bodies (may contain smoke test keys).
+    const instance_id = String(req.body?.instance_id || '').trim();
+    const lang = String(req.body?.lang || 'en').trim().toLowerCase();
+    const key = String(req.body?.openai_key || '').trim();
+    if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
+    if (!key) return send(res, 400, { ok:false, error:'openai_key_required' });
+    if (instance_id === 'lhins-npsqfxvn') return send(res, 403, { ok:false, error:'forbidden_master_host' });
+
+    const uuid = crypto.randomUUID();
+    const wa_jid = `sim:1${sha256Hex(uuid).slice(0,10).replace(/\D/g,'0')}@s.whatsapp.net`;
+    const ts0 = nowIso();
+    const { db } = openDb();
+
+    const inst = getInstanceById(db, instance_id);
+    if (!inst?.public_ip) return send(res, 404, { ok:false, error:'instance_not_found_or_missing_ip' });
+
+    // Allocate delivery onto the chosen instance.
+    let d = getOrCreateDeliveryForUuid(db, uuid, { preferredLang: lang });
+
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const meta2 = mergeMeta(d.meta_json, { smoke: true, smoke_started_at: ts0, smoke_lang: lang });
+      db.prepare('UPDATE deliveries SET instance_id=?, status=?, wa_jid=?, bound_at=?, updated_at=?, user_lang=?, meta_json=? WHERE delivery_id=?')
+        .run(instance_id, 'BOUND_UNPAID', wa_jid, ts0, ts0, lang, meta2, d.delivery_id);
+      db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=?, assigned_at=? WHERE instance_id=?')
+        .run('DELIVERING', uuid, ts0, instance_id);
+      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+        crypto.randomUUID(), ts0, 'delivery', d.delivery_id, 'SMOKE_BOUND_SIMULATED',
+        JSON.stringify({ uuid, instance_id, wa_jid, lang })
+      );
+      db.exec('COMMIT');
+    } catch (e) {
+      try { db.exec('ROLLBACK'); } catch {}
+      throw e;
+    }
+
+    d = getDeliveryByUuid(db, uuid);
+
+    // (1) Welcome (BOUND_UNPAID)
+    let welcomeMsg = '';
+    try {
+      // reuse the same renderer logic as /api/wa/welcome_unpaid_text (inline by HTTP call to our own server)
+      const r = await fetch(`http://127.0.0.1:18998/api/wa/welcome_unpaid_text?uuid=${encodeURIComponent(uuid)}`);
+      const j = await r.json();
+      welcomeMsg = String(j?.message || j?.msg || j?.text || j?.welcome || j?.data || '');
+      // The endpoint above currently returns {ok:true, message:...} further down in file; be defensive.
+      if (!welcomeMsg && j?.ok && typeof j?.message === 'string') welcomeMsg = j.message;
+      if (!welcomeMsg && j?.ok && typeof j?.msg === 'string') welcomeMsg = j.msg;
+    } catch {}
+
+    if (!welcomeMsg) {
+      // Fallback: call renderer directly by hitting the same endpoint again and reading raw text.
+      try {
+        const r = await fetch(`http://127.0.0.1:18998/api/wa/welcome_unpaid_text?uuid=${encodeURIComponent(uuid)}`);
+        const t = await r.text();
+        welcomeMsg = t;
+      } catch {}
+    }
+
+    // If the endpoint returns JSON, it should contain a rendered message. If not, treat as failure.
+    if (!welcomeMsg || welcomeMsg.includes('welcome_unpaid_missing') || welcomeMsg.includes('unknown_uuid')) {
+      return send(res, 500, { ok:false, error:'welcome_render_failed', uuid, instance_id, lang });
+    }
+
+    const rrW = sendSelfChatOnInstance(inst, welcomeMsg, { toJid: wa_jid });
+    const recW = recordSmokeMessage(db, { uuid, delivery_id: d.delivery_id, instance_id, kind:'welcome_unpaid', lang, text: welcomeMsg, sendResult: rrW });
+    if (!recW.ok) return send(res, 500, { ok:false, error:'welcome_contains_forbidden', uuid, forbidden_hits: recW.forbidden_hits });
+
+    // (2) Mark paid + send guide
+    const tsPaid = nowIso();
+    try {
+      const metaPaid = mergeMeta(d.meta_json, { smoke_paid_at: tsPaid, paid_confirmed_via: 'smoke' });
+      db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?').run('PAID', tsPaid, metaPaid, d.delivery_id);
+      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+        crypto.randomUUID(), tsPaid, 'delivery', d.delivery_id, 'SMOKE_PAYMENT_SIMULATED', JSON.stringify({ uuid, instance_id })
+      );
+    } catch {}
+
+    // Build guide text using the same prompt slot.
+    const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
+    const guideTpl = String(prompts.guide_key_paid || '').trim();
+    const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
+    const guideMsg = guideTpl ? renderTpl(guideTpl, { uuid, p_link: pLink }) : `[bothook] Payment received ✅\n\nNext: paste your OpenAI API key here as ONE line starting with sk- (self-chat only).\nLink: ${pLink}`;
+
+    const rrG = sendSelfChatOnInstance(inst, guideMsg, { toJid: wa_jid });
+    const recG = recordSmokeMessage(db, { uuid, delivery_id: d.delivery_id, instance_id, kind:'guide_key_paid', lang, text: guideMsg, sendResult: rrG });
+    if (!recG.ok) return send(res, 500, { ok:false, error:'guide_contains_forbidden', uuid, forbidden_hits: recG.forbidden_hits });
+
+    // (3) Verify key (real OpenAI call) + store encrypted key in DB
+    const kv = await fetch('http://127.0.0.1:18998/api/key/verify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ uuid, provider: 'openai', key })
+    });
+    const kvj = await kv.json();
+    if (!kvj?.ok || kvj?.verified !== true) {
+      // Record the user-visible failure message if provided (must not contain system warnings).
+      const failMsg = String(kvj?.message || kvj?.detail || kvj?.error || 'key_verify_failed');
+      recordSmokeMessage(db, { uuid, delivery_id: d.delivery_id, instance_id, kind:'key_verify_failed', lang, text: failMsg, sendResult: { code: 0, stdout: 'simulated', stderr: '' } });
+      return send(res, 200, { ok:true, uuid, instance_id, lang, verified:false, verify_error: kvj?.error || 'key_invalid' });
+    }
+
+    const keyOkMsg = String(kvj?.message || '').trim();
+    if (keyOkMsg) {
+      const recK = recordSmokeMessage(db, { uuid, delivery_id: d.delivery_id, instance_id, kind:'key_verified_success', lang, text: keyOkMsg, sendResult: { code: 0, stdout: 'simulated', stderr: '' } });
+      if (!recK.ok) return send(res, 500, { ok:false, error:'key_success_message_contains_forbidden', uuid, forbidden_hits: recK.forbidden_hits });
+    }
+
+    // (4) Cutover + finalize delivery
+    try { tryCutoverDelivered(db, uuid, { reason: 'smoke' }); } catch {}
+
+    // Wait a bit then check if machine is converged to DELIVERED.
+    await sleepMs(3000);
+    let delivered = false;
+    let d3 = null;
+    try { d3 = getDeliveryByUuid(db, uuid); } catch {}
+    try { delivered = String(d3?.status || '') === 'DELIVERED'; } catch { delivered = false; }
+
+    // (5) Cleanup on instance: clear auth + sanitize WA session (so it is safe to return to pool)
+    try { poolSsh(inst, 'sudo rm -f /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json 2>/dev/null || true', { timeoutMs: 15000, tty:false, retries:0 }); } catch {}
+    try { await fetch('http://127.0.0.1:18998/api/ops/pool/wa-sanitize', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ instance_id }) }); } catch {}
+
+    // Delete stored secret for smoke UUID (do not leave keys behind)
+    try {
+      db.prepare('DELETE FROM delivery_secrets WHERE provision_uuid=? AND kind=?').run(uuid, 'openai_api_key');
+      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+        crypto.randomUUID(), nowIso(), 'delivery', d.delivery_id, 'SMOKE_SECRET_DELETED', JSON.stringify({ uuid })
+      );
+    } catch {}
+
+    // Return instance back to pool
+    try {
+      const tsEnd = nowIso();
+      db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=NULL, assigned_at=NULL WHERE instance_id=?').run('IN_POOL', instance_id);
+      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+        crypto.randomUUID(), tsEnd, 'instance', instance_id, 'SMOKE_INSTANCE_RETURNED_TO_POOL', JSON.stringify({ uuid, instance_id })
+      );
+    } catch {}
+
+    return send(res, 200, { ok:true, uuid, instance_id, lang, delivered });
+  } catch (e) {
+    return send(res, 500, { ok:false, error: e?.message || 'server_error' });
+  }
+});
 
 // Ops: mark QR generated (A-stage start)
 app.post('/api/ops/qr-generated', (req, res) => {
