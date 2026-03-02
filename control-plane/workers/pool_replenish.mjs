@@ -208,9 +208,11 @@ function main() {
   const ready = Math.max(0, Number(readyRaw || 0) - reserved);
 
   const needs = db.prepare(`SELECT instance_id FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='NEEDS_VERIFY' ORDER BY last_probe_at ASC NULLS FIRST LIMIT 1`).get();
+  const manualRaw = db.prepare(`SELECT COUNT(*) c FROM instances WHERE lifecycle_status='IN_POOL' AND health_status='NEEDS_MANUAL'`).get().c;
+  const manual = Number(manualRaw || 0);
 
   if (total >= WARN_THRESHOLD) {
-    tgSend(`[bothook] pool nearing cap: total=${total}/${CAP_TOTAL}, ready=${ready}/${TARGET_READY} (raw_ready=${readyRaw}, reserved=${reserved})`);
+    tgSend(`[bothook] pool nearing cap: total=${total}/${CAP_TOTAL}, ready=${ready}/${TARGET_READY} (raw_ready=${readyRaw}, reserved=${reserved}, manual=${manual})`);
   }
 
   if (ready >= TARGET_READY) {
@@ -237,9 +239,18 @@ function main() {
   }
 
   if (total >= CAP_TOTAL) {
-    tgSend(`[bothook][WARN] pool blocked by cap: total=${total}/${CAP_TOTAL}, ready=${ready}/${TARGET_READY} (raw_ready=${readyRaw}, reserved=${reserved})`);
-    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'cap_reached', total, ready, raw_ready: readyRaw, reserved }, null, 2));
+    tgSend(`[bothook][WARN] pool blocked by cap: total=${total}/${CAP_TOTAL}, ready=${ready}/${TARGET_READY} (raw_ready=${readyRaw}, reserved=${reserved}, manual=${manual})`);
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'cap_reached', total, ready, raw_ready: readyRaw, reserved, manual }, null, 2));
     return;
+  }
+
+  // Hard guard: if any instance is flagged NEEDS_MANUAL, suppress cloud creates.
+  // We still allow repair of NEEDS_VERIFY; but we do not "create our way out" of manual problems.
+  // Implementation detail: allow the repair path below to run, but block the create path later.
+  const manualBlocked = manual > 0;
+  if (manualBlocked) {
+    tgSend(`[bothook][WARN] pool create suppressed: manual=${manual} total=${total}/${CAP_TOTAL}, ready=${ready}/${TARGET_READY}`);
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'manual_blocked_suppress_create', total, ready, raw_ready: readyRaw, reserved, manual }, null, 2));
   }
 
   // Suppress cloud creates while pool init jobs are active (maintenance bursts).
@@ -264,6 +275,12 @@ function main() {
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
       .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_REPAIR_TRIGGERED', JSON.stringify({ job }));
     console.log(JSON.stringify({ ok:true, ts, action:'repair', instance_id, job }, null, 2));
+    return;
+  }
+
+  // If manual-blocked, stop here. No creates while manual issues exist.
+  if (manualBlocked) {
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'manual_blocked_no_create', total, ready, raw_ready: readyRaw, reserved, manual }, null, 2));
     return;
   }
 
