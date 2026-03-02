@@ -1,0 +1,47 @@
+{
+  "version": "0.1",
+  "googleAds": {
+    "mccCustomerId": "9776571037",
+    "clientCustomerId": "1577191627",
+    "timeZone": "Asia/Singapore",
+    "scopes": {
+      "sgDesktop": {
+        "campaignNamePrefixes": ["BH-SG-DESKTOP"],
+        "campaignIds": []
+      }
+    }
+  },
+  "guard": {
+    "windows": {
+      "spendLookbackMinutes": 15,
+      "funnelLookbackMinutes": 30
+    },
+    "thresholds": {
+      "spend15mSgdHardStop": 3.0
+    },
+    "hardStop": {
+      "eventTypesAny": [
+        "WELCOME_UNPAID_SEND_FAILED",
+        "GUIDE_KEY_SEND_FAILED"
+      ],
+      "fallback": {
+        "boundButWelcomeNotSent": true
+      }
+    },
+    "safety": {
+      "maxPausePerRun": 5
+    }
+  },
+  "optimize": {
+    "enabled": false,
+    "negativeKeywords": {
+      "maxAddsPerRun": 20,
+      "minCostSgd": 2.0,
+      "requireQualityScoreEq": 0
+    },
+    "budget": {
+      "maxIncreasePctPerDay": 20,
+      "requireRoiGte": 1.5
+    }
+  }
+}
