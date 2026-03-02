@@ -1488,6 +1488,127 @@ app.post('/api/ops/pool/clear-auth', (req, res) => {
   }
 });
 
+// Ops: sanitize WhatsApp provisioning state on a pool instance so the next user can generate a fresh QR.
+// Policy: no reimage. We stop provision service (if present), clear PROVISION_DATA_DIR contents, clear auth-profiles/DELIVERED markers,
+// restart provision service, and probe /healthz. Any failure leaves the instance in NEEDS_VERIFY for further repair.
+app.post('/api/ops/pool/wa-sanitize', (req, res) => {
+  try {
+    const instance_id = String(req.body?.instance_id || '').trim();
+    if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
+    if (instance_id === 'lhins-npsqfxvn') return send(res, 403, { ok:false, error:'forbidden_master_host' });
+
+    const { db } = openDb();
+    const inst = getInstanceById(db, instance_id);
+    if (!inst?.public_ip) return send(res, 404, { ok:false, error:'instance_not_found_or_missing_ip' });
+
+    const ts = nowIso();
+    const steps = [];
+
+    const remote = `set -euo pipefail; 
+`+
+`DATA_DIR='/opt/bothook/provision/data';
+`+
+`# If systemd unit exists, prefer its configured PROVISION_DATA_DIR
+`+
+`if systemctl list-unit-files 2>/dev/null | grep -q '^bothook-provision\\.service'; then
+`+
+`  ENV_LINE=$(systemctl show bothook-provision.service -p Environment 2>/dev/null | sed 's/^Environment=//');
+`+
+`  if echo "$ENV_LINE" | tr ' ' '\n' | grep -q '^PROVISION_DATA_DIR='; then
+`+
+`    DATA_DIR=$(echo "$ENV_LINE" | tr ' ' '\n' | sed -n 's/^PROVISION_DATA_DIR=//p' | tail -n1);
+`+
+`  fi
+`+
+`fi
+`+
+`echo "step:detected_data_dir:$DATA_DIR";
+`+
+`# Stop provision if present
+`+
+`if systemctl list-unit-files 2>/dev/null | grep -q '^bothook-provision\\.service'; then
+`+
+`  sudo systemctl stop bothook-provision.service || true;
+`+
+`  echo 'step:stopped_provision:ok';
+`+
+`else
+`+
+`  echo 'step:stopped_provision:skip';
+`+
+`fi
+`+
+`# Clear WA/provision session data
+`+
+`sudo mkdir -p "$DATA_DIR";
+`+
+`sudo rm -rf "$DATA_DIR"/*;
+`+
+`echo 'step:cleared_provision_data:ok';
+`+
+`# Clear OpenClaw auth + delivered markers
+`+
+`AGENT_DIR=/home/ubuntu/.openclaw/agents/main/agent;
+`+
+`sudo rm -f "$AGENT_DIR/auth-profiles.json" || true;
+`+
+`sudo rm -f /opt/bothook/DELIVERED.json 2>/dev/null || true;
+`+
+`echo 'step:cleared_auth:ok';
+`+
+`# Start provision if present
+`+
+`if systemctl list-unit-files 2>/dev/null | grep -q '^bothook-provision\\.service'; then
+`+
+`  sudo systemctl start bothook-provision.service || true;
+`+
+`  echo 'step:started_provision:ok';
+`+
+`else
+`+
+`  echo 'step:started_provision:skip';
+`+
+`fi
+`+
+`# Probe health (best-effort)
+`+
+`code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:18999/healthz 2>/dev/null || true);
+`+
+`echo "step:probe_healthz:$code";
+`+
+`echo done`;
+
+    const r = poolSsh(inst, remote, { timeoutMs: 45000, tty: false, retries: 0 });
+    const stdout = String(r.stdout || '');
+    const ok = (r.code ?? 1) === 0;
+
+    // Parse step markers (best-effort)
+    for (const line of stdout.split(/\r?\n/)) {
+      if (line.startsWith('step:')) steps.push(line.trim());
+    }
+
+    try {
+      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+        .run(
+          crypto.randomUUID(), ts, 'instance', instance_id,
+          ok ? 'POOL_WA_SANITIZED' : 'POOL_WA_SANITIZE_FAILED',
+          JSON.stringify({ instance_id, ok, ssh_code: r.code ?? null, steps: steps.slice(0, 50) })
+        );
+    } catch {}
+
+    if (!ok) {
+      try {
+        db.prepare('UPDATE instances SET health_status=?, health_reason=?, health_source=? WHERE instance_id=?')
+          .run('NEEDS_VERIFY', 'wa_sanitize_failed', 'ops', instance_id);
+      } catch {}
+    }
+
+    return send(res, 200, { ok:true, instance_id, sanitized: ok, ssh_code: r.code ?? null, steps });
+  } catch {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 
 // Pool READY report (push): called by pool instances after they finish bootstrap + verification.
 // Auth: short-lived instance-scoped token stored in instances.meta_json.ready_report_token.

@@ -206,7 +206,7 @@ async function main() {
   for (const r of rows) {
     // Hard skip: if ops has marked this delivery as "do not reallocate" / closed out,
     // watchdog must not keep touching it (prevents release/reallocate loops).
-    const dm = jsonMeta(r.delivery_meta);
+    const dm = parseJson(r.delivery_meta);
     if (dm?.do_not_reallocate === 1 || dm?.closed_out_at || dm?.closed_out_reason) continue;
 
     if (isPaid(db, r.delivery_status, r.delivery_meta, r.user_id)) continue;
@@ -272,7 +272,7 @@ async function main() {
   }
 
   // Stage B: bound but unpaid. Safeguard: confirm payment before any action.
-  // We DO NOT auto-reimage here (L2). We release back to pool and raise an alert.
+  // We DO NOT auto-reimage here (L2). We sanitize WA state (no reimage) then release back to pool.
   let confirmPaid = false;
   try {
     const u = String(chosen.provision_uuid || chosen.user_id || '').trim();
@@ -285,6 +285,15 @@ async function main() {
   if (confirmPaid) {
     console.log(JSON.stringify({ ok:true, ts, action:'skip_paid_confirmed', stage, instance_id, delivery_id }, null, 2));
     return;
+  }
+
+  // Sanitize WhatsApp provisioning state on the instance (no reimage) to ensure next user can generate a fresh QR.
+  // If sanitize fails, leave instance as NEEDS_VERIFY and proceed to release.
+  let sanitize = null;
+  try {
+    sanitize = postJson(`${API_BASE}/api/ops/pool/wa-sanitize`, { instance_id });
+  } catch {
+    sanitize = { ok:false, error:'wa_sanitize_call_failed' };
   }
 
   db.exec('BEGIN IMMEDIATE');
@@ -304,15 +313,15 @@ async function main() {
     ).run(mergeMeta(chosen.instance_meta, { released_by: 'delivery_watchdog', released_at: ts, timeout_stage: stage }), instance_id);
 
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-      .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_PAYMENT_TIMEOUT_RELEASE', JSON.stringify({ instance_id }));
+      .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_PAYMENT_TIMEOUT_RELEASE', JSON.stringify({ instance_id, sanitize }));
     db.exec('COMMIT');
   } catch (e) {
     try { db.exec('ROLLBACK'); } catch {}
     throw e;
   }
 
-  tgSend(`[bothook][watchdog] post-bind unpaid timeout (15m): released (no reimage) instance=${instance_id} delivery=${delivery_id}`);
-  console.log(JSON.stringify({ ok:true, ts, action:'release_no_reimage', stage, instance_id, delivery_id }, null, 2));
+  tgSend(`[bothook][watchdog] post-bind unpaid timeout (15m): sanitized+released (no reimage) instance=${instance_id} delivery=${delivery_id}`);
+  console.log(JSON.stringify({ ok:true, ts, action:'sanitize_and_release_no_reimage', stage, instance_id, delivery_id, sanitize }, null, 2));
 }
 
 main();
