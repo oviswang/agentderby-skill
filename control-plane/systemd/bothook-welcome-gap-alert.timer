@@ -1,0 +1,11 @@
+[Unit]
+Description=Run BOTHook welcome-gap Telegram alert every 5 minutes
+
+[Timer]
+OnBootSec=3m
+OnUnitActiveSec=5m
+AccuracySec=20s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
