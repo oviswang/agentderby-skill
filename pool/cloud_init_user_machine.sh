@@ -154,6 +154,14 @@ install_units(){
   systemctl enable --now bothook-postboot-verify.service >/dev/null 2>&1 || true
 }
 
+ensure_onboarding_plugins(){
+  # Critical path: user must always get deterministic welcome/guide prompts.
+  # Ensure autoreply plugin is enabled (best-effort; does not fail bootstrap).
+  log "ensuring onboarding plugins enabled"
+  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw plugins enable bothook-wa-autoreply >/dev/null 2>&1 || true'
+  sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true
+}
+
 main(){
   require_root
   install_deps
@@ -163,6 +171,7 @@ main(){
   place_assets
   install_provision_deps
   install_units
+  ensure_onboarding_plugins
 
   # Verify pinned version
   local v

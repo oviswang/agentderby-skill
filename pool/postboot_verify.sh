@@ -121,6 +121,19 @@ send_openai_key_guide_if_missing
 if ! svc_active openclaw-gateway.service; then ok=false; errs+=("openclaw-gateway.service not active"); fi
 if ! svc_active bothook-provision.service; then ok=false; errs+=("bothook-provision.service not active"); fi
 
+# Critical UX gate: autoreply plugin must be enabled so users always get welcome/guide prompts.
+# Best-effort repair: enable it if found disabled.
+autoreply_loaded=false
+if sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply' && sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply.*loaded'; then
+  autoreply_loaded=true
+else
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-autoreply >/dev/null 2>&1 || true
+  sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true
+  if sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply.*loaded'; then
+    autoreply_loaded=true
+  fi
+fi
+
 # Check ports (18789 can be briefly unavailable after reboot; retry a short window)
 port18789_ok=false
 for _ in $(seq 1 12); do
@@ -146,6 +159,7 @@ export CHK_PROV_HEALTHZ=$([ "$prov_ok" = true ] && echo 1 || echo 0)
 # Additional checks
 export CHK_TMUX=$([ -x /usr/bin/tmux ] && echo 1 || echo 0)
 export CHK_AUTH_PROFILES=$([ -f /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json ] && echo 1 || echo 0)
+export CHK_AUTOREPLY_LOADED=$([ "$autoreply_loaded" = true ] && echo 1 || echo 0)
 
 # Default model check (best-effort)
 MODEL_PRIMARY=$(sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config get agents.defaults.model.primary 2>/dev/null || true)
@@ -161,6 +175,7 @@ j={
   'provision_healthz_ok': os.environ.get('CHK_PROV_HEALTHZ')=='1',
   'tmux_installed': os.environ.get('CHK_TMUX')=='1',
   'auth_profiles_present': os.environ.get('CHK_AUTH_PROFILES')=='1',
+  'autoreply_loaded': os.environ.get('CHK_AUTOREPLY_LOADED')=='1',
   'default_model_openai_gpt_5_2': os.environ.get('CHK_DEFAULT_MODEL_OK')=='1'
 }
 print(json.dumps(j,ensure_ascii=False))
