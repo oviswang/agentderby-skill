@@ -5,7 +5,8 @@
 ## 1) Artifacts 目录（不含密钥）
 
 发布目录（示例版本）：
-- `https://p.bothook.me/artifacts/v0.2.7/`
+- `https://p.bothook.me/artifacts/latest/` (preferred)
+- `https://p.bothook.me/artifacts/v0.2.7/` (pinned example)
 
 文件清单：
 - `bootstrap.sh`
@@ -32,7 +33,7 @@
 
 ### 步骤
 1. 在一台全新机器上通过 cloud-init（或手动）以 root 运行：
-   - `curl -fsSL https://p.bothook.me/artifacts/v0.2.7/bootstrap.sh | bash`
+   - `curl -fsSL https://p.bothook.me/artifacts/latest/bootstrap.sh | bash`
 
 2. 预期结果（文件落盘）
 - `/opt/bothook/healthcheck.sh` 存在且可执行
