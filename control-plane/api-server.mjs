@@ -1508,9 +1508,13 @@ app.post('/api/ops/pool/wa-sanitize', (req, res) => {
 `+
 `DATA_DIR='/opt/bothook/provision/data';
 `+
+`HAS_UNIT=0;
+`+
+`if systemctl list-unit-files 2>/dev/null | grep -q '^bothook-provision\\.service'; then HAS_UNIT=1; fi
+`+
 `# If systemd unit exists, prefer its configured PROVISION_DATA_DIR
 `+
-`if systemctl list-unit-files 2>/dev/null | grep -q '^bothook-provision\\.service'; then
+`if [ "$HAS_UNIT" = "1" ]; then
 `+
 `  ENV_LINE=$(systemctl show bothook-provision.service -p Environment 2>/dev/null | sed 's/^Environment=//');
 `+
@@ -1524,9 +1528,11 @@ app.post('/api/ops/pool/wa-sanitize', (req, res) => {
 `+
 `echo "step:detected_data_dir:$DATA_DIR";
 `+
+`echo "step:has_provision_unit:$HAS_UNIT";
+`+
 `# Stop provision if present
 `+
-`if systemctl list-unit-files 2>/dev/null | grep -q '^bothook-provision\\.service'; then
+`if [ "$HAS_UNIT" = "1" ]; then
 `+
 `  sudo systemctl stop bothook-provision.service || true;
 `+
@@ -1558,7 +1564,7 @@ app.post('/api/ops/pool/wa-sanitize', (req, res) => {
 `+
 `# Start provision if present
 `+
-`if systemctl list-unit-files 2>/dev/null | grep -q '^bothook-provision\\.service'; then
+`if [ "$HAS_UNIT" = "1" ]; then
 `+
 `  sudo systemctl start bothook-provision.service || true;
 `+
@@ -1570,11 +1576,39 @@ app.post('/api/ops/pool/wa-sanitize', (req, res) => {
 `+
 `fi
 `+
-`# Probe health (best-effort)
+`# Probe health.
 `+
 `code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:18999/healthz 2>/dev/null || true);
 `+
 `echo "step:probe_healthz:$code";
+`+
+`# Strong validation: if provision unit exists, require healthz=200 (wait a short window).
+`+
+`if [ "$HAS_UNIT" = "1" ]; then
+`+
+`  ok=0;
+`+
+`  for i in 1 2 3 4 5 6 7 8 9 10; do
+`+
+`    code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:18999/healthz 2>/dev/null || true);
+`+
+`    if [ "$code" = "200" ]; then ok=1; break; fi
+`+
+`    sleep 1;
+`+
+`  done
+`+
+`  echo "step:healthz_required_ok:$ok";
+`+
+`  if [ "$ok" != "1" ]; then
+`+
+`    echo 'step:healthz_required_failed';
+`+
+`    exit 12;
+`+
+`  fi
+`+
+`fi
 `+
 `echo done`;
 
