@@ -54,6 +54,24 @@ function postJson(url, body) {
   return JSON.parse(out);
 }
 
+function sshCmd(ip, cmd, { timeoutSec = 15 } = {}) {
+  const key = '/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519';
+  const ssh = [
+    'ssh',
+    '-i', key,
+    '-o', 'BatchMode=yes',
+    '-o', 'StrictHostKeyChecking=no',
+    '-o', 'UserKnownHostsFile=/dev/null',
+    '-o', 'GlobalKnownHostsFile=/dev/null',
+    '-o', 'LogLevel=ERROR',
+    '-o', `ConnectTimeout=${Math.min(8, timeoutSec)}`,
+    '-o', 'ConnectionAttempts=1',
+    `ubuntu@${ip}`,
+    cmd
+  ].map(x => JSON.stringify(String(x))).join(' ');
+  return sh(`timeout ${Math.max(5, timeoutSec)}s ${ssh}`);
+}
+
 function loadEnvFile(p) {
   try {
     const text = sh(`bash -lc 'set -a; source ${JSON.stringify(p)}; set +a; python3 - <<"PY"\nimport os, json\nkeys=["TELEGRAM_BOT_TOKEN","TELEGRAM_TOKEN","TELEGRAM_CHAT_ID","OWNER_CHAT_ID"]\nprint(json.dumps({k:os.environ.get(k) for k in keys}))\nPY'`);
@@ -203,11 +221,58 @@ async function main() {
   let chosen = null;
   let stage = null;
 
+  // Best-effort self-heal for onboarding UX (at most 1 instance per run):
+  // ensure user-machine has autoreply enabled + gateway running after bind.
+  let ensured = 0;
+
   for (const r of rows) {
     // Hard skip: if ops has marked this delivery as "do not reallocate" / closed out,
     // watchdog must not keep touching it (prevents release/reallocate loops).
     const dm = parseJson(r.delivery_meta);
     if (dm?.do_not_reallocate === 1 || dm?.closed_out_at || dm?.closed_out_reason) continue;
+
+    // UX self-heal: only for bound-but-unpaid within the 15m window.
+    // Goal: avoid cases where user gets no welcome/guide due to autoreply disabled or gateway not running.
+    if (ensured < 1 && r.bound_at && !isPaid(db, r.delivery_status, r.delivery_meta, r.user_id)) {
+      try {
+        const boundMs = Date.now() - Date.parse(String(r.bound_at));
+        if (Number.isFinite(boundMs) && boundMs >= 0 && boundMs < STAGE_B_MS) {
+          const m = parseJson(r.delivery_meta);
+          const last = m?.autoreply_ensured_at ? Date.parse(String(m.autoreply_ensured_at)) : null;
+          // Once per QR generation window, or at most once per 10 minutes as fallback.
+          const qrGenAt = m?.qr_generated_at ? Date.parse(String(m.qr_generated_at)) : null;
+          const allow = (!last) || (qrGenAt && last && qrGenAt > last) || (last && (Date.now() - last) > 10 * 60 * 1000);
+          if (allow) {
+            const ip = String(r.public_ip || '');
+            if (ip) {
+              let ok2 = false;
+              let detail = '';
+              try {
+                const out = sshCmd(ip, "set -euo pipefail; openclaw plugins list 2>/dev/null | grep -q 'bothook-wa-autoreply.*loaded' || (openclaw plugins enable bothook-wa-autoreply >/dev/null 2>&1 || true); sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true; ss -ltn 2>/dev/null | grep -q ':18789' && echo ok || echo noport");
+                detail = String(out || '').trim().slice(0, 300);
+                ok2 = detail.includes('ok');
+              } catch (e) {
+                detail = String(e?.message || e).slice(0, 300);
+                ok2 = false;
+              }
+
+              const ts2 = nowIso();
+              try {
+                db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(
+                  mergeMeta(r.delivery_meta, { autoreply_ensured_at: ts2, autoreply_ensure_ok: ok2 }), ts2, String(r.delivery_id)
+                );
+              } catch {}
+              try {
+                db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+                  .run(crypto.randomUUID(), ts2, 'delivery', String(r.delivery_id), ok2 ? 'AUTOREPLY_ENSURED_OK' : 'AUTOREPLY_ENSURED_FAILED', JSON.stringify({ uuid: String(r.provision_uuid || ''), instance_id: String(r.instance_id || ''), ip, ok: ok2, detail }));
+              } catch {}
+
+              ensured++;
+            }
+          }
+        }
+      } catch {}
+    }
 
     if (isPaid(db, r.delivery_status, r.delivery_meta, r.user_id)) continue;
 
