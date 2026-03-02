@@ -2943,8 +2943,25 @@ app.get('/api/wa/status', async (req, res) => {
                 // Ensure autoreply plugin is enabled on the user machine.
                 try { poolSsh(inst2, `openclaw plugins enable bothook-wa-autoreply 2>/dev/null || true`, { timeoutMs: 8000, tty: false, retries: 0 }); } catch {}
 
-                const rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
-                const ok = (rr2.code ?? 1) === 0;
+                // Send guide. If it fails, do a single fast self-heal (restart gateway) and retry once.
+                let rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
+                let ok = (rr2.code ?? 1) === 0;
+                if (!ok) {
+                  // Rate-limit gateway restarts: at most once per QR generation window.
+                  try {
+                    const metaNow = jsonMeta(d2.meta_json) || {};
+                    const lastAutoRestartAt = metaNow.guide_key_gateway_restart_at ? Date.parse(metaNow.guide_key_gateway_restart_at) : null;
+                    const allowAutoRestart = (!lastAutoRestartAt) || (qrGenAt && lastAutoRestartAt && qrGenAt > lastAutoRestartAt);
+                    if (allowAutoRestart) {
+                      poolSsh(inst2, `sudo systemctl restart openclaw-gateway.service 2>/dev/null || true; echo restarted`, { timeoutMs: 20000, tty: false, retries: 0 });
+                      const metaR = mergeMeta(d2.meta_json, { guide_key_gateway_restart_at: ts });
+                      db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(metaR, ts, d2.delivery_id);
+                      d2.meta_json = metaR;
+                    }
+                  } catch {}
+                  rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
+                  ok = (rr2.code ?? 1) === 0;
+                }
                 const patch = ok
                   ? { guide_key_sent_at: ts, guide_key_lang: lang, guide_key_send_ok: true }
                   : { guide_key_last_attempt_at: ts, guide_key_lang: lang, guide_key_send_ok: false };
@@ -3031,6 +3048,10 @@ app.get('/api/pay/confirm', async (req, res) => {
         crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAYMENT_PAID', JSON.stringify({ uuid, provider_sub_id: subId, via:'pay_confirm' })
       );
     } catch {}
+
+    // Proactively trigger onboarding/cutover messaging immediately after payment.
+    // This avoids waiting for user messages or polling to send guide_key_paid.
+    try { await fetch(`http://127.0.0.1:18998/api/wa/status?uuid=${encodeURIComponent(uuid)}`); } catch {}
 
     return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, paid:true, provider_sub_id: subId });
   } catch (e) {
