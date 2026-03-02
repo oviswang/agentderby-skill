@@ -182,3 +182,26 @@ CREATE TABLE IF NOT EXISTS delivery_secrets (
 );
 
 CREATE INDEX IF NOT EXISTS idx_delivery_secrets_uuid ON delivery_secrets(provision_uuid, kind);
+
+-- Outbound messaging tasks (welcome/guide retries with readiness gating)
+CREATE TABLE IF NOT EXISTS outbound_tasks (
+  task_id TEXT PRIMARY KEY,
+  delivery_id TEXT NOT NULL,
+  provision_uuid TEXT NOT NULL,
+  instance_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  lang TEXT,
+  to_jid TEXT,
+  status TEXT NOT NULL,
+  attempt INTEGER NOT NULL DEFAULT 0,
+  next_run_at TEXT,
+  last_error_code TEXT,
+  last_error_detail TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  done_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_outbound_tasks_due ON outbound_tasks(status, next_run_at, created_at);
+CREATE INDEX IF NOT EXISTS idx_outbound_tasks_delivery ON outbound_tasks(delivery_id, kind, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_outbound_tasks_active_unique ON outbound_tasks(delivery_id, kind) WHERE status IN ('QUEUED','RUNNING');

@@ -1415,6 +1415,189 @@ function spawnOpsWorkerBestEffort(){
   } catch {}
 }
 
+function enqueueOutboundTask(db, { delivery_id, uuid, instance_id, kind, lang, to_jid }){
+  try {
+    const task_id = crypto.randomUUID();
+    const ts = nowIso();
+    // Dedupe: unique active index on (delivery_id, kind) prevents duplicates.
+    db.prepare(
+      `INSERT OR IGNORE INTO outbound_tasks(task_id, delivery_id, provision_uuid, instance_id, kind, lang, to_jid, status, attempt, next_run_at, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(task_id, delivery_id, uuid, instance_id, kind, lang || null, to_jid || null, 'QUEUED', 0, ts, ts, ts);
+    try {
+      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+        crypto.randomUUID(), ts, 'delivery', delivery_id || uuid, 'OUTBOUND_TASK_ENQUEUED',
+        JSON.stringify({ uuid, delivery_id, instance_id, kind, lang })
+      );
+    } catch {}
+    return { ok:true, task_id };
+  } catch (e) {
+    return { ok:false, error: e?.message || 'enqueue_failed' };
+  }
+}
+
+function parseJsonFromFirstBrace(s){
+  const t = String(s || '');
+  const i = t.indexOf('{');
+  if (i < 0) return null;
+  try { return JSON.parse(t.slice(i)); } catch { return null; }
+}
+
+function outboundBackoffMs(attempt){
+  const n = Number(attempt || 0);
+  if (n <= 0) return 30_000;
+  if (n === 1) return 60_000;
+  if (n === 2) return 120_000;
+  if (n === 3) return 300_000;
+  return 600_000;
+}
+
+function outboundReadinessProbe(inst){
+  // Cheap readiness check: gateway probe must succeed.
+  try {
+    const r = poolSsh(inst, 'openclaw gateway probe --json 2>/dev/null || true', { timeoutMs: 6000, tty:false, retries:0 });
+    const j = parseJsonFromFirstBrace(r.stdout || r.stderr || '');
+    if (!j || j.ok !== true) return { ok:false, reason:'gateway_probe_failed' };
+    return { ok:true };
+  } catch {
+    return { ok:false, reason:'gateway_probe_failed' };
+  }
+}
+
+async function runOutboundWorkerLoop(){
+  const lockPath = '/tmp/bothook_outbound_worker.lock';
+  let fd = null;
+  try {
+    fd = fs.openSync(lockPath, 'wx');
+    fs.writeFileSync(lockPath, String(process.pid));
+  } catch {
+    return;
+  }
+
+  try {
+    const { db } = openDb();
+    const now = nowIso();
+    while (true) {
+      const row = db.prepare(
+        "SELECT * FROM outbound_tasks WHERE status='QUEUED' AND (next_run_at IS NULL OR next_run_at <= ?) ORDER BY datetime(created_at) ASC LIMIT 1"
+      ).get(now);
+      if (!row) break;
+
+      const ts0 = nowIso();
+      const task_id = row.task_id;
+      const attempt = Number(row.attempt || 0) + 1;
+      try {
+        db.prepare('UPDATE outbound_tasks SET status=?, attempt=?, updated_at=? WHERE task_id=?')
+          .run('RUNNING', attempt, ts0, task_id);
+      } catch {}
+
+      const delivery_id = String(row.delivery_id || '');
+      const uuid = String(row.provision_uuid || '');
+      const instance_id = String(row.instance_id || '');
+      const kind = String(row.kind || '');
+      const lang = String(row.lang || '') || null;
+      const to_jid = String(row.to_jid || '') || null;
+
+      const inst = getInstanceById(db, instance_id);
+      if (!inst?.public_ip) {
+        try { db.prepare('UPDATE outbound_tasks SET status=?, last_error_code=?, last_error_detail=?, updated_at=? WHERE task_id=?')
+          .run('ERROR', 'missing_instance', 'instance_not_found_or_missing_ip', nowIso(), task_id); } catch {}
+        continue;
+      }
+
+      // Readiness gating before send
+      const ready = outboundReadinessProbe(inst);
+      if (!ready.ok) {
+        const tsN = nowIso();
+        const next = new Date(Date.now() + outboundBackoffMs(attempt)).toISOString();
+        try {
+          db.prepare('UPDATE outbound_tasks SET status=?, next_run_at=?, last_error_code=?, last_error_detail=?, updated_at=? WHERE task_id=?')
+            .run('QUEUED', next, ready.reason || 'not_ready', '', tsN, task_id);
+          db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+            crypto.randomUUID(), tsN, 'delivery', delivery_id || uuid, 'OUTBOUND_TASK_DELAYED',
+            JSON.stringify({ uuid, delivery_id, instance_id, kind, reason: ready.reason || 'not_ready', attempt, next_run_at: next })
+          );
+        } catch {}
+        continue;
+      }
+
+      // Render message
+      let msg = '';
+      try {
+        const prompts = loadWaPrompts(lang || 'en') || loadWaPrompts('en') || {};
+        if (kind === 'welcome_unpaid') {
+          const tpl = String(prompts.welcome_unpaid || '').trim();
+          if (!tpl) throw new Error('welcome_unpaid_missing');
+          const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
+          msg = renderTpl(tpl, { uuid, p_link: pLink, pay_countdown_minutes: 15, pay_short_link: '' });
+        } else if (kind === 'guide_key_paid') {
+          const tpl = String(prompts.guide_key_paid || '').trim();
+          if (!tpl) throw new Error('guide_key_paid_missing');
+          const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
+          msg = renderTpl(tpl, { uuid, p_link: pLink });
+        } else {
+          throw new Error('unknown_kind');
+        }
+      } catch (e) {
+        try {
+          db.prepare('UPDATE outbound_tasks SET status=?, last_error_code=?, last_error_detail=?, updated_at=? WHERE task_id=?')
+            .run('ERROR', 'render_failed', String(e?.message || 'render_failed').slice(0,120), nowIso(), task_id);
+        } catch {}
+        continue;
+      }
+
+      // Attempt send (best-effort enable plugin)
+      try { poolSsh(inst, `openclaw plugins enable bothook-wa-autoreply 2>/dev/null || true`, { timeoutMs: 8000, tty:false, retries:0 }); } catch {}
+
+      let rr = { code: 1, stdout: '', stderr: 'send_not_run' };
+      try { rr = sendSelfChatOnInstance(inst, msg, { toJid: to_jid }); } catch {}
+      const ok = (rr.code ?? 1) === 0;
+      const ts1 = nowIso();
+
+      try {
+        const detail = (String(rr.stderr || rr.stdout || '')).replace(/\s+/g,' ').slice(0,300);
+        db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+          crypto.randomUUID(), ts1, 'delivery', delivery_id || uuid,
+          ok ? (kind === 'welcome_unpaid' ? 'WELCOME_UNPAID_SENT' : 'GUIDE_KEY_SENT') : (kind === 'welcome_unpaid' ? 'WELCOME_UNPAID_SEND_FAILED' : 'GUIDE_KEY_SEND_FAILED'),
+          JSON.stringify({ uuid, delivery_id, instance_id, exit_code: rr.code ?? null, detail, attempt })
+        );
+      } catch {}
+
+      if (ok) {
+        try { db.prepare('UPDATE outbound_tasks SET status=?, done_at=?, updated_at=? WHERE task_id=?').run('DONE', ts1, ts1, task_id); } catch {}
+        // Persist delivery meta (idempotent)
+        try {
+          const d2 = db.prepare('SELECT meta_json FROM deliveries WHERE delivery_id=?').get(delivery_id);
+          const meta2 = mergeMeta(d2?.meta_json || null, kind === 'welcome_unpaid'
+            ? { welcome_unpaid_sent_at: ts1, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: true }
+            : { guide_key_sent_at: ts1, guide_key_lang: lang, guide_key_send_ok: true }
+          );
+          db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts1, delivery_id);
+        } catch {}
+      } else {
+        const next = new Date(Date.now() + outboundBackoffMs(attempt)).toISOString();
+        const detail = (String(rr.stderr || rr.stdout || '')).replace(/\s+/g,' ').slice(0,300);
+        try {
+          db.prepare('UPDATE outbound_tasks SET status=?, next_run_at=?, last_error_code=?, last_error_detail=?, updated_at=? WHERE task_id=?')
+            .run('QUEUED', next, 'send_failed', detail, ts1, task_id);
+        } catch {}
+        // Persist delivery meta attempt
+        try {
+          const d2 = db.prepare('SELECT meta_json FROM deliveries WHERE delivery_id=?').get(delivery_id);
+          const meta2 = mergeMeta(d2?.meta_json || null, kind === 'welcome_unpaid'
+            ? { welcome_unpaid_last_attempt_at: ts1, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: false }
+            : { guide_key_last_attempt_at: ts1, guide_key_lang: lang, guide_key_send_ok: false }
+          );
+          db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts1, delivery_id);
+        } catch {}
+      }
+    }
+  } finally {
+    try { if (fd) fs.closeSync(fd); } catch {}
+    try { fs.unlinkSync(lockPath); } catch {}
+  }
+}
+
 app.post('/api/ops/pool/init', (req, res) => {
   try {
     const instance_id = String(req.body?.instance_id || '').trim();
@@ -2922,38 +3105,8 @@ app.get('/api/wa/status', async (req, res) => {
                 // Ensure autoreply plugin is enabled on the user machine (repeat welcome until paid).
                 try { poolSsh(inst2, `openclaw plugins enable bothook-wa-autoreply 2>/dev/null || true`, { timeoutMs: 8000, tty: false, retries: 0 }); } catch {}
 
-                // Send welcome. If it fails, do a single fast self-heal (restart gateway) and retry once.
-                let rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
-                let ok = (rr2.code ?? 1) === 0;
-                if (!ok) {
-                  // Rate-limit gateway restarts: at most once per QR generation window.
-                  try {
-                    const metaNow = jsonMeta(d2.meta_json) || {};
-                    const lastAutoRestartAt = metaNow.welcome_unpaid_gateway_restart_at ? Date.parse(metaNow.welcome_unpaid_gateway_restart_at) : null;
-                    const allowAutoRestart = (!lastAutoRestartAt) || (qrGenAt && lastAutoRestartAt && qrGenAt > lastAutoRestartAt);
-                    if (allowAutoRestart) {
-                      poolSsh(inst2, `sudo systemctl restart openclaw-gateway.service 2>/dev/null || true; echo restarted`, { timeoutMs: 20000, tty: false, retries: 0 });
-                      const metaR = mergeMeta(d2.meta_json, { welcome_unpaid_gateway_restart_at: ts });
-                      db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(metaR, ts, d2.delivery_id);
-                      d2.meta_json = metaR;
-                    }
-                  } catch {}
-                  rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
-                  ok = (rr2.code ?? 1) === 0;
-                }
-
-                const patch = ok
-                  ? { welcome_unpaid_sent_at: ts, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: true }
-                  : { welcome_unpaid_last_attempt_at: ts, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: false };
-                const meta2 = mergeMeta(d2.meta_json, patch);
-                db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts, d2.delivery_id);
-                try {
-                  const detail = (String(rr2.stderr || rr2.stdout || '')).replace(/\s+/g, ' ').slice(0, 300);
-                  db2.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-                    crypto.randomUUID(), ts, 'delivery', d2.delivery_id, ok ? 'WELCOME_UNPAID_SENT' : 'WELCOME_UNPAID_SEND_FAILED',
-                    JSON.stringify({ uuid, instance_id: inst2.instance_id, exit_code: rr2.code ?? null, detail })
-                  );
-                } catch {}
+                // Enqueue welcome send (worker will do readiness gating + retries).
+                try { enqueueOutboundTask(db2, { delivery_id: d2.delivery_id, uuid, instance_id: inst2.instance_id, kind: 'welcome_unpaid', lang, to_jid: d2.wa_jid }); } catch {}
               }
               return;
             }
@@ -3001,36 +3154,8 @@ app.get('/api/wa/status', async (req, res) => {
                 // Ensure autoreply plugin is enabled on the user machine.
                 try { poolSsh(inst2, `openclaw plugins enable bothook-wa-autoreply 2>/dev/null || true`, { timeoutMs: 8000, tty: false, retries: 0 }); } catch {}
 
-                // Send guide. If it fails, do a single fast self-heal (restart gateway) and retry once.
-                let rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
-                let ok = (rr2.code ?? 1) === 0;
-                if (!ok) {
-                  // Rate-limit gateway restarts: at most once per QR generation window.
-                  try {
-                    const metaNow = jsonMeta(d2.meta_json) || {};
-                    const lastAutoRestartAt = metaNow.guide_key_gateway_restart_at ? Date.parse(metaNow.guide_key_gateway_restart_at) : null;
-                    const allowAutoRestart = (!lastAutoRestartAt) || (qrGenAt && lastAutoRestartAt && qrGenAt > lastAutoRestartAt);
-                    if (allowAutoRestart) {
-                      poolSsh(inst2, `sudo systemctl restart openclaw-gateway.service 2>/dev/null || true; echo restarted`, { timeoutMs: 20000, tty: false, retries: 0 });
-                      const metaR = mergeMeta(d2.meta_json, { guide_key_gateway_restart_at: ts });
-                      db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(metaR, ts, d2.delivery_id);
-                      d2.meta_json = metaR;
-                    }
-                  } catch {}
-                  rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
-                  ok = (rr2.code ?? 1) === 0;
-                }
-                const patch = ok
-                  ? { guide_key_sent_at: ts, guide_key_lang: lang, guide_key_send_ok: true }
-                  : { guide_key_last_attempt_at: ts, guide_key_lang: lang, guide_key_send_ok: false };
-                const meta2 = mergeMeta(d2.meta_json, patch);
-                db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts, d2.delivery_id);
-                try {
-                  db2.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-                    crypto.randomUUID(), ts, 'delivery', d2.delivery_id, ok ? 'GUIDE_KEY_SENT' : 'GUIDE_KEY_SEND_FAILED',
-                    JSON.stringify({ uuid, instance_id: inst2.instance_id, exit_code: rr2.code ?? null, detail: (String(rr2.stderr || rr2.stdout || '')).replace(/\s+/g,' ').slice(0,300) })
-                  );
-                } catch {}
+                // Enqueue guide send (worker will do readiness gating + retries).
+                try { enqueueOutboundTask(db2, { delivery_id: d2.delivery_id, uuid, instance_id: inst2.instance_id, kind: 'guide_key_paid', lang, to_jid: d2.wa_jid }); } catch {}
               }
             }
           } catch {}
@@ -3133,28 +3258,13 @@ app.get('/api/pay/confirm', async (req, res) => {
 
         const ts2 = nowIso();
         const lang = getDeliveryLang(d2);
-        const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
-        const guide = (prompts && prompts.guide_key_paid) ? String(prompts.guide_key_paid) : '';
+        // Enqueue guide send (worker will do readiness gating + retries).
+        try { enqueueOutboundTask(db, { delivery_id: d2.delivery_id, uuid: String(uuid), instance_id: inst2.instance_id, kind: 'guide_key_paid', lang, to_jid: d2.wa_jid }); } catch {}
 
-        const pLink = `https://p.bothook.me/p/${encodeURIComponent(String(uuid))}?lang=${encodeURIComponent(String(lang||'en'))}`;
-        const fallback = `[bothook] Payment received ✅\n\nNext: paste your OpenAI API key here as ONE line starting with sk- (self-chat only).\nLink: ${pLink}`;
-        const msg = guide ? renderTpl(guide, { uuid: String(uuid), p_link: pLink }) : fallback;
-        const rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
-        const ok2 = (rr2.code ?? 1) === 0;
-
-        // Update meta (idempotent)
-        const patch2 = ok2
-          ? { guide_key_sent_at: ts2, guide_key_lang: lang, guide_key_send_ok: true, guide_key_sent_via: 'pay_confirm' }
-          : { guide_key_last_attempt_at: ts2, guide_key_lang: lang, guide_key_send_ok: false, guide_key_sent_via: 'pay_confirm' };
-        const meta2 = mergeMeta(d2.meta_json, patch2);
-        try { db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts2, d2.delivery_id); } catch {}
-
-        // Audit event
+        // Persist meta that we attempted to enqueue (best-effort)
         try {
-          db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-            crypto.randomUUID(), ts2, 'delivery', d2.delivery_id, ok2 ? 'GUIDE_KEY_SENT' : 'GUIDE_KEY_SEND_FAILED',
-            JSON.stringify({ uuid, instance_id: inst2.instance_id, exit_code: rr2.code ?? null, via: 'pay_confirm', detail: (String(rr2.stderr || rr2.stdout || '')).replace(/\s+/g,' ').slice(0,300) })
-          );
+          const meta2 = mergeMeta(d2.meta_json, { guide_key_enqueued_at: ts2, guide_key_lang: lang, guide_key_sent_via: 'pay_confirm' });
+          db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts2, d2.delivery_id);
         } catch {}
       } catch {}
     }, 0);
@@ -4301,7 +4411,9 @@ async function runOpsWorkerLoop(){
   }
 }
 
-if (String(process.env.BOTHOOK_OPS_WORKER || '') === '1') {
+if (String(process.env.BOTHOOK_OUTBOUND_WORKER || '') === '1') {
+  runOutboundWorkerLoop().then(()=>process.exit(0)).catch(()=>process.exit(0));
+} else if (String(process.env.BOTHOOK_OPS_WORKER || '') === '1') {
   runOpsWorkerLoop().then(()=>process.exit(0)).catch(()=>process.exit(0));
 } else {
   app.listen(PORT, '127.0.0.1', () => {

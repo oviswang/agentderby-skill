@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openDb, nowIso } from './lib/db.mjs';
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 function readSchemaSql() {
   // Resolve schema.sql relative to this file (works regardless of process.cwd()).
@@ -66,6 +66,33 @@ function main() {
         meta_json TEXT
       );`);
       db.exec("CREATE INDEX IF NOT EXISTS idx_delivery_secrets_uuid ON delivery_secrets(provision_uuid, kind);");
+    } catch {}
+  }
+
+  if (v < 7) {
+    // Outbound messaging tasks (welcome/guide retries with readiness gating)
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS outbound_tasks (
+        task_id TEXT PRIMARY KEY,
+        delivery_id TEXT NOT NULL,
+        provision_uuid TEXT NOT NULL,
+        instance_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        lang TEXT,
+        to_jid TEXT,
+        status TEXT NOT NULL,
+        attempt INTEGER NOT NULL DEFAULT 0,
+        next_run_at TEXT,
+        last_error_code TEXT,
+        last_error_detail TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        done_at TEXT
+      );`);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_outbound_tasks_due ON outbound_tasks(status, next_run_at, created_at);");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_outbound_tasks_delivery ON outbound_tasks(delivery_id, kind, status);");
+      // Prevent duplicate active tasks for the same delivery+kind.
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_outbound_tasks_active_unique ON outbound_tasks(delivery_id, kind) WHERE status IN ('QUEUED','RUNNING');");
     } catch {}
   }
 
