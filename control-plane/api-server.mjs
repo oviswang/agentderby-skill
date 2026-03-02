@@ -2729,7 +2729,21 @@ app.get('/api/wa/status', async (req, res) => {
               + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
               + `echo services_restarted`
             );
-        poolSsh(instance, cmd, { timeoutMs: 20000, tty: false, retries: 0 });
+        const rr = poolSsh(instance, cmd, { timeoutMs: 20000, tty: false, retries: 0 });
+        try {
+          // Audit: record whether delivered service convergence + marker write succeeded.
+          const out = String(rr?.stdout || rr?.stderr || '').trim();
+          const ok = out.includes('services_restarted_delivered') || out.includes('services_restarted');
+          const ts = nowIso();
+          const et = delivered
+            ? (ok ? 'DELIVERED_SERVICES_CONVERGED' : 'DELIVERED_SERVICES_CONVERGE_FAILED')
+            : (ok ? 'LINKING_SERVICES_CONVERGED' : 'LINKING_SERVICES_CONVERGE_FAILED');
+          const detail = out.replace(/\s+/g, ' ').slice(0, 300);
+          db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+            crypto.randomUUID(), ts, 'delivery', (delivery?.delivery_id || uuid), et,
+            JSON.stringify({ uuid, instance_id: instance.instance_id, delivered, ok, detail })
+          );
+        } catch {}
       } catch {}
     }
     // If connected + entitled, self-heal delivered cutover (auth/model/config) and send OpenAI key setup guide.
