@@ -1274,7 +1274,8 @@ async function runPoolInitJob(job){
     }
 
     // Bootstrap
-    const bootstrapVer = String(process.env.BOTHOOK_BOOTSTRAP_VER || 'v0.2.8');
+    // Bootstrap artifacts version. Default to /artifacts/latest to pick up published fixes automatically.
+    const bootstrapVer = String(process.env.BOTHOOK_BOOTSTRAP_VER || 'latest');
     pushJobLog(job, `run bootstrap ${bootstrapVer}`);
     const boot = poolSsh(
       inst,
