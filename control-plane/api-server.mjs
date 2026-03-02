@@ -2868,8 +2868,17 @@ app.get('/api/wa/status', async (req, res) => {
                 let rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
                 let ok = (rr2.code ?? 1) === 0;
                 if (!ok) {
+                  // Rate-limit gateway restarts: at most once per QR generation window.
                   try {
-                    poolSsh(inst2, `sudo systemctl restart openclaw-gateway.service 2>/dev/null || true; echo restarted`, { timeoutMs: 20000, tty: false, retries: 0 });
+                    const metaNow = jsonMeta(d2.meta_json) || {};
+                    const lastAutoRestartAt = metaNow.welcome_unpaid_gateway_restart_at ? Date.parse(metaNow.welcome_unpaid_gateway_restart_at) : null;
+                    const allowAutoRestart = (!lastAutoRestartAt) || (qrGenAt && lastAutoRestartAt && qrGenAt > lastAutoRestartAt);
+                    if (allowAutoRestart) {
+                      poolSsh(inst2, `sudo systemctl restart openclaw-gateway.service 2>/dev/null || true; echo restarted`, { timeoutMs: 20000, tty: false, retries: 0 });
+                      const metaR = mergeMeta(d2.meta_json, { welcome_unpaid_gateway_restart_at: ts });
+                      db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(metaR, ts, d2.delivery_id);
+                      d2.meta_json = metaR;
+                    }
                   } catch {}
                   rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
                   ok = (rr2.code ?? 1) === 0;
