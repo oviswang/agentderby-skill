@@ -108,10 +108,16 @@ function sshProbe(ip) {
     // - ssh_ok: network + auth
     // - has_openclaw: runtime presence
     // - gateway_unit: systemd unit presence
+    // IMPORTANT: use a dedicated known_hosts for machine-to-machine probes.
+    // This avoids false ssh_fail caused by the operator's ~/.ssh/known_hosts (e.g. host key rotations).
+    // Policy: accept-new (learn first-seen keys), but do NOT ignore changes.
+    const KNOWN_HOSTS = process.env.BOTHOOK_POOL_KNOWN_HOSTS || '/tmp/bothook_pool_known_hosts';
+
     const cmd =
       `ssh -i ${JSON.stringify(POOL_SSH_KEY)} `
-      + `-o BatchMode=yes -o StrictHostKeyChecking=no `
-      + `-o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null `
+      + `-o BatchMode=yes -o StrictHostKeyChecking=accept-new `
+      + `-o UserKnownHostsFile=${JSON.stringify(KNOWN_HOSTS)} -o GlobalKnownHostsFile=/dev/null `
+      + `-o UpdateHostKeys=yes -o HashKnownHosts=no `
       + `-o ConnectTimeout=5 ubuntu@${host} `
       + `'set -euo pipefail; `
       + `echo ssh_ok; `
