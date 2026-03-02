@@ -1453,14 +1453,52 @@ function outboundBackoffMs(attempt){
 }
 
 function outboundReadinessProbe(inst){
-  // Cheap readiness check: gateway probe must succeed.
+  // Readiness gating for outbound welcome/guide.
+  // Goal: avoid wasting attempts when the user machine isn't ready to send/receive.
+  // Checks (best-effort, cheap):
+  // 1) gateway probe ok
+  // 2) whatsapp channel running+connected
+  // 3) autoreply plugin loaded (from postboot evidence if present; fallback to plugin list text)
   try {
-    const r = poolSsh(inst, 'openclaw gateway probe --json 2>/dev/null || true', { timeoutMs: 6000, tty:false, retries:0 });
-    const j = parseJsonFromFirstBrace(r.stdout || r.stderr || '');
-    if (!j || j.ok !== true) return { ok:false, reason:'gateway_probe_failed' };
+    // (1) gateway probe
+    const pr = poolSsh(inst, 'openclaw gateway probe --json 2>/dev/null || true', { timeoutMs: 6000, tty:false, retries:0 });
+    const pj = parseJsonFromFirstBrace(pr.stdout || pr.stderr || '');
+    if (!pj || pj.ok !== true) return { ok:false, reason:'gateway_probe_failed' };
+
+    // (2) whatsapp channel status
+    const cr = poolSsh(inst, 'openclaw channels status --probe --json 2>/dev/null || true', { timeoutMs: 7000, tty:false, retries:0 });
+    const cj = parseJsonFromFirstBrace(cr.stdout || cr.stderr || '');
+    const wa = cj?.channels?.whatsapp || null;
+    // Some versions may omit connected/running fields; be conservative.
+    if (!wa) return { ok:false, reason:'wa_status_missing' };
+    if (wa.running === false) return { ok:false, reason:'wa_not_running' };
+    if (wa.connected === false) return { ok:false, reason:'wa_not_connected' };
+
+    // (3) autoreply loaded
+    let autoreplyOk = null;
+    try {
+      const er = poolSsh(inst, 'sudo cat /opt/bothook/evidence/postboot_verify.json 2>/dev/null || echo missing', { timeoutMs: 4000, tty:false, retries:0 });
+      const txt = String(er.stdout || '').trim();
+      if (txt && txt !== 'missing') {
+        const ej = JSON.parse(txt);
+        if (typeof ej?.autoreply_loaded === 'boolean') autoreplyOk = ej.autoreply_loaded;
+      }
+    } catch {}
+
+    if (autoreplyOk === null) {
+      try {
+        const lr = poolSsh(inst, 'openclaw plugins list 2>/dev/null || true', { timeoutMs: 6000, tty:false, retries:0 });
+        const lt = String(lr.stdout || lr.stderr || '');
+        // Heuristic: presence of the plugin name suggests it is installed/recognized.
+        autoreplyOk = /bothook-wa-autoreply/i.test(lt);
+      } catch {}
+    }
+
+    if (autoreplyOk === false) return { ok:false, reason:'autoreply_not_loaded' };
+
     return { ok:true };
   } catch {
-    return { ok:false, reason:'gateway_probe_failed' };
+    return { ok:false, reason:'readiness_probe_failed' };
   }
 }
 
