@@ -220,7 +220,7 @@ function main() {
     const nowMs = Date.now();
     const due = (nowMs - lastRepairAt) >= REPAIR_EVERY_MS;
     if (!due) {
-      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient', total, ready, raw_ready: readyRaw, reserved, needs_verify: Boolean(needs?.instance_id), next_repair_in_ms: Math.max(0, REPAIR_EVERY_MS - (nowMs - lastRepairAt)) }, null, 2));
+      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient', total, ready, raw_ready: readyRaw, reserved, manual, needs_verify: Boolean(needs?.instance_id), next_repair_in_ms: Math.max(0, REPAIR_EVERY_MS - (nowMs - lastRepairAt)) }, null, 2));
       return;
     }
 
@@ -234,7 +234,7 @@ function main() {
       return;
     }
 
-    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient_no_needs_verify', total, ready, raw_ready: readyRaw, reserved }, null, 2));
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient_no_needs_verify', total, ready, raw_ready: readyRaw, reserved, manual }, null, 2));
     return;
   }
 
@@ -258,13 +258,13 @@ function main() {
   try {
     const busy = getJson(`${API_BASE}/api/ops/pool/init/busy`);
     if (busy?.busy || (Number(busy?.active || 0) > 0)) {
-      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'init_busy_suppress_create', total, ready, raw_ready: readyRaw, reserved, active_init: Number(busy?.active||0) }, null, 2));
+      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'init_busy_suppress_create', total, ready, raw_ready: readyRaw, reserved, manual, active_init: Number(busy?.active||0) }, null, 2));
       return;
     }
   } catch {
     // Fail-closed: if busy signal is unreachable (e.g. API server blocked by a long init),
     // suppress create to avoid over-provision.
-    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'init_busy_suppress_create_unreachable', total, ready, raw_ready: readyRaw, reserved }, null, 2));
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'init_busy_suppress_create_unreachable', total, ready, raw_ready: readyRaw, reserved, manual }, null, 2));
     return;
   }
 
@@ -274,7 +274,7 @@ function main() {
     const job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
       .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_REPAIR_TRIGGERED', JSON.stringify({ job }));
-    console.log(JSON.stringify({ ok:true, ts, action:'repair', instance_id, job }, null, 2));
+    console.log(JSON.stringify({ ok:true, ts, action:'repair', instance_id, job, manual }, null, 2));
     return;
   }
 
@@ -347,7 +347,7 @@ function main() {
   }
 
   if (!resp) {
-    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'cloud_quota_all_bundles', total, ready, raw_ready: readyRaw, reserved, bundlesToTry }, null, 2));
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'cloud_quota_all_bundles', total, ready, raw_ready: readyRaw, reserved, manual, bundlesToTry }, null, 2));
     return;
   }
 
@@ -393,7 +393,7 @@ function main() {
     );
 
   const job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
-  console.log(JSON.stringify({ ok:true, ts, action:'create_and_init', instance_id, zone, bundle_id: usedBundle || null, bundle_price_cny: usedPrice, job }, null, 2));
+  console.log(JSON.stringify({ ok:true, ts, action:'create_and_init', instance_id, zone, bundle_id: usedBundle || null, bundle_price_cny: usedPrice, job, manual }, null, 2));
 }
 
 main();
