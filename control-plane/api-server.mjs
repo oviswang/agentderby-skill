@@ -3050,8 +3050,55 @@ app.get('/api/pay/confirm', async (req, res) => {
     } catch {}
 
     // Proactively trigger onboarding/cutover messaging immediately after payment.
-    // This avoids waiting for user messages or polling to send guide_key_paid.
+    // (1) Kick the status endpoint (best-effort)
     try { await fetch(`http://127.0.0.1:18998/api/wa/status?uuid=${encodeURIComponent(uuid)}`); } catch {}
+
+    // (2) Also push guide_key_paid directly (best-effort) so the user sees it without sending a message.
+    // Fire-and-forget: keep this endpoint fast.
+    setTimeout(() => {
+      try {
+        const d2 = getDeliveryByUuid(db, uuid);
+        if (!d2?.instance_id || !d2?.wa_jid) return;
+        const inst2 = getInstanceById(db, d2.instance_id);
+        if (!inst2?.public_ip) return;
+
+        // If key already verified, don't send guide.
+        let keyVerified = false;
+        try {
+          const ks = db.prepare('SELECT meta_json FROM delivery_secrets WHERE provision_uuid=? AND kind=? LIMIT 1').get(String(uuid), 'openai_api_key');
+          if (ks?.meta_json) {
+            const km = JSON.parse(ks.meta_json);
+            keyVerified = Boolean(km?.verified_at) && !km?.invalid_at;
+          }
+        } catch { keyVerified = false; }
+        if (keyVerified) return;
+
+        const ts2 = nowIso();
+        const lang = getDeliveryLang(d2);
+        const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
+        const guide = prompts.guide_key_paid;
+        if (!guide) return;
+
+        const msg = renderTpl(guide, { uuid: String(uuid) });
+        const rr2 = sendSelfChatOnInstance(inst2, msg, { toJid: d2.wa_jid });
+        const ok2 = (rr2.code ?? 1) === 0;
+
+        // Update meta (idempotent)
+        const patch2 = ok2
+          ? { guide_key_sent_at: ts2, guide_key_lang: lang, guide_key_send_ok: true, guide_key_sent_via: 'pay_confirm' }
+          : { guide_key_last_attempt_at: ts2, guide_key_lang: lang, guide_key_send_ok: false, guide_key_sent_via: 'pay_confirm' };
+        const meta2 = mergeMeta(d2.meta_json, patch2);
+        try { db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts2, d2.delivery_id); } catch {}
+
+        // Audit event
+        try {
+          db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+            crypto.randomUUID(), ts2, 'delivery', d2.delivery_id, ok2 ? 'GUIDE_KEY_SENT' : 'GUIDE_KEY_SEND_FAILED',
+            JSON.stringify({ uuid, instance_id: inst2.instance_id, exit_code: rr2.code ?? null, via: 'pay_confirm', detail: (String(rr2.stderr || rr2.stdout || '')).replace(/\s+/g,' ').slice(0,300) })
+          );
+        } catch {}
+      } catch {}
+    }, 0);
 
     return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, paid:true, provider_sub_id: subId });
   } catch (e) {
