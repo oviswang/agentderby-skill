@@ -1835,6 +1835,14 @@ app.post('/api/ops/pool/wa-sanitize', (req, res) => {
 `+
 `echo 'step:cleared_auth:ok';
 `+
+`# Ensure onboarding autoreply is enabled (critical for welcome/guide UX)
+`+
+`openclaw plugins enable bothook-wa-autoreply 2>/dev/null || true;
+`+
+`sudo systemctl restart openclaw-gateway.service 2>/dev/null || true;
+`+
+`echo 'step:enabled_autoreply:ok';
+`+
 `# Start provision if present
 `+
 `if [ "$HAS_UNIT" = "1" ]; then
