@@ -1824,6 +1824,12 @@ async function runOutboundWorkerLoop(){
           const tpl = String(prompts.guide_key_paid || '').trim();
           if (!tpl) throw new Error('guide_key_paid_missing');
           msg = renderTpl(tpl, { uuid, p_link: pLink });
+        } else if (kind === 'key_verified_success') {
+          let tpl = String(prompts.key_verified_success || '').trim();
+          if (!tpl) {
+            tpl = '[bothook] OpenAI Key verified ✅\n\nWe’re finishing delivery cutover (takes ~1–2 minutes and includes a service restart).\n\nPlease wait 1 minute, then send: "hi"';
+          }
+          msg = renderTpl(tpl, { uuid, p_link: pLink });
         } else {
           throw new Error('unknown_kind');
         }
@@ -1847,7 +1853,9 @@ async function runOutboundWorkerLoop(){
         const detail = (String(rr.stderr || rr.stdout || '')).replace(/\s+/g,' ').slice(0,300);
         db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
           crypto.randomUUID(), ts1, 'delivery', delivery_id || uuid,
-          ok ? (kind === 'welcome_unpaid' ? 'WELCOME_UNPAID_SENT' : 'GUIDE_KEY_SENT') : (kind === 'welcome_unpaid' ? 'WELCOME_UNPAID_SEND_FAILED' : 'GUIDE_KEY_SEND_FAILED'),
+          ok
+            ? (kind === 'welcome_unpaid' ? 'WELCOME_UNPAID_SENT' : (kind === 'guide_key_paid' ? 'GUIDE_KEY_SENT' : 'KEY_VERIFIED_SUCCESS_SENT'))
+            : (kind === 'welcome_unpaid' ? 'WELCOME_UNPAID_SEND_FAILED' : (kind === 'guide_key_paid' ? 'GUIDE_KEY_SEND_FAILED' : 'KEY_VERIFIED_SUCCESS_SEND_FAILED')),
           JSON.stringify({ uuid, delivery_id, instance_id, exit_code: rr.code ?? null, detail, attempt })
         );
       } catch {}
@@ -1857,12 +1865,20 @@ async function runOutboundWorkerLoop(){
         // Persist delivery meta (idempotent)
         try {
           const d2 = db.prepare('SELECT meta_json FROM deliveries WHERE delivery_id=?').get(delivery_id);
-          const meta2 = mergeMeta(d2?.meta_json || null, kind === 'welcome_unpaid'
-            ? { welcome_unpaid_sent_at: ts1, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: true }
-            : { guide_key_sent_at: ts1, guide_key_lang: lang, guide_key_send_ok: true }
+          const meta2 = mergeMeta(d2?.meta_json || null,
+            kind === 'welcome_unpaid'
+              ? { welcome_unpaid_sent_at: ts1, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: true }
+              : (kind === 'guide_key_paid'
+                  ? { guide_key_sent_at: ts1, guide_key_lang: lang, guide_key_send_ok: true }
+                  : { key_verified_success_sent_at: ts1, key_verified_success_lang: lang, key_verified_success_send_ok: true })
           );
           db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts1, delivery_id);
         } catch {}
+
+        // After the user receives the "key verified" success message, trigger cutover.
+        if (kind === 'key_verified_success') {
+          try { tryCutoverDelivered(db, uuid, { reason: 'key_verified_success_sent' }); } catch {}
+        }
       } else {
         const next = new Date(Date.now() + outboundBackoffMs(attempt)).toISOString();
         const detail = (String(rr.stderr || rr.stdout || '')).replace(/\s+/g,' ').slice(0,300);
@@ -1873,9 +1889,12 @@ async function runOutboundWorkerLoop(){
         // Persist delivery meta attempt
         try {
           const d2 = db.prepare('SELECT meta_json FROM deliveries WHERE delivery_id=?').get(delivery_id);
-          const meta2 = mergeMeta(d2?.meta_json || null, kind === 'welcome_unpaid'
-            ? { welcome_unpaid_last_attempt_at: ts1, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: false }
-            : { guide_key_last_attempt_at: ts1, guide_key_lang: lang, guide_key_send_ok: false }
+          const meta2 = mergeMeta(d2?.meta_json || null,
+            kind === 'welcome_unpaid'
+              ? { welcome_unpaid_last_attempt_at: ts1, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: false }
+              : (kind === 'guide_key_paid'
+                  ? { guide_key_last_attempt_at: ts1, guide_key_lang: lang, guide_key_send_ok: false }
+                  : { key_verified_success_last_attempt_at: ts1, key_verified_success_lang: lang, key_verified_success_send_ok: false })
           );
           db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts1, delivery_id);
         } catch {}
@@ -4442,10 +4461,18 @@ app.post('/api/key/verify', async (req, res) => {
       throw e;
     }
 
-    // If paid + linked, trigger cutover automatically.
+    // If paid + linked, enqueue an explicit success message via outbound_tasks.
+    // Cutover will be triggered AFTER that message is successfully sent.
     try {
       const { db } = openDb();
-      tryCutoverDelivered(db, uuid, { reason: 'openai_key_verified' });
+      const d2 = db.prepare('SELECT delivery_id, instance_id, wa_jid, meta_json, user_lang FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
+      if (d2?.delivery_id && d2?.instance_id && d2?.wa_jid) {
+        const lang = getDeliveryLang(d2);
+        enqueueOutboundTask(db, { delivery_id: d2.delivery_id, uuid, instance_id: d2.instance_id, kind: 'key_verified_success', lang, to_jid: d2.wa_jid });
+        const ts2 = nowIso();
+        const meta2 = mergeMeta(d2.meta_json || null, { key_verified_success_enqueued_at: ts2, key_verified_success_lang: lang });
+        db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts2, d2.delivery_id);
+      }
     } catch {}
 
     // Return a localized success message (sent to WhatsApp by the user-machine autoreply plugin).
