@@ -1830,6 +1830,17 @@ async function runOutboundWorkerLoop(){
             tpl = '[bothook] OpenAI Key verified ✅\n\nWe’re finishing delivery cutover (takes ~1–2 minutes and includes a service restart).\n\nPlease wait 1 minute, then send: "hi"';
           }
           msg = renderTpl(tpl, { uuid, p_link: pLink });
+        } else if (kind === 'relink_success') {
+          let tpl = String(prompts.relink_success || '').trim();
+          if (!tpl) {
+            // Fallback to English prompt if the locale file doesn't have this new key yet.
+            const p2 = loadWaPrompts('en') || {};
+            tpl = String(p2.relink_success || '').trim();
+          }
+          if (!tpl) {
+            tpl = '[bothook] Relink successful ✅\n\nYour device is connected again. You can now chat normally here.';
+          }
+          msg = renderTpl(tpl, { uuid, p_link: pLink });
         } else {
           throw new Error('unknown_kind');
         }
@@ -1854,8 +1865,20 @@ async function runOutboundWorkerLoop(){
         db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
           crypto.randomUUID(), ts1, 'delivery', delivery_id || uuid,
           ok
-            ? (kind === 'welcome_unpaid' ? 'WELCOME_UNPAID_SENT' : (kind === 'guide_key_paid' ? 'GUIDE_KEY_SENT' : 'KEY_VERIFIED_SUCCESS_SENT'))
-            : (kind === 'welcome_unpaid' ? 'WELCOME_UNPAID_SEND_FAILED' : (kind === 'guide_key_paid' ? 'GUIDE_KEY_SEND_FAILED' : 'KEY_VERIFIED_SUCCESS_SEND_FAILED')),
+            ? (kind === 'welcome_unpaid'
+                ? 'WELCOME_UNPAID_SENT'
+                : (kind === 'guide_key_paid'
+                    ? 'GUIDE_KEY_SENT'
+                    : (kind === 'key_verified_success'
+                        ? 'KEY_VERIFIED_SUCCESS_SENT'
+                        : 'RELINK_SUCCESS_SENT')))
+            : (kind === 'welcome_unpaid'
+                ? 'WELCOME_UNPAID_SEND_FAILED'
+                : (kind === 'guide_key_paid'
+                    ? 'GUIDE_KEY_SEND_FAILED'
+                    : (kind === 'key_verified_success'
+                        ? 'KEY_VERIFIED_SUCCESS_SEND_FAILED'
+                        : 'RELINK_SUCCESS_SEND_FAILED'))),
           JSON.stringify({ uuid, delivery_id, instance_id, exit_code: rr.code ?? null, detail, attempt })
         );
       } catch {}
@@ -1870,14 +1893,19 @@ async function runOutboundWorkerLoop(){
               ? { welcome_unpaid_sent_at: ts1, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: true }
               : (kind === 'guide_key_paid'
                   ? { guide_key_sent_at: ts1, guide_key_lang: lang, guide_key_send_ok: true }
-                  : { key_verified_success_sent_at: ts1, key_verified_success_lang: lang, key_verified_success_send_ok: true })
+                  : (kind === 'key_verified_success'
+                      ? { key_verified_success_sent_at: ts1, key_verified_success_lang: lang, key_verified_success_send_ok: true }
+                      : { relink_success_sent_at: ts1, relink_success_lang: lang, relink_success_send_ok: true }))
           );
           db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts1, delivery_id);
         } catch {}
 
-        // After the user receives the "key verified" success message, trigger cutover.
+        // After the user receives a critical success message, trigger cutover.
         if (kind === 'key_verified_success') {
           try { tryCutoverDelivered(db, uuid, { reason: 'key_verified_success_sent' }); } catch {}
+        }
+        if (kind === 'relink_success') {
+          try { tryCutoverDelivered(db, uuid, { reason: 'relink_success_sent' }); } catch {}
         }
       } else {
         const next = new Date(Date.now() + outboundBackoffMs(attempt)).toISOString();
@@ -1894,7 +1922,9 @@ async function runOutboundWorkerLoop(){
               ? { welcome_unpaid_last_attempt_at: ts1, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: false }
               : (kind === 'guide_key_paid'
                   ? { guide_key_last_attempt_at: ts1, guide_key_lang: lang, guide_key_send_ok: false }
-                  : { key_verified_success_last_attempt_at: ts1, key_verified_success_lang: lang, key_verified_success_send_ok: false })
+                  : (kind === 'key_verified_success'
+                      ? { key_verified_success_last_attempt_at: ts1, key_verified_success_lang: lang, key_verified_success_send_ok: false }
+                      : { relink_success_last_attempt_at: ts1, relink_success_lang: lang, relink_success_send_ok: false }))
           );
           db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts1, delivery_id);
         } catch {}
@@ -2803,6 +2833,16 @@ app.post('/api/wa/start', async (req, res) => {
 
     const force = Boolean(req.body?.force);
 
+    // Mark relink intent (force flow) so /api/wa/status can branch behavior without affecting first-link.
+    try {
+      if (force) {
+        const ts2 = nowIso();
+        const meta2 = mergeMeta(delivery.meta_json, { relink_force: true, relink_started_at: ts2 });
+        db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts2, delivery.delivery_id);
+        delivery = db.prepare('SELECT * FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+      }
+    } catch {}
+
     // SECURITY (A-style relink: same instance): force relink must be authorized.
     // Policy: allow when either
     // - delivery.status is PAID (legacy MVP), OR
@@ -3577,10 +3617,29 @@ app.get('/api/wa/status', async (req, res) => {
             }
 
             // Paid entitlement branch
-            // Self-heal delivered cutover (auth/model/config). Idempotent.
-            // Also forces a fresh key re-check (avoids stale last_check_ok=false from prior transient failures).
-            try { tryCutoverDelivered(db2, uuid, { reason: 'relink_connected' }); } catch {}
-            try { writeOpenAiAuthOnInstance(db2, inst2, { uuid }); } catch {}
+            // IMPORTANT: keep relink behavior isolated from first-link.
+            const isRelink = Boolean(meta?.relink_force);
+
+            if (isRelink) {
+              // Relink: send an explicit success message first (must be deliverable), then trigger cutover AFTER send.
+              // This avoids the "success message lost during restart" race.
+              try {
+                const sentAt = meta.relink_success_sent_at ? Date.parse(meta.relink_success_sent_at) : null;
+                const enqAt = meta.relink_success_enqueued_at ? Date.parse(meta.relink_success_enqueued_at) : null;
+                if (!sentAt && (!enqAt || (Date.now() - enqAt) > 30_000)) {
+                  const tsX = nowIso();
+                  enqueueOutboundTask(db2, { delivery_id: d2.delivery_id, uuid, instance_id: inst2.instance_id, kind: 'relink_success', lang, to_jid: d2.wa_jid });
+                  const metaX = mergeMeta(d2.meta_json, { relink_success_enqueued_at: tsX, relink_success_lang: lang });
+                  db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(metaX, tsX, d2.delivery_id);
+                }
+              } catch {}
+            } else {
+              // First-link paid path (or non-force paid connect): keep legacy behavior.
+              // Self-heal delivered cutover (auth/model/config). Idempotent.
+              // Also forces a fresh key re-check (avoids stale last_check_ok=false from prior transient failures).
+              try { tryCutoverDelivered(db2, uuid, { reason: 'relink_connected' }); } catch {}
+              try { writeOpenAiAuthOnInstance(db2, inst2, { uuid }); } catch {}
+            }
 
             // Decide whether we need to proactively ask for key.
             // Rule:
