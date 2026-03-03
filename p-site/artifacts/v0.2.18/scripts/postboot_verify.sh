@@ -14,11 +14,13 @@ RAM_GB="$(free -m 2>/dev/null | awk '/Mem:/{printf "%.0f", $2/1024}' || echo '?'
 DISK_GB="$(df -BG / 2>/dev/null | awk 'NR==2{gsub(/G/,"",$2); print $2}' || echo '?')"
 TS_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 mkdir -p /opt/bothook
+OCV=$(/home/ubuntu/.npm-global/bin/openclaw --version 2>/dev/null | head -n 1 || true)
 cat > "$SPECS_PATH" <<JSON
 {
   "cpu": ${CPU:-0},
   "ram_gb": ${RAM_GB:-0},
   "disk_gb": ${DISK_GB:-0},
+  "openclaw_version": "${OCV}",
   "captured_at": "$TS_ISO"
 }
 JSON

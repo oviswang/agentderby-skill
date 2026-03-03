@@ -40,6 +40,25 @@ function loadState(): any {
   }
 }
 
+function loadLocalPrompts(lang: string): any {
+  const safe = String(lang || '').trim().toLowerCase() || 'en';
+  const dir = '/opt/bothook/prompts/whatsapp_prompts';
+  const pick = fs.existsSync(`${dir}/${safe}.json`) ? safe : 'en';
+  try {
+    return JSON.parse(fs.readFileSync(`${dir}/${pick}.json`, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function readSpecs(): any {
+  try { return JSON.parse(fs.readFileSync('/opt/bothook/SPECS.json', 'utf8')); } catch { return {}; }
+}
+
+function readInstanceInfo(): any {
+  try { return JSON.parse(fs.readFileSync('/opt/bothook/INSTANCE.json', 'utf8')); } catch { return {}; }
+}
+
 function saveState(obj: any) {
   try {
     fs.mkdirSync('/opt/bothook', { recursive: true });
@@ -51,10 +70,14 @@ function sha256(s: string) {
   return crypto.createHash('sha256').update(String(s)).digest('hex');
 }
 
-function renderTplSimple(tpl: string, vars: { uuid: string }) {
-  // Minimal template support for known prompts. Control-plane is the source of truth.
+function renderTplVars(tpl: string, vars: Record<string, any>) {
+  // Minimal template support for known prompts.
+  // Replace {{var}} occurrences with provided values.
   let out = String(tpl || '');
-  out = out.replace(/\{\{\s*uuid\s*\}\}/g, String(vars.uuid));
+  for (const [k, v] of Object.entries(vars || {})) {
+    const re = new RegExp('\\{\\{\\s*' + k.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\s*\\}\\}', 'g');
+    out = out.replace(re, String(v ?? ''));
+  }
   return out;
 }
 
@@ -219,7 +242,7 @@ export default {
             return;
           }
 
-          // Fallback: if control-plane is temporarily unavailable, reuse cached welcome text.
+          // Fallback 1: reuse cached welcome text.
           const cached = String(st.autoreply.cachedWelcomeUnpaidText || '').trim();
           if (cached) {
             await sendWhatsApp(api, self!, cached);
@@ -228,7 +251,33 @@ export default {
             return;
           }
 
-          // No cached copy available; fall through.
+          // Fallback 2: use local prompts shipped with artifacts.
+          const lp = loadLocalPrompts(lang);
+          const tpl = String(lp?.welcome_unpaid || '').trim();
+          if (tpl) {
+            const specs = readSpecs();
+            const instInfo = readInstanceInfo();
+            const msg = renderTplVars(tpl, {
+              uuid,
+              p_link: `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang)}`,
+              pay_countdown_minutes: 15,
+              pay_short_link: '',
+              region: String(instInfo.region || ''),
+              public_ip: String(instInfo.public_ip || ''),
+              cpu: String(specs.cpu ?? ''),
+              ram_gb: String(specs.ram_gb ?? ''),
+              disk_gb: String(specs.disk_gb ?? ''),
+              openclaw_version: String(specs.openclaw_version || '')
+            });
+            if (msg) {
+              await sendWhatsApp(api, self!, msg);
+              st.autoreply.lastWelcomeAt = nowIso();
+              saveState(st);
+              return;
+            }
+          }
+
+          // No cached/local copy available; fall through.
         }
 
         // 3) Paid: if key not verified -> repeat guide_key_paid for ANY non-verified-key message.
@@ -247,9 +296,14 @@ export default {
               st.autoreply.cachedGuideKeyPaidAt = nowIso();
             }
 
-            const tpl = String(guideTpl || st.autoreply.cachedGuideKeyPaidTpl || '').trim();
+            let tpl = String(guideTpl || st.autoreply.cachedGuideKeyPaidTpl || '').trim();
+            if (!tpl) {
+              // Offline fallback: load local prompts shipped with artifacts.
+              const lp = loadLocalPrompts(lang);
+              tpl = String(lp?.guide_key_paid || '').trim();
+            }
             if (tpl) {
-              const msg = renderTplSimple(tpl, { uuid });
+              const msg = renderTplVars(tpl, { uuid });
               if (msg) {
                 await sendWhatsApp(api, self!, msg);
                 st.autoreply.lastGuideAt = nowIso();

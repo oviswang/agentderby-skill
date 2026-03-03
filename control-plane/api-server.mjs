@@ -648,10 +648,17 @@ function writeUuidStateFilesOnInstance(instance, { uuid, lang } = {}) {
     const uuidB64 = Buffer.from(`uuid=${safeUuid}\np_link=${pLink}\n`, 'utf8').toString('base64');
     const stateB64 = Buffer.from(JSON.stringify({ autoreply: { externalReplied: {} } }, null, 2) + "\n", 'utf8').toString('base64');
 
+    const instB64 = Buffer.from(JSON.stringify({
+      region: String(instance?.region || ''),
+      public_ip: String(instance?.public_ip || '')
+    }, null, 2) + "\n", 'utf8').toString('base64');
+
     const remote = `set -euo pipefail; `
       + `sudo mkdir -p /opt/bothook; `
       + `echo '${uuidB64}' | base64 -d | sudo tee /opt/bothook/UUID.txt >/dev/null; `
       + `sudo chmod 644 /opt/bothook/UUID.txt; `
+      + `echo '${instB64}' | base64 -d | sudo tee /opt/bothook/INSTANCE.json >/dev/null; `
+      + `sudo chmod 644 /opt/bothook/INSTANCE.json; `
       + `if [ ! -f /opt/bothook/state.json ]; then echo '${stateB64}' | base64 -d | sudo tee /opt/bothook/state.json >/dev/null; fi; `
       + `sudo chown ubuntu:ubuntu /opt/bothook/state.json || true; `
       + `sudo chmod 664 /opt/bothook/state.json || true; `

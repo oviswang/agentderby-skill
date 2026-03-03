@@ -427,6 +427,11 @@ PY
   chown ubuntu:ubuntu /opt/bothook/evidence 2>/dev/null || true
   chmod 775 /opt/bothook/evidence 2>/dev/null || true
 
+  # Install local WhatsApp prompts for offline fallback (autoreply must work even if control-plane is down).
+  mkdir -p /opt/bothook/prompts/whatsapp_prompts
+  cp -a "$INSTALL_DIR/prompts/whatsapp_prompts/." /opt/bothook/prompts/whatsapp_prompts/ 2>/dev/null || true
+  chmod -R a+rX /opt/bothook/prompts/whatsapp_prompts 2>/dev/null || true
+
   # Optional: run a one-time reboot acceptance automatically on first bootstrap.
   # This avoids manual reboot testing and proves the machine survives reboot.
   if [[ ! -f "$INSTALL_DIR/evidence/postboot_verify.done" ]]; then
