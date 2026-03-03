@@ -310,6 +310,24 @@ function main() {
 
     if (needs?.instance_id) {
       const instance_id = String(needs.instance_id);
+      // Cooldown: avoid spamming init enqueues while a job is already queued/running.
+      const ENQUEUE_COOLDOWN_MS = parseInt(process.env.BOTHOOK_POOL_INIT_ENQUEUE_COOLDOWN_MS || String(5*60*1000), 10);
+      const inflight = db.prepare(
+        `SELECT job_id, status, created_at
+           FROM pool_init_jobs
+          WHERE instance_id=?
+            AND status IN ('QUEUED','RUNNING')
+          ORDER BY created_at DESC
+          LIMIT 1`
+      ).get(instance_id);
+      if (inflight?.job_id) {
+        const ageMs = Date.now() - Date.parse(String(inflight.created_at||''));
+        if (Number.isFinite(ageMs) && ageMs >= 0 && ageMs < ENQUEUE_COOLDOWN_MS) {
+          console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'background_repair_inflight_cooldown', total, ready, raw_ready: readyRaw, reserved, manual, instance_id, inflight_job_id: inflight.job_id, inflight_status: inflight.status, inflight_age_ms: ageMs, cadence_ms: REPAIR_EVERY_MS }, null, 2));
+          return;
+        }
+      }
+
       const job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
       db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
         .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_BACKGROUND_REPAIR_TRIGGERED', JSON.stringify({ job, cadence_ms: REPAIR_EVERY_MS }));
@@ -355,6 +373,26 @@ function main() {
   // Prefer repairing NEEDS_VERIFY
   if (needs?.instance_id) {
     const instance_id = String(needs.instance_id);
+
+    // Cooldown: do not enqueue init for the same instance too frequently.
+    // New instances can take time before SSH is reachable; repeated enqueues just create noise.
+    const ENQUEUE_COOLDOWN_MS = parseInt(process.env.BOTHOOK_POOL_INIT_ENQUEUE_COOLDOWN_MS || String(5*60*1000), 10);
+    const inflight = db.prepare(
+      `SELECT job_id, status, created_at
+         FROM pool_init_jobs
+        WHERE instance_id=?
+          AND status IN ('QUEUED','RUNNING')
+        ORDER BY created_at DESC
+        LIMIT 1`
+    ).get(instance_id);
+    if (inflight?.job_id) {
+      const ageMs = Date.now() - Date.parse(String(inflight.created_at||''));
+      if (Number.isFinite(ageMs) && ageMs >= 0 && ageMs < ENQUEUE_COOLDOWN_MS) {
+        console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'init_job_inflight_cooldown', total, ready, raw_ready: readyRaw, reserved, manual, instance_id, inflight_job_id: inflight.job_id, inflight_status: inflight.status, inflight_age_ms: ageMs }, null, 2));
+        return;
+      }
+    }
+
     const job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
       .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_REPAIR_TRIGGERED', JSON.stringify({ job }));
