@@ -326,9 +326,66 @@ LIMIT 200
     }
   }
 
+  // Auto-resume: if we previously paused due to hard-stop and conditions are now healthy, re-enable.
+  // Safety: only re-enable campaigns that have an ADS_GUARD_CAMPAIGN_PAUSED event recently and have not been re-enabled since.
+  const enableOps = [];
+  if (!shouldPause) {
+    const maxEnable = Number(policy.guard.safety.maxEnablePerRun || 5);
+    const resumeWindowMin = Number(policy.guard.safety.resumeWindowMinutes || 360); // default 6h
+
+    function sqlJson(query) {
+      try {
+        const out = execFileSync('sqlite3', ['-json', dbPath, query], { encoding: 'utf8' });
+        return JSON.parse(out || '[]');
+      } catch {
+        return [];
+      }
+    }
+
+    for (const c of campaigns) {
+      if (enableOps.length >= maxEnable) break;
+      if (c.status !== 'PAUSED') continue;
+
+      const cid = String(c.id);
+      // Find last pause by guard that referenced this campaign id.
+      const rows = sqlJson(
+        `SELECT ts FROM events `
+        + `WHERE event_type='ADS_GUARD_CAMPAIGN_PAUSED' `
+        + `  AND payload_json LIKE '%"${sqlEscape(cid)}"%' `
+        + `ORDER BY ts DESC LIMIT 1;`
+      );
+      const lastPause = rows?.[0]?.ts ? String(rows[0].ts) : '';
+      if (!lastPause) continue;
+
+      // Only resume if pause is recent (avoid re-enabling intentionally paused campaigns from long ago).
+      const ageMs = Date.now() - Date.parse(lastPause);
+      if (!(ageMs >= 0 && ageMs <= resumeWindowMin * 60_000)) continue;
+
+      const rows2 = sqlJson(
+        `SELECT ts FROM events `
+        + `WHERE event_type='ADS_GUARD_CAMPAIGN_ENABLED' AND entity_type='ads_campaign' AND entity_id='${sqlEscape(cid)}' `
+        + `ORDER BY ts DESC LIMIT 1;`
+      );
+      const lastEnable = rows2?.[0]?.ts ? String(rows2[0].ts) : '';
+      if (lastEnable && Date.parse(lastEnable) >= Date.parse(lastPause)) continue;
+
+      enableOps.push({
+        update: {
+          resourceName: `customers/${customerId}/campaigns/${cid}`,
+          status: 'ENABLED'
+        },
+        updateMask: 'status'
+      });
+    }
+  }
+
   let mutateResult = null;
+  let enableMutateResult = null;
   if (pauseOps.length && args.mode === 'apply') {
     mutateResult = await googleAdsMutateCampaigns({ developerToken, accessToken, customerId, loginCustomerId: mcc, operations: pauseOps, validateOnly: false });
+  }
+  if (enableOps.length && args.mode === 'apply') {
+    enableMutateResult = await googleAdsMutateCampaigns({ developerToken, accessToken, customerId, loginCustomerId: mcc, operations: enableOps, validateOnly: false });
   }
 
   // Audit: write a compact run summary + any applied pause ops into BOTHook events.
@@ -344,8 +401,8 @@ LIMIT 200
       timeZone,
       windows: { spendLookbackMin, funnelLookbackMin, funnel_since: sinceIso, spend_start: startStr, spend_end: endStr },
       funnel_30m: { bound_count: Number(boundCount || 0), welcome_sent_count: Number(welcomeSentCount || 0), hard_stop_event_count: Number(hardEventCount || 0) },
-      decision: { should_pause: shouldPause, triggers, pause_ops_planned: pauseOps.length },
-      applied: { paused: (args.mode === 'apply') ? pauseOps.length : 0 }
+      decision: { should_pause: shouldPause, triggers, pause_ops_planned: pauseOps.length, enable_ops_planned: enableOps.length },
+      applied: { paused: (args.mode === 'apply') ? pauseOps.length : 0, enabled: (args.mode === 'apply') ? enableOps.length : 0 }
     }
   });
 
@@ -355,6 +412,15 @@ LIMIT 200
         entity_id: String(scope?.campaignIds?.[0] || 'sgDesktop'),
         event_type: 'ADS_GUARD_CAMPAIGN_PAUSED',
         payload: { triggers, paused_campaign_ids: pauseOps.map(op => op.update?.resourceName?.split('/').pop()).filter(Boolean) }
+      })
+    : null;
+
+  const auditEnable = (enableOps.length && args.mode === 'apply')
+    ? writeEvent({
+        entity_type: 'ads_campaign',
+        entity_id: String(enableOps[0]?.update?.resourceName?.split('/')?.pop() || 'sgDesktop'),
+        event_type: 'ADS_GUARD_CAMPAIGN_ENABLED',
+        payload: { reason: 'auto_resume', enabled_campaign_ids: enableOps.map(op => op.update?.resourceName?.split('/').pop()).filter(Boolean) }
       })
     : null;
 
@@ -381,12 +447,16 @@ LIMIT 200
       campaigns_in_scope: campaigns.length,
       pause_ops_planned: pauseOps.length
     },
-    applied: args.mode === 'apply' ? { paused: pauseOps.length, mutateResult } : { paused: 0 },
+    applied: args.mode === 'apply'
+      ? { paused: pauseOps.length, enabled: enableOps.length, mutateResult, enableMutateResult }
+      : { paused: 0, enabled: 0 },
     audit: {
       run_event_id: auditRun?.event_id,
       run_event_written: auditRun?.ok,
       pause_event_id: auditPause?.event_id,
-      pause_event_written: auditPause?.ok
+      pause_event_written: auditPause?.ok,
+      enable_event_id: auditEnable?.event_id,
+      enable_event_written: auditEnable?.ok
     }
   };
 
