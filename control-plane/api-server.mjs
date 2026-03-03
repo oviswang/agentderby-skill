@@ -1465,17 +1465,22 @@ function enqueueOutboundTask(db, { delivery_id, uuid, instance_id, kind, lang, t
     const task_id = crypto.randomUUID();
     const ts = nowIso();
     // Dedupe: unique active index on (delivery_id, kind) prevents duplicates.
-    db.prepare(
+    const r = db.prepare(
       `INSERT OR IGNORE INTO outbound_tasks(task_id, delivery_id, provision_uuid, instance_id, kind, lang, to_jid, status, attempt, next_run_at, created_at, updated_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(task_id, delivery_id, uuid, instance_id, kind, lang || null, to_jid || null, 'QUEUED', 0, ts, ts, ts);
-    try {
-      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-        crypto.randomUUID(), ts, 'delivery', delivery_id || uuid, 'OUTBOUND_TASK_ENQUEUED',
-        JSON.stringify({ uuid, delivery_id, instance_id, kind, lang })
-      );
-    } catch {}
-    return { ok:true, task_id };
+
+    // Only emit ENQUEUED event if a new row was actually inserted.
+    if (r && r.changes > 0) {
+      try {
+        db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+          crypto.randomUUID(), ts, 'delivery', delivery_id || uuid, 'OUTBOUND_TASK_ENQUEUED',
+          JSON.stringify({ uuid, delivery_id, instance_id, kind, lang })
+        );
+      } catch {}
+    }
+
+    return { ok:true, task_id, inserted: Boolean(r && r.changes > 0) };
   } catch (e) {
     return { ok:false, error: e?.message || 'enqueue_failed' };
   }
@@ -1520,14 +1525,12 @@ function outboundReadinessProbe(inst){
     if (wa.connected === false) return { ok:false, reason:'wa_not_connected' };
 
     // (3) autoreply loaded
+    // Prefer the cheap marker written by the plugin itself.
     let autoreplyOk = null;
     try {
-      const er = poolSsh(inst, 'sudo cat /opt/bothook/evidence/postboot_verify.json 2>/dev/null || echo missing', { timeoutMs: 4000, tty:false, retries:0 });
-      const txt = String(er.stdout || '').trim();
-      if (txt && txt !== 'missing') {
-        const ej = JSON.parse(txt);
-        if (typeof ej?.autoreply_loaded === 'boolean') autoreplyOk = ej.autoreply_loaded;
-      }
+      const mr = poolSsh(inst, 'test -f /opt/bothook/evidence/autoreply_loaded && echo ok || echo missing', { timeoutMs: 3000, tty:false, retries:0 });
+      const mt = String(mr.stdout || '').trim();
+      if (mt === 'ok') autoreplyOk = true;
     } catch {}
 
     if (autoreplyOk === null) {
