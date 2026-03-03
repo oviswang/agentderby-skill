@@ -1,0 +1,36 @@
+# Personal-assistant intent keyword pack (v0.2) — broader, higher-volume variants
+# Goal: avoid 'low search volume' while staying user-intent aligned with OpenClaw capabilities.
+
+whatsapp assistant
+whatsapp ai
+ai assistant whatsapp
+whatsapp ai helper
+whatsapp smart assistant
+whatsapp assistant app
+
+whatsapp reminders
+whatsapp reminder app
+reminder on whatsapp
+set reminder whatsapp
+whatsapp daily planner
+
+summarize whatsapp
+summarize whatsapp chat
+whatsapp summary
+summarize chat whatsapp
+
+whatsapp auto reply
+whatsapp reply generator
+write replies whatsapp
+
+whatsapp translate
+translate whatsapp messages
+
+whatsapp note taking
+whatsapp meeting notes
+
+whatsapp voice to text
+transcribe whatsapp voice
+
+whatsapp to do
+whatsapp task list
