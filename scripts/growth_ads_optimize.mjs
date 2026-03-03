@@ -217,6 +217,23 @@ LIMIT 500
   // Only pause keywords when we have enough click volume, and they produced 0 paid conversions.
   const MIN_CLICKS_TO_EVAL = Number(policy.optimize?.safety?.minClicks14dToEvaluatePaid ?? 50);
   const MAX_PAUSE_PAID_PER_RUN = Number(policy.optimize?.safety?.maxPausePaidLosersPerRun ?? 20);
+
+  // Extra safety: do NOT run paid-based elimination until we have at least 1 paid conversion recorded in Ads in last 14d.
+  const convGateQ = `
+SELECT metrics.conversions
+FROM campaign
+WHERE campaign.id = ${campaignId}
+  AND segments.date DURING LAST_14_DAYS
+LIMIT 50
+`;
+  let conv14d = 0;
+  try {
+    const stream = await googleAdsSearchStream({ developerToken, accessToken, customerId, loginCustomerId: mcc, query: convGateQ });
+    const rows = gaqlRows(stream);
+    for (const r of rows) conv14d += Number(r.metrics?.conversions || 0);
+  } catch { /* ignore */ }
+  const paidElimAllowed = conv14d >= 1;
+
   const paidQ = `
 SELECT ad_group_criterion.resource_name,
        ad_group_criterion.keyword.text,
@@ -271,11 +288,12 @@ LIMIT 500
   } catch { statusRows = []; }
   const statusMap = new Map(statusRows.map(r => [String(r.resourceName), { status: r.status, negative: Boolean(r.negative) }]));
 
-  const paidLosers = paidAgg
+  const paidLosers = paidElimAllowed ? paidAgg
     .filter(x => (statusMap.get(x.resourceName)?.status === 'ENABLED') && !(statusMap.get(x.resourceName)?.negative))
     .filter(x => x.clicks >= MIN_CLICKS_TO_EVAL && x.conversions <= 0)
     .sort((a,b) => (b.cost_micros - a.cost_micros) || (b.clicks - a.clicks))
-    .slice(0, MAX_PAUSE_PAID_PER_RUN);
+    .slice(0, MAX_PAUSE_PAID_PER_RUN)
+    : [];
 
   const paidPauseOps = paidLosers.map(k => ({ update: { resourceName: k.resourceName, status: 'PAUSED' }, updateMask: 'status' }));
 
@@ -350,6 +368,8 @@ LIMIT 50
     mutate_allowed: mutateAllowed,
     impressions_last_1_day: vol.impressions,
     max_impressions_to_mutate: MAX_IMP_TO_MUTATE,
+    paid_elim_allowed: paidElimAllowed,
+    paid_elim_conversions_14d: conv14d,
     paid_eval_min_clicks_14d: MIN_CLICKS_TO_EVAL,
     paid_losers_found: paidLosers.length,
     paid_pause_planned: paidPauseOps.length
@@ -415,7 +435,7 @@ LIMIT 50
     rsa: { enabled_count: enabledRsa.length, enabled_counts: counts, need_rsa: needRsa, plan: planned.rsa_plan },
     volume_last_1_day: vol,
     keywords: { rarely_served_enabled: rare.length, pause_planned: pauseOps.length, add_planned: addOps.length, mutate_allowed: mutateAllowed, max_impressions_to_mutate: MAX_IMP_TO_MUTATE },
-    paid_elimination_14d: { min_clicks: MIN_CLICKS_TO_EVAL, losers_found: paidLosers.length, pause_planned: paidPauseOps.length, losers_sample: paidLosers.slice(0, 5) },
+    paid_elimination_14d: { allowed: paidElimAllowed, conversions_14d: conv14d, min_clicks: MIN_CLICKS_TO_EVAL, losers_found: paidLosers.length, pause_planned: paidPauseOps.length, losers_sample: paidLosers.slice(0, 5) },
     search_terms_top_50: terms,
     actions: { planned, applied }
   };
