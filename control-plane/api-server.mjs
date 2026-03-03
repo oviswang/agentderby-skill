@@ -410,19 +410,50 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
       const suppressed = Number(metaR.do_not_reallocate || 0) === 1 || Boolean(metaR.closed_out_at || metaR.closed_out_reason);
       if (suppressed) {
         const ts = nowIso();
+        const reason = (suppressed && Number(metaR.do_not_reallocate || 0) === 1)
+          ? 'do_not_reallocate'
+          : 'closed_out';
+
+        // De-noise: dedupe suppressed events per delivery+reason within a window.
+        // This prevents QR_EXPIRED polling/refresh loops from spamming events/alerts.
+        const DEDUPE_MS = parseInt(process.env.BOTHOOK_REALLOCATE_SUPPRESS_DEDUPE_MS || String(30 * 60 * 1000), 10);
+        let shouldEmit = true;
         try {
-          db.prepare(
-            `INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json)
-             VALUES (?,?,?,?,?,?)`
-          ).run(
-            crypto.randomUUID(),
-            ts,
-            'delivery',
-            updated.delivery_id,
-            'PROVISION_REALLOCATE_SUPPRESSED',
-            JSON.stringify({ provision_uuid: uuid, delivery_id: updated.delivery_id, from_status: st, reason: suppressed && Number(metaR.do_not_reallocate||0)===1 ? 'do_not_reallocate' : 'closed_out' })
-          );
+          const row = db.prepare(
+            `SELECT ts, payload_json
+               FROM events
+              WHERE entity_type='delivery'
+                AND entity_id=?
+                AND event_type='PROVISION_REALLOCATE_SUPPRESSED'
+              ORDER BY datetime(ts) DESC
+              LIMIT 1`
+          ).get(updated.delivery_id);
+
+          if (row && row.ts) {
+            const lastTs = Date.parse(String(row.ts));
+            const last = jsonMeta(row.payload_json) || {};
+            const lastReason = String(last.reason || '').trim();
+            if (Number.isFinite(lastTs) && (Date.now() - lastTs) < DEDUPE_MS && lastReason === reason) {
+              shouldEmit = false;
+            }
+          }
         } catch {}
+
+        if (shouldEmit) {
+          try {
+            db.prepare(
+              `INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json)
+               VALUES (?,?,?,?,?,?)`
+            ).run(
+              crypto.randomUUID(),
+              ts,
+              'delivery',
+              updated.delivery_id,
+              'PROVISION_REALLOCATE_SUPPRESSED',
+              JSON.stringify({ provision_uuid: uuid, delivery_id: updated.delivery_id, from_status: st, reason })
+            );
+          } catch {}
+        }
         return updated;
       }
 
