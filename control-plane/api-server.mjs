@@ -1891,9 +1891,16 @@ app.post('/api/ops/pool/apply-memorysearch', (req, res) => {
     if (!inst?.public_ip) return send(res, 404, { ok:false, error:'instance_not_found_or_missing_ip' });
 
     const remote = `set -euo pipefail; `
-      + `sudo bash /opt/bothook/scripts/patch_openclaw_enable_memory_search_openai.sh 2>/dev/null || true; `
-      + `sudo systemctl restart openclaw-gateway.service 2>/dev/null || true; `
-      + `sudo bash /opt/bothook/bin/postboot_verify.sh 2>/dev/null || true; `
+      + `echo '[memorySearch] pre-check:'; `
+      + `ls -l /opt/bothook/scripts/patch_openclaw_enable_memory_search_openai.sh 2>&1 || true; `
+      + `ls -l /home/ubuntu/.openclaw/openclaw.json 2>&1 || true; `
+      + `echo '[memorySearch] apply patch:'; `
+      + `sudo bash /opt/bothook/scripts/patch_openclaw_enable_memory_search_openai.sh 2>&1 || true; `
+      + `echo '[memorySearch] restart gateway:'; `
+      + `sudo systemctl restart openclaw-gateway.service 2>&1 || true; `
+      + `echo '[memorySearch] postboot verify:'; `
+      + `sudo bash /opt/bothook/bin/postboot_verify.sh 2>&1 || true; `
+      + `echo '[memorySearch] dump config:'; `
       + `python3 - <<'PY'\n`
       + `import json\n`
       + `p='/home/ubuntu/.openclaw/openclaw.json'\n`
