@@ -1880,6 +1880,32 @@ app.get('/api/ops/pool/init/busy', (req, res) => {
 
 // Ops: clear OpenClaw auth on a pool instance (used to ensure smoke-test keys never linger on pool machines).
 // NOTE: This does not touch control-plane delivery_secrets; caller should delete secrets separately if desired.
+app.post('/api/ops/pool/cat-memorysearch', (req, res) => {
+  try {
+    const instance_id = String(req.body?.instance_id || '').trim();
+    if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
+    if (instance_id === 'lhins-npsqfxvn') return send(res, 403, { ok:false, error:'forbidden_master_host' });
+
+    const { db } = openDb();
+    const inst = getInstanceById(db, instance_id);
+    if (!inst?.public_ip) return send(res, 404, { ok:false, error:'instance_not_found_or_missing_ip' });
+
+    const remote = "python3 - <<'PY'\n"+
+      "import json\n"+
+      "p='/home/ubuntu/.openclaw/openclaw.json'\n"+
+      "try:\n  j=json.load(open(p))\nexcept Exception as e:\n  print('ERR:'+str(e))\n  raise SystemExit(0)\n"+
+      "ms=((j.get('agents') or {}).get('defaults') or {}).get('memorySearch')\n"+
+      "print(json.dumps(ms,ensure_ascii=False))\n"+
+      "PY\n";
+
+    const rr = poolSsh(inst, remote, { timeoutMs: 15000, tty:false, retries: 1 });
+    const out = ((rr.stdout || '') + (rr.stderr || '')).trim();
+    return send(res, 200, { ok:true, instance_id, ip: inst.public_ip, code: rr.code, out: out.slice(0, 2000) });
+  } catch {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 app.post('/api/ops/pool/clear-auth', (req, res) => {
   try {
     const instance_id = String(req.body?.instance_id || '').trim();
