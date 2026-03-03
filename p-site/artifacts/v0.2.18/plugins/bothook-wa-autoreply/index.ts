@@ -223,18 +223,16 @@ export default {
           const ks = await getJson(`${controlPlane}/api/key/status?uuid=${encodeURIComponent(uuid)}`, 12000);
           const verified = Boolean(ks?.json?.verified);
           if (!verified) {
-            // tiny anti-dup window (avoid double-fire on a single inbound)
-            const lastGuideAt = st.autoreply.lastGuideAt ? Date.parse(st.autoreply.lastGuideAt) : 0;
-            if ((now - lastGuideAt) > 800) {
-              const pr = await getJson(`${controlPlane}/api/i18n/whatsapp-prompts?lang=${encodeURIComponent(lang)}`, 12000);
-              const guideTpl = String(pr?.json?.prompts?.guide_key_paid || '').trim();
-              if (pr.ok && guideTpl) {
-                const msg = renderTplSimple(guideTpl, { uuid });
-                if (msg) {
-                  await sendWhatsApp(api, self!, msg);
-                  st.autoreply.lastGuideAt = nowIso();
-                  saveState(st);
-                }
+            // Paid but key not verified: ALWAYS repeat guide_key_paid on any inbound self message.
+            // No rate limiting: goal is to guarantee the user always sees the next-step instructions.
+            const pr = await getJson(`${controlPlane}/api/i18n/whatsapp-prompts?lang=${encodeURIComponent(lang)}`, 12000);
+            const guideTpl = String(pr?.json?.prompts?.guide_key_paid || '').trim();
+            if (pr.ok && guideTpl) {
+              const msg = renderTplSimple(guideTpl, { uuid });
+              if (msg) {
+                await sendWhatsApp(api, self!, msg);
+                st.autoreply.lastGuideAt = nowIso();
+                saveState(st);
               }
             }
             return;
