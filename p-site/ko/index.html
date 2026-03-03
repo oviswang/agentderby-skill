@@ -347,7 +347,8 @@
           acctPairs.push(['UUID', st.uuid]);
           acctPairs.push(['Subscription', sub && sub.status]);
           acctPairs.push(['Plan', sub && sub.plan]);
-          acctPairs.push(['Ends at', sub && sub.cancel_at]);
+          // Prefer current period end; fallback to cancel_at/ended_at.
+          acctPairs.push(['Ends at', sub && (sub.current_period_end || sub.cancel_at || sub.ended_at)]);
           acctPairs.push(['Delivery status', del && del.status]);
           acctPairs.push(['Bound WhatsApp', del && del.wa_jid ? '(bound)' : '(unknown)']);
           acctPairs.push(['Bound at', del && del.bound_at]);
