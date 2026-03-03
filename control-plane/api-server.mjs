@@ -1822,8 +1822,27 @@ app.post('/api/ops/pool/init', (req, res) => {
     if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
     if (!['init_only','reimage_and_init'].includes(mode)) return send(res, 400, { ok:false, error:'bad_mode' });
 
-    const job_id = crypto.randomUUID();
     const { db } = openDb();
+
+    // Dedupe / idempotency: at most ONE init job in-flight per instance.
+    // Rationale: cross-region boot/SSH/npm can be slow; repeated enqueues create queue storms and can destabilize the box.
+    const inflight = db.prepare(
+      "SELECT job_id, status, created_at, mode FROM pool_init_jobs WHERE instance_id=? AND status IN ('QUEUED','RUNNING') ORDER BY created_at DESC LIMIT 1"
+    ).get(instance_id);
+    if (inflight?.job_id) {
+      return send(res, 200, {
+        ok: true,
+        deduped: true,
+        job_id: inflight.job_id,
+        status: inflight.status,
+        queued: inflight.status === 'QUEUED',
+        running: inflight.status === 'RUNNING',
+        inflight_mode: inflight.mode,
+        inflight_created_at: inflight.created_at
+      });
+    }
+
+    const job_id = crypto.randomUUID();
     db.prepare('INSERT INTO pool_init_jobs(job_id, instance_id, mode, status, created_at, log_json) VALUES (?,?,?,?,?,?)')
       .run(job_id, instance_id, mode, 'QUEUED', nowIso(), '[]');
 
