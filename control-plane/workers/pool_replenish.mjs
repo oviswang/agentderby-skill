@@ -297,12 +297,14 @@ function main() {
     tgSend(`[bothook] pool nearing cap: total=${total}/${CAP_TOTAL}, ready=${ready}/${TARGET_READY} (raw_ready=${readyRaw}, reserved=${reserved}, manual=${manual})`);
   }
 
-  if (ready >= TARGET_READY) {
-    // If READY target is met, we still do a slow background repair of NEEDS_VERIFY.
+  // Owner rule: if raw_ready >= target, NEVER create new instances.
+  // (Even if some are temporarily "reserved" by bound deliveries.)
+  if (readyRaw >= TARGET_READY) {
+    // If raw READY target is met, we still do a slow background repair of NEEDS_VERIFY.
     const nowMs = Date.now();
     const due = (nowMs - lastRepairAt) >= REPAIR_EVERY_MS;
     if (!due) {
-      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient', total, ready, raw_ready: readyRaw, reserved, manual, needs_verify: Boolean(needs?.instance_id), next_repair_in_ms: Math.max(0, REPAIR_EVERY_MS - (nowMs - lastRepairAt)) }, null, 2));
+      console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'raw_ready_sufficient', total, ready, raw_ready: readyRaw, reserved, manual, needs_verify: Boolean(needs?.instance_id), next_repair_in_ms: Math.max(0, REPAIR_EVERY_MS - (nowMs - lastRepairAt)) }, null, 2));
       return;
     }
 
@@ -316,7 +318,7 @@ function main() {
       return;
     }
 
-    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'ready_sufficient_no_needs_verify', total, ready, raw_ready: readyRaw, reserved, manual }, null, 2));
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'raw_ready_sufficient_no_needs_verify', total, ready, raw_ready: readyRaw, reserved, manual }, null, 2));
     return;
   }
 
