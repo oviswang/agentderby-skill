@@ -1,0 +1,12 @@
+{
+  "name": "bothook-wa-autoreply",
+  "version": "0.2.11",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "openclaw": {
+    "extensions": [
+      "index.ts"
+    ]
+  }
+}
