@@ -1608,15 +1608,40 @@ async function runOutboundWorkerLoop(){
       let msg = '';
       try {
         const prompts = loadWaPrompts(lang || 'en') || loadWaPrompts('en') || {};
+        const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
+
         if (kind === 'welcome_unpaid') {
           const tpl = String(prompts.welcome_unpaid || '').trim();
           if (!tpl) throw new Error('welcome_unpaid_missing');
-          const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
-          msg = renderTpl(tpl, { uuid, p_link: pLink, pay_countdown_minutes: 15, pay_short_link: '' });
+
+          // Fill full i18n template variables (specs captured on user machine).
+          let specs = {};
+          try {
+            const sr = poolSsh(inst, 'cat /opt/bothook/SPECS.json 2>/dev/null || echo {}', { timeoutMs: 5000, tty:false, retries:0 });
+            specs = JSON.parse(String(sr.stdout || '{}')) || {};
+          } catch {}
+
+          let openclaw_version = '';
+          try {
+            const vr = poolSsh(inst, 'openclaw --version 2>/dev/null | head -n 1 || true', { timeoutMs: 4000, tty:false, retries:0 });
+            openclaw_version = String(vr.stdout || '').trim();
+          } catch {}
+
+          msg = renderTpl(tpl, {
+            uuid,
+            p_link: pLink,
+            pay_countdown_minutes: 15,
+            pay_short_link: '',
+            region: String(inst.region || ''),
+            public_ip: String(inst.public_ip || ''),
+            cpu: String(specs.cpu ?? ''),
+            ram_gb: String(specs.ram_gb ?? ''),
+            disk_gb: String(specs.disk_gb ?? ''),
+            openclaw_version: openclaw_version || String(specs.openclaw_version || '')
+          });
         } else if (kind === 'guide_key_paid') {
           const tpl = String(prompts.guide_key_paid || '').trim();
           if (!tpl) throw new Error('guide_key_paid_missing');
-          const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
           msg = renderTpl(tpl, { uuid, p_link: pLink });
         } else {
           throw new Error('unknown_kind');
