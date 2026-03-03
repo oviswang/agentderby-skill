@@ -1992,7 +1992,11 @@ app.post('/api/ops/instance/get-specs', (req, res) => {
 
     const rr = poolSsh(inst, 'sudo cat /opt/bothook/SPECS.json 2>/dev/null || echo missing', { timeoutMs: 15000, tty:false, retries: 1 });
     const txt = String(rr.stdout||'').trim();
-    return send(res, 200, { ok:true, instance_id, ip: inst.public_ip, code: rr.code, specs: txt.slice(0, 4000) });
+
+    const vr = poolSsh(inst, 'sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw --version 2>/dev/null | head -n 1 || echo missing', { timeoutMs: 12000, tty:false, retries: 1 });
+    const ver = String(vr.stdout||'').trim();
+
+    return send(res, 200, { ok:true, instance_id, ip: inst.public_ip, code: rr.code, specs: txt.slice(0, 4000), openclaw_version: ver && ver!='missing' ? ver : null });
   } catch {
     return send(res, 500, { ok:false, error:'server_error' });
   }
