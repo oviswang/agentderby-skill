@@ -4007,6 +4007,7 @@ app.post('/api/ops/smoke/run', async (req, res) => {
     const lang = String(req.body?.lang || 'en').trim().toLowerCase();
     const key = String(req.body?.openai_key || '').trim();
     const targetE164Raw = String(req.body?.target_e164 || '').trim();
+    const doCutover = Boolean(req.body?.cutover);
     if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
     if (!key) return send(res, 400, { ok:false, error:'openai_key_required' });
     if (instance_id === 'lhins-npsqfxvn') return send(res, 403, { ok:false, error:'forbidden_master_host' });
@@ -4146,15 +4147,45 @@ app.post('/api/ops/smoke/run', async (req, res) => {
     const recK = recordSmokeMessage(db, { uuid, delivery_id: d.delivery_id, instance_id, kind:'key_verified_success', lang, text: keyOkMsg, sendResult: { code: 0, stdout: 'simulated', stderr: '' } });
     if (!recK.ok) return send(res, 500, { ok:false, error:'key_success_message_contains_forbidden', uuid, forbidden_hits: recK.forbidden_hits });
 
-    // (4) Cutover + finalize delivery
-    try { tryCutoverDelivered(db, uuid, { reason: 'smoke' }); } catch {}
+    // (4) Optional: Cutover + finalize delivery
+    let cutover = { attempted: false, delivered: false, checks: null };
+    if (doCutover) {
+      cutover.attempted = true;
+      try { tryCutoverDelivered(db, uuid, { reason: 'smoke' }); } catch {}
 
-    // Wait a bit then check if machine is converged to DELIVERED.
-    await sleepMs(3000);
-    let delivered = false;
-    let d3 = null;
-    try { d3 = getDeliveryByUuid(db, uuid); } catch {}
-    try { delivered = String(d3?.status || '') === 'DELIVERED'; } catch { delivered = false; }
+      // Wait a bit then check if machine is converged to DELIVERED.
+      await sleepMs(4000);
+      let d3 = null;
+      try { d3 = getDeliveryByUuid(db, uuid); } catch {}
+      try { cutover.delivered = String(d3?.status || '') === 'DELIVERED'; } catch { cutover.delivered = false; }
+
+      // Verify instance-side convergence BEFORE cleanup.
+      try {
+        const vr = poolSsh(inst,
+          `set -euo pipefail; `
+          + `test -f /opt/bothook/DELIVERED.json && echo delivered_marker=1 || echo delivered_marker=0; `
+          + `test -f /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json && echo auth_profiles=1 || echo auth_profiles=0; `
+          + `systemctl is-enabled bothook-provision.service >/dev/null 2>&1 && echo provision_enabled=1 || echo provision_enabled=0; `
+          + `systemctl is-active bothook-provision.service >/dev/null 2>&1 && echo provision_active=1 || echo provision_active=0; `
+          + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -qi bothook-wa-autoreply && echo autoreply_present=1 || echo autoreply_present=0; `
+          + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins list 2>/dev/null | grep -qi 'bothook-wa-autoreply.*disabled' && echo autoreply_disabled=1 || echo autoreply_disabled=0; `
+          + `echo ok`,
+          { timeoutMs: 20000, tty:false, retries:0 }
+        );
+        const lines = String(vr.stdout || '').trim().split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+        const asBool = (k) => lines.includes(`${k}=1`);
+        cutover.checks = {
+          delivered_marker: asBool('delivered_marker'),
+          auth_profiles: asBool('auth_profiles'),
+          provision_enabled: asBool('provision_enabled'),
+          provision_active: asBool('provision_active'),
+          autoreply_present: asBool('autoreply_present'),
+          autoreply_disabled: asBool('autoreply_disabled')
+        };
+      } catch {
+        cutover.checks = { error: 'instance_verify_failed' };
+      }
+    }
 
     // (5) Cleanup on instance: clear auth + sanitize WA session (so it is safe to return to pool)
     try { poolSsh(inst, 'sudo rm -f /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json 2>/dev/null || true', { timeoutMs: 15000, tty:false, retries:0 }); } catch {}
@@ -4177,7 +4208,7 @@ app.post('/api/ops/smoke/run', async (req, res) => {
       );
     } catch {}
 
-    return send(res, 200, { ok:true, uuid, instance_id, lang, delivered, target: wa_jid.startsWith('sim:') ? 'simulated' : 'real', wa_jid });
+    return send(res, 200, { ok:true, uuid, delivery_id: d.delivery_id, instance_id, lang, cutover, target: wa_jid.startsWith('sim:') ? 'simulated' : 'real', wa_jid });
   } catch (e) {
     return send(res, 500, { ok:false, error: e?.message || 'server_error' });
   }
