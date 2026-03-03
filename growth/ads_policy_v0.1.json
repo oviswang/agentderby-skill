@@ -1,6 +1,9 @@
 {
   "version": "0.1",
   "googleAds": {
+    "conversionActions": {
+      "paymentPaid": "customers/1577191627/conversionActions/7520172601"
+    },
     "mccCustomerId": "9776571037",
     "clientCustomerId": "1577191627",
     "timeZone": "Asia/Singapore",

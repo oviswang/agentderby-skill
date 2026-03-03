@@ -3727,6 +3727,93 @@ app.post('/api/stripe/webhook', async (req, res) => {
       } catch { return null; }
     };
 
+    // Offline conversion upload (Google Ads) for PAYMENT_PAID (best-effort)
+    // This enables keyword-level淘汰机制 based on paid conversions.
+    function fmtDateTimeInTz(d, timeZone) {
+      const parts = new Intl.DateTimeFormat('sv-SE', {
+        timeZone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+      }).formatToParts(d);
+      const get = (t) => parts.find(p => p.type === t)?.value;
+      return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
+    }
+
+    async function uploadPaidConversionBestEffort({ uuid, delivery_id, paid_at_iso, attr }) {
+      try {
+        const gclid = attr?.click?.gclid || attr?.gclid || null;
+        if (!gclid) return { ok:false, reason:'missing_gclid' };
+
+        let policy = null;
+        try { policy = JSON.parse(fs.readFileSync('/home/ubuntu/.openclaw/workspace/growth/ads_policy_v0.1.json','utf8')); } catch { policy = null; }
+        const convAction = policy?.googleAds?.conversionActions?.paymentPaid;
+        if (!convAction) return { ok:false, reason:'missing_conversion_action' };
+
+        // Mint access token
+        const creds = (()=>{ try {
+          const txt = fs.readFileSync('/home/ubuntu/.openclaw/credentials/google_ads.env','utf8');
+          const env={};
+          for(const line of txt.split(/\r?\n/)){
+            if(!line||line.trim().startsWith('#')) continue;
+            const idx=line.indexOf('=');
+            if(idx<0) continue;
+            env[line.slice(0,idx)] = line.slice(idx+1);
+          }
+          return env;
+        } catch { return {}; }})();
+
+        const mcc = policy?.googleAds?.mccCustomerId;
+        const customerId = policy?.googleAds?.clientCustomerId;
+        const developerToken = creds.GOOGLE_ADS_DEVELOPER_TOKEN;
+        if (!mcc || !customerId || !developerToken) return { ok:false, reason:'missing_ads_creds' };
+
+        const params = new URLSearchParams({
+          client_id: creds.GOOGLE_ADS_CLIENT_ID,
+          client_secret: creds.GOOGLE_ADS_CLIENT_SECRET,
+          refresh_token: creds.GOOGLE_ADS_REFRESH_TOKEN,
+          grant_type: 'refresh_token'
+        });
+        const tokRes = await fetch('https://oauth2.googleapis.com/token', { method:'POST', body: params });
+        const tok = await tokRes.json();
+        if (!tokRes.ok) return { ok:false, reason:'oauth_failed' };
+        const accessToken = tok.access_token;
+
+        const timeZone = policy?.googleAds?.timeZone || 'Asia/Singapore';
+        const dt = paid_at_iso ? new Date(paid_at_iso) : new Date();
+        const convDateTime = fmtDateTimeInTz(dt, timeZone) + '+00:00';
+
+        const url = `https://googleads.googleapis.com/v20/customers/${customerId}:uploadClickConversions`;
+        const headers = {
+          'Authorization': `Bearer ${accessToken}`,
+          'developer-token': developerToken,
+          'login-customer-id': String(mcc),
+          'Content-Type': 'application/json'
+        };
+        const body = {
+          partialFailure: true,
+          conversions: [
+            {
+              gclid,
+              conversionAction: convAction,
+              conversionDateTime: convDateTime,
+              conversionValue: 1.0,
+              currencyCode: 'SGD',
+              orderId: String(delivery_id || uuid || '')
+            }
+          ]
+        };
+
+        const res = await fetch(url, { method:'POST', headers, body: JSON.stringify(body) });
+        const text = await res.text();
+        let j = null;
+        try { j = text ? JSON.parse(text) : null; } catch { j = { _raw: text }; }
+        return { ok: res.ok, status: res.status, resp: j };
+      } catch (e) {
+        return { ok:false, reason:'exception' };
+      }
+    }
+
     // Minimal state transitions
     if (type === 'checkout.session.completed') {
       // Mark delivery paid (MVP)
@@ -3739,9 +3826,34 @@ app.post('/api/stripe/webhook', async (req, res) => {
           crypto.randomUUID(), ts, 'delivery', delivery_id, 'PAYMENT_CONFIRMED', JSON.stringify({ uuid, stripe_event_id: eventId })
         );
         // Normalized funnel event
+        const attrSnap = getAttr(uuid);
         db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-          crypto.randomUUID(), ts, 'delivery', delivery_id, 'PAYMENT_PAID', JSON.stringify({ uuid, delivery_id, stripe_event_id: eventId, attr: getAttr(uuid) })
+          crypto.randomUUID(), ts, 'delivery', delivery_id, 'PAYMENT_PAID', JSON.stringify({ uuid, delivery_id, stripe_event_id: eventId, attr: attrSnap })
         );
+
+        // Best-effort: persist gclid snapshot to delivery meta for later audits.
+        try {
+          const gclid = attrSnap?.click?.gclid || attrSnap?.gclid || null;
+          if (gclid) {
+            const row2 = db.prepare('SELECT meta_json FROM deliveries WHERE delivery_id=?').get(delivery_id);
+            const meta3 = mergeMeta(row2?.meta_json || null, { ads_gclid: String(gclid), ads_paid_at: ts });
+            db.prepare('UPDATE deliveries SET meta_json=? WHERE delivery_id=?').run(meta3, delivery_id);
+          }
+        } catch {}
+
+        // Best-effort: upload offline conversion to Google Ads for keyword-level淘汰机制.
+        // Fire-and-forget to keep webhook fast.
+        setTimeout(() => {
+          uploadPaidConversionBestEffort({ uuid, delivery_id, paid_at_iso: ts, attr: attrSnap })
+            .then((r) => {
+              try {
+                db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                  crypto.randomUUID(), nowIso(), 'delivery', delivery_id, 'ADS_OFFLINE_CONVERSION_UPLOAD', JSON.stringify({ ok: r?.ok, status: r?.status || null, reason: r?.reason || null })
+                );
+              } catch {}
+            })
+            .catch(() => {});
+        }, 0);
         // If key already verified + linked, cutover now.
         try { tryCutoverDelivered(db, uuid, { reason: 'payment_confirmed' }); } catch {}
 
