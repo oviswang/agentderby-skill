@@ -1130,8 +1130,9 @@ async function tccli(cmd, { envFile='/home/ubuntu/.openclaw/credentials/tencentc
   return sh(full, { timeoutMs: 20000 });
 }
 
-async function describeInstance(instance_id){
-  const r = await tccli(`tccli lighthouse DescribeInstances --region ap-singapore --InstanceIds '["${instance_id}"]' --output json`);
+async function describeInstance(instance_id, { region } = {}){
+  const rgn = String(region || process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore');
+  const r = await tccli(`tccli lighthouse DescribeInstances --region ${rgn} --InstanceIds '["${instance_id}"]' --output json`);
   if ((r.code ?? 1) !== 0) throw new Error('describe_instances_failed');
   const j = JSON.parse(String(r.stdout||'{}'));
   const it = (j.InstanceSet||[])[0];
@@ -1175,10 +1176,61 @@ async function waitSshEcho(instance, { timeoutMs=15*60*1000, phase='ssh' } = {})
   return { ok: false, attempt, lastDetail, lastCode, phase };
 }
 
-async function associatePoolKey(instance_id){
-  const r = await tccli(`tccli lighthouse AssociateInstancesKeyPairs --region ap-singapore --InstanceIds '["${instance_id}"]' --KeyIds '["lhkp-q1oc3vdz"]' --output json`);
+async function resolvePoolKeyIdForRegion(targetRegion) {
+  const region = String(targetRegion || process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore');
+  const cachePath = process.env.BOTHOOK_POOL_KEY_REGION_CACHE_PATH || '/tmp/bothook_pool_key_by_region.json';
+  const desiredKeyId = String(process.env.BOTHOOK_POOL_KEY_ID || 'lhkp-q1oc3vdz');
+  const sourceRegion = String(process.env.BOTHOOK_POOL_KEY_SOURCE_REGION || process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore');
+
+  // Fast path: same region.
+  if (region === sourceRegion) return desiredKeyId;
+
+  // Cache lookup.
+  try {
+    const j = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    const hit = j?.[region];
+    if (hit) return String(hit);
+  } catch {}
+
+  // Fetch public key from source region, then import into target region.
+  const d = await tccli(`tccli lighthouse DescribeKeyPairs --region ${sourceRegion} --KeyIds '["${desiredKeyId}"]' --output json`);
+  const dj = JSON.parse(String(d.stdout||'{}'));
+  const kp = (dj.KeyPairSet || [])[0];
+  const pub = String(kp?.PublicKey || '').trim();
+  const name = String(kp?.KeyName || 'bothook_pool_key').trim() || 'bothook_pool_key';
+  if (!pub) throw new Error('pool_key_public_key_missing');
+
+  const imp = await tccli(`tccli lighthouse ImportKeyPair --region ${region} --KeyName '${name}' --PublicKey '${pub.replace(/'/g, "'\\''")}' --output json`);
+  const ij = JSON.parse(String(imp.stdout||'{}'));
+  const newKeyId = String(ij?.KeyId || ij?.KeyPairId || '').trim();
+  if (!newKeyId) throw new Error('pool_key_import_failed');
+
+  // Persist cache best-effort.
+  try {
+    let j = {};
+    try { j = JSON.parse(fs.readFileSync(cachePath, 'utf8')); } catch { j = {}; }
+    j[region] = newKeyId;
+    fs.writeFileSync(cachePath, JSON.stringify(j, null, 2));
+  } catch {}
+
+  return newKeyId;
+}
+
+async function associatePoolKey(instance_id, { region } = {}){
+  const rgn = String(region || process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore');
+  let keyId = await resolvePoolKeyIdForRegion(rgn);
+
+  let r = await tccli(`tccli lighthouse AssociateInstancesKeyPairs --region ${rgn} --InstanceIds '["${instance_id}"]' --KeyIds '["${keyId}"]' --output json`);
+  let out = String((r.stdout||'') + (r.stderr||''));
+
+  // If key is missing in that region, re-resolve (imports) and retry once.
+  if (out.includes('KeyIdNotFound') || out.includes('ResourceNotFound.KeyIdNotFound')) {
+    keyId = await resolvePoolKeyIdForRegion(rgn);
+    r = await tccli(`tccli lighthouse AssociateInstancesKeyPairs --region ${rgn} --InstanceIds '["${instance_id}"]' --KeyIds '["${keyId}"]' --output json`);
+    out = String((r.stdout||'') + (r.stderr||''));
+  }
+
   // Allow "duplicate" as success.
-  const out = String((r.stdout||'') + (r.stderr||''));
   if ((r.code ?? 0) === 0) return true;
   if (out.includes('KeyPairBindDuplicate')) return true;
   // Retryable: cloud is busy or instance still pending.
@@ -1195,8 +1247,9 @@ async function issueReadyToken(db, instRow){
   writeReadyReportFilesOnInstance(instRow, { token, expIso });
 }
 
-async function resetInstance(instance_id, blueprint_id){
-  const r = await tccli(`tccli lighthouse ResetInstance --region ap-singapore --version 2020-03-24 --InstanceId '${instance_id}' --BlueprintId '${blueprint_id}' --output json`);
+async function resetInstance(instance_id, blueprint_id, { region } = {}){
+  const rgn = String(region || process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore');
+  const r = await tccli(`tccli lighthouse ResetInstance --region ${rgn} --version 2020-03-24 --InstanceId '${instance_id}' --BlueprintId '${blueprint_id}' --output json`);
   const out = String((r.stdout||'') + (r.stderr||''));
   if ((r.code ?? 0) === 0) return { ok:true, out };
   if (out.includes('LatestOperationUnfinished')) return { ok:false, retryable:true, out };
@@ -1239,7 +1292,7 @@ async function runPoolInitJob(job){
     if (!(ls === 'IN_POOL' || ls === 'DELIVERING')) throw new Error('not_in_pool');
 
     // Describe + write IP/KeyIds to DB
-    const it = await describeInstance(job.instance_id);
+    const it = await describeInstance(job.instance_id, { region: inst0.region });
     const pub = (it.PublicAddresses||[])[0] || null;
     const priv = (it.PrivateAddresses||[])[0] || null;
     const keyIds = ((it.LoginSettings||{}).KeyIds||[]).map(String);
@@ -1255,7 +1308,7 @@ async function runPoolInitJob(job){
       pushJobLog(job, `reset instance (reimage): blueprint=${(it.BlueprintId||'')}`);
       // reset may be blocked by ongoing ops; retry a bit
       for (let i=0;i<10;i++){
-        const rr = await resetInstance(job.instance_id, String(it.BlueprintId || ''));
+        const rr = await resetInstance(job.instance_id, String(it.BlueprintId || ''), { region: inst0.region });
         if (rr.ok) break;
         if (rr.retryable) {
           await sleepMs(5000);
@@ -1272,14 +1325,14 @@ async function runPoolInitJob(job){
     // Associate pool key (retry window)
     pushJobLog(job, 'associate keypair bothook_pool_key');
     for (let i=0;i<20;i++){
-      const ok = await associatePoolKey(job.instance_id);
+      const ok = await associatePoolKey(job.instance_id, { region: inst0.region });
       if (ok) break;
       await sleepMs(3000);
       if (i===19) throw new Error('associate_key_timeout');
     }
 
     // Refresh describe
-    const it2 = await describeInstance(job.instance_id);
+    const it2 = await describeInstance(job.instance_id, { region: inst0.region });
     const pub2 = (it2.PublicAddresses||[])[0] || pub;
     pushJobLog(job, `describe2: ip=${pub2}`);
     db.prepare('UPDATE instances SET public_ip=COALESCE(?,public_ip) WHERE instance_id=?').run(pub2, job.instance_id);
