@@ -204,9 +204,9 @@ export default {
           // else: continue to guide repeat below
         }
 
-        // 2) Unpaid: repeat welcome_unpaid (rate limit 10s)
-        const lastWelcomeAt = st.autoreply.lastWelcomeAt ? Date.parse(st.autoreply.lastWelcomeAt) : 0;
-        if (!paid && (now - lastWelcomeAt > 10_000)) {
+        // 2) Unpaid: ALWAYS repeat welcome_unpaid on any inbound self message.
+        // No rate limiting: goal is to guarantee the user always sees the onboarding instructions.
+        if (!paid) {
           const wr = await getJson(`${controlPlane}/api/wa/welcome_unpaid_text?uuid=${encodeURIComponent(uuid)}`, 15000);
           const text = String(wr?.json?.text || '').trim();
           if (wr.ok && text) {
@@ -215,6 +215,7 @@ export default {
             saveState(st);
             return;
           }
+          // If control-plane is temporarily unavailable, do not crash; fall through.
         }
 
         // 3) Paid: if key not verified -> repeat guide_key_paid for ANY non-verified-key message.
