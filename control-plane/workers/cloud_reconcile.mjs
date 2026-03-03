@@ -288,12 +288,17 @@ function main() {
             .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_AUTORENEW_FIX_FAILED', JSON.stringify(renewFix));
         }
 
-        if (!keyIds.includes(POOL_KEY_ID)) {
+        // Region-aware pool key id (KeyPair ids are region-scoped in Tencent).
+        let poolKeyId = null;
+        try { poolKeyId = resolvePoolKeyIdForRegion(region); } catch {}
+        poolKeyId = String(poolKeyId || POOL_KEY_ID);
+
+        if (!keyIds.includes(poolKeyId)) {
           const rr = associateKey(region, instance_id);
           if (rr.ok) {
             keyfix++;
             db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-              .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_KEYPAIR_REBOUND', JSON.stringify({ pool_key_id: POOL_KEY_ID }));
+              .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_KEYPAIR_REBOUND', JSON.stringify({ pool_key_id: poolKeyId }));
 
             // Refresh keyIds after bind (best-effort).
             try {
@@ -304,7 +309,7 @@ function main() {
         }
 
         // Probe SSH if we have a public IP and key is bound.
-        if (pub && keyIds.includes(POOL_KEY_ID)) {
+        if (pub && keyIds.includes(poolKeyId)) {
           const pr = sshProbe(pub);
           sshOk = Boolean(pr.ok);
 
