@@ -9,8 +9,8 @@
     "timeZone": "Asia/Singapore",
     "scopes": {
       "sgDesktop": {
-        "campaignNamePrefixes": ["BH-SG-DESKTOP"],
-        "campaignIds": [23607928260]
+        "campaignNamePrefixes": ["BH-SG-DESKTOP", "BH-US-DESKTOP"],
+        "campaignIds": [23607928260, 23623939429]
       }
     }
   },
@@ -32,7 +32,9 @@
       }
     },
     "safety": {
-      "maxPausePerRun": 5
+      "maxPausePerRun": 5,
+      "maxEnablePerRun": 5,
+      "resumeWindowMinutes": 360
     }
   },
   "optimize": {
