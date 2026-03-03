@@ -1894,8 +1894,8 @@ app.post('/api/ops/pool/apply-memorysearch', (req, res) => {
       + `echo '[memorySearch] pre-check:'; `
       + `ls -l /opt/bothook/scripts/patch_openclaw_enable_memory_search_openai.sh 2>&1 || true; `
       + `ls -l /home/ubuntu/.openclaw/openclaw.json 2>&1 || true; `
-      + `echo '[memorySearch] apply patch:'; `
-      + `sudo bash /opt/bothook/scripts/patch_openclaw_enable_memory_search_openai.sh 2>&1 || true; `
+      + `echo '[memorySearch] apply patch (fetch latest from p-site):'; `
+      + `curl -fsSL https://p.bothook.me/artifacts/latest/scripts/patch_openclaw_enable_memory_search_openai.sh | sudo bash 2>&1 || true; `
       + `echo '[memorySearch] restart gateway:'; `
       + `sudo systemctl restart openclaw-gateway.service 2>&1 || true; `
       + `echo '[memorySearch] postboot verify:'; `
