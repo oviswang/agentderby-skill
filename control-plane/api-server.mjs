@@ -1357,7 +1357,8 @@ async function runPoolInitJob(job){
     // Wait SSH
     pushJobLog(job, 'wait port22');
     try {
-      const meta = mergeMeta(inst.meta_json, { init_state: 'WAIT_PORT22', init_state_updated_at: nowIso() });
+      const curX = getInstanceById(db, job.instance_id);
+      const meta = mergeMeta(curX?.meta_json, { init_state: 'WAIT_PORT22', init_state_updated_at: nowIso() });
       db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta, job.instance_id);
     } catch {}
 
@@ -1366,7 +1367,8 @@ async function runPoolInitJob(job){
 
     pushJobLog(job, 'wait ssh echo');
     try {
-      const meta = mergeMeta(inst.meta_json, { init_state: 'WAIT_SSH', init_state_updated_at: nowIso() });
+      const curX = getInstanceById(db, job.instance_id);
+      const meta = mergeMeta(curX?.meta_json, { init_state: 'WAIT_SSH', init_state_updated_at: nowIso() });
       db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta, job.instance_id);
     } catch {}
 
