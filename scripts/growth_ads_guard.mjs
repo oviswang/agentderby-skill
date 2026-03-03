@@ -229,6 +229,35 @@ WHERE segments.date_time >= '${startStr}'
   // NOTE: Do not depend on native node modules. Use sqlite3 CLI.
   const dbPath = '/home/ubuntu/.openclaw/workspace/control-plane/data/bothook.sqlite';
   const { execFileSync } = await import('node:child_process');
+  const { randomUUID } = await import('node:crypto');
+
+  function sqlExec(query) {
+    // Best-effort; do not fail the guard run on audit write.
+    try {
+      execFileSync('sqlite3', [dbPath, query], { encoding: 'utf8' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function sqlEscape(s) {
+    return String(s).replace(/'/g, "''");
+  }
+
+  function writeEvent({ entity_type, entity_id, event_type, payload }) {
+    const event_id = randomUUID();
+    const payload_json = payload == null ? null : JSON.stringify(payload);
+    const q = `INSERT INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (` +
+      `'${sqlEscape(event_id)}',` +
+      `'${sqlEscape(ts)}',` +
+      `'${sqlEscape(entity_type)}',` +
+      `'${sqlEscape(entity_id)}',` +
+      `'${sqlEscape(event_type)}',` +
+      (payload_json == null ? 'NULL' : `'${sqlEscape(payload_json)}'`) +
+      `);`;
+    return { ok: sqlExec(q), event_id };
+  }
 
   const sinceIso = new Date(Date.now() - funnelLookbackMin * 60_000).toISOString();
 
@@ -302,6 +331,33 @@ LIMIT 200
     mutateResult = await googleAdsMutateCampaigns({ developerToken, accessToken, customerId, loginCustomerId: mcc, operations: pauseOps, validateOnly: false });
   }
 
+  // Audit: write a compact run summary + any applied pause ops into BOTHook events.
+  // This makes it easy to correlate “why it paused” without relying on Ads change history.
+  const auditRun = writeEvent({
+    entity_type: 'ads_guard',
+    entity_id: 'sgDesktop',
+    event_type: 'ADS_GUARD_RUN',
+    payload: {
+      mode: args.mode,
+      policy_version: policy.version,
+      customerId,
+      timeZone,
+      windows: { spendLookbackMin, funnelLookbackMin, funnel_since: sinceIso, spend_start: startStr, spend_end: endStr },
+      funnel_30m: { bound_count: Number(boundCount || 0), welcome_sent_count: Number(welcomeSentCount || 0), hard_stop_event_count: Number(hardEventCount || 0) },
+      decision: { should_pause: shouldPause, triggers, pause_ops_planned: pauseOps.length },
+      applied: { paused: (args.mode === 'apply') ? pauseOps.length : 0 }
+    }
+  });
+
+  const auditPause = (pauseOps.length && args.mode === 'apply')
+    ? writeEvent({
+        entity_type: 'ads_campaign',
+        entity_id: String(scope?.campaignIds?.[0] || 'sgDesktop'),
+        event_type: 'ADS_GUARD_CAMPAIGN_PAUSED',
+        payload: { triggers, paused_campaign_ids: pauseOps.map(op => op.update?.resourceName?.split('/').pop()).filter(Boolean) }
+      })
+    : null;
+
   const out = {
     ok: true,
     ts,
@@ -325,7 +381,13 @@ LIMIT 200
       campaigns_in_scope: campaigns.length,
       pause_ops_planned: pauseOps.length
     },
-    applied: args.mode === 'apply' ? { paused: pauseOps.length, mutateResult } : { paused: 0 }
+    applied: args.mode === 'apply' ? { paused: pauseOps.length, mutateResult } : { paused: 0 },
+    audit: {
+      run_event_id: auditRun?.event_id,
+      run_event_written: auditRun?.ok,
+      pause_event_id: auditPause?.event_id,
+      pause_event_written: auditPause?.ok
+    }
   };
 
   console.log(JSON.stringify(out, null, 2));
