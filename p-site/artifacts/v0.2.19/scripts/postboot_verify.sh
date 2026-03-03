@@ -177,6 +177,20 @@ export CHK_TMUX=$([ -x /usr/bin/tmux ] && echo 1 || echo 0)
 export CHK_AUTH_PROFILES=$([ -f /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json ] && echo 1 || echo 0)
 export CHK_AUTOREPLY_LOADED=$([ "$autoreply_loaded" = true ] && echo 1 || echo 0)
 
+# Embedding semantic memorySearch (OpenAI) check
+export CHK_MEMORYSEARCH=$(python3 - <<'PY'
+import json
+p='/home/ubuntu/.openclaw/openclaw.json'
+try:
+  j=json.load(open(p))
+except Exception:
+  print('0'); raise SystemExit(0)
+ms=((j.get('agents') or {}).get('defaults') or {}).get('memorySearch') or {}
+ok = bool(ms.get('enabled') is True and ms.get('provider')=='openai' and ms.get('model')=='text-embedding-3-small')
+print('1' if ok else '0')
+PY
+)
+
 # Default model check + repair (best-effort)
 MODEL_PRIMARY=$(sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config get agents.defaults.model.primary 2>/dev/null || true)
 MODEL_PRIMARY=$(echo "$MODEL_PRIMARY" | tr -d '\r' | tail -n 1)
@@ -188,6 +202,10 @@ if [[ "$MODEL_PRIMARY" != "openai/gpt-5.2" ]]; then
 fi
 export CHK_DEFAULT_MODEL_OK=$([ "$MODEL_PRIMARY" = "openai/gpt-5.2" ] && echo 1 || echo 0)
 
+# memorySearch is not a hard gate for READY (can be useful only after user sets OPENAI_API_KEY),
+# but we still record it for verification.
+export CHK_MEMORYSEARCH_OK=$([ "$CHK_MEMORYSEARCH" = "1" ] && echo 1 || echo 0)
+
 checks_json=$(python3 - <<'PY'
 import json,os
 j={
@@ -198,6 +216,7 @@ j={
   'tmux_installed': os.environ.get('CHK_TMUX')=='1',
   'auth_profiles_present': os.environ.get('CHK_AUTH_PROFILES')=='1',
   'autoreply_loaded': os.environ.get('CHK_AUTOREPLY_LOADED')=='1',
+  'memory_search_openai_enabled': os.environ.get('CHK_MEMORYSEARCH_OK')=='1',
   'default_model_openai_gpt_5_2': os.environ.get('CHK_DEFAULT_MODEL_OK')=='1'
 }
 print(json.dumps(j,ensure_ascii=False))
