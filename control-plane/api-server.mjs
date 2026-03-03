@@ -4084,6 +4084,19 @@ app.post('/api/stripe/webhook', async (req, res) => {
           }
         } catch {}
 
+        // If linked but key not yet verified: enqueue key setup guide immediately (even if user sends no messages).
+        // Use outbound_tasks queue for gating + retries (more reliable than direct send in webhook).
+        try {
+          const d2 = getDeliveryByUuid(db, String(uuid));
+          if (d2?.instance_id && d2?.wa_jid) {
+            const lang = getDeliveryLang(d2);
+            enqueueOutboundTask(db, { delivery_id: d2.delivery_id, uuid: String(uuid), instance_id: d2.instance_id, kind: 'guide_key_paid', lang, to_jid: d2.wa_jid });
+            const ts2 = nowIso();
+            const meta2 = mergeMeta(d2.meta_json, { guide_key_enqueued_at: ts2, guide_key_lang: lang, guide_key_enqueued_via: 'stripe_webhook' });
+            db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts2, d2.delivery_id);
+          }
+        } catch {}
+
         // Best-effort: upload offline conversion to Google Ads for keyword-level淘汰机制.
         // Fire-and-forget to keep webhook fast.
         setTimeout(() => {
