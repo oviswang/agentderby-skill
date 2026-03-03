@@ -177,7 +177,7 @@ export CHK_TMUX=$([ -x /usr/bin/tmux ] && echo 1 || echo 0)
 export CHK_AUTH_PROFILES=$([ -f /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json ] && echo 1 || echo 0)
 export CHK_AUTOREPLY_LOADED=$([ "$autoreply_loaded" = true ] && echo 1 || echo 0)
 
-# Embedding semantic memorySearch (OpenAI) check
+# Embedding semantic memorySearch (OpenAI) check + self-heal (best-effort)
 export CHK_MEMORYSEARCH=$(python3 - <<'PY'
 import json
 p='/home/ubuntu/.openclaw/openclaw.json'
@@ -190,6 +190,26 @@ ok = bool(ms.get('enabled') is True and ms.get('provider')=='openai' and ms.get(
 print('1' if ok else '0')
 PY
 )
+
+if [ "$CHK_MEMORYSEARCH" != "1" ]; then
+  # Apply patch only when missing/misconfigured; do not loop/restart storm.
+  if [ -x /opt/bothook/scripts/patch_openclaw_enable_memory_search_openai.sh ]; then
+    sudo bash /opt/bothook/scripts/patch_openclaw_enable_memory_search_openai.sh >/dev/null 2>&1 || true
+    sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true
+  fi
+  export CHK_MEMORYSEARCH=$(python3 - <<'PY'
+import json
+p='/home/ubuntu/.openclaw/openclaw.json'
+try:
+  j=json.load(open(p))
+except Exception:
+  print('0'); raise SystemExit(0)
+ms=((j.get('agents') or {}).get('defaults') or {}).get('memorySearch') or {}
+ok = bool(ms.get('enabled') is True and ms.get('provider')=='openai' and ms.get('model')=='text-embedding-3-small')
+print('1' if ok else '0')
+PY
+)
+fi
 
 # Default model check + repair (best-effort)
 MODEL_PRIMARY=$(sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config get agents.defaults.model.primary 2>/dev/null || true)
