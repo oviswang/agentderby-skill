@@ -4058,7 +4058,7 @@ app.post('/api/stripe/webhook', async (req, res) => {
 
                 const ts2 = nowIso();
                 db.prepare(
-                  `UPDATE subscriptions SET status=?, current_period_end=?, cancel_at=?, canceled_at=?, ended_at=?, cancel_at_period_end=?, updated_at=? WHERE provider_sub_id=? AND provider='stripe'`
+                  `UPDATE subscriptions SET status=?, current_period_end=COALESCE(?, current_period_end), cancel_at=COALESCE(?, cancel_at), canceled_at=COALESCE(?, canceled_at), ended_at=COALESCE(?, ended_at), cancel_at_period_end=?, updated_at=? WHERE provider_sub_id=? AND provider='stripe'`
                 ).run(
                   String(sj.status || 'active'),
                   unixToIso(cpe),
@@ -4174,10 +4174,10 @@ app.post('/api/stripe/webhook', async (req, res) => {
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(provider_sub_id) DO UPDATE SET
            status=excluded.status,
-           current_period_end=excluded.current_period_end,
-           cancel_at=excluded.cancel_at,
-           canceled_at=excluded.canceled_at,
-           ended_at=excluded.ended_at,
+           current_period_end=COALESCE(excluded.current_period_end, subscriptions.current_period_end),
+           cancel_at=COALESCE(excluded.cancel_at, subscriptions.cancel_at),
+           canceled_at=COALESCE(excluded.canceled_at, subscriptions.canceled_at),
+           ended_at=COALESCE(excluded.ended_at, subscriptions.ended_at),
            cancel_at_period_end=excluded.cancel_at_period_end,
            updated_at=excluded.updated_at`
       );
