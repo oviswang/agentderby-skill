@@ -1,0 +1,27 @@
+{
+  "headlines": [
+    "WhatsApp Personal Assistant",
+    "AI Assistant in WhatsApp",
+    "Summarize WhatsApp Chats",
+    "Turn Chats Into To-Dos",
+    "Draft Replies in Seconds",
+    "Never Miss Follow-Ups",
+    "WhatsApp Message Summaries",
+    "Reminders From Your Chats",
+    "Quick Reply Suggestions",
+    "Works on Your Phone",
+    "No App Download",
+    "Setup in Minutes",
+    "Cancel Anytime",
+    "Private Setup (Your Own Key)",
+    "Get More Done in WhatsApp"
+  ],
+  "descriptions": [
+    "Summaries, to-dos, and quick replies for WhatsApp messages. Setup in minutes—try it today.",
+    "Stay on top of chats with reminders and follow-ups. Draft responses fast when you're busy.",
+    "Private and controllable: use your own OpenAI key. Subscription based—cancel anytime.",
+    "Send a chat, get a clean summary and action list. Great for groups and work threads."
+  ],
+  "path1": "whatsapp",
+  "path2": "assistant"
+}
