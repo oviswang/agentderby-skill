@@ -1882,6 +1882,9 @@ app.get('/api/ops/pool/init/busy', (req, res) => {
 // NOTE: This does not touch control-plane delivery_secrets; caller should delete secrets separately if desired.
 app.post('/api/ops/pool/apply-memorysearch', (req, res) => {
   try {
+    if (String(process.env.BOTHOOK_DEBUG_OPS || '') !== '1') {
+      return send(res, 403, { ok:false, error:'debug_ops_disabled' });
+    }
     const instance_id = String(req.body?.instance_id || '').trim();
     if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
     if (instance_id === 'lhins-npsqfxvn') return send(res, 403, { ok:false, error:'forbidden_master_host' });
@@ -1919,6 +1922,9 @@ app.post('/api/ops/pool/apply-memorysearch', (req, res) => {
 
 app.post('/api/ops/pool/cat-memorysearch', (req, res) => {
   try {
+    if (String(process.env.BOTHOOK_DEBUG_OPS || '') !== '1') {
+      return send(res, 403, { ok:false, error:'debug_ops_disabled' });
+    }
     const instance_id = String(req.body?.instance_id || '').trim();
     if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
     if (instance_id === 'lhins-npsqfxvn') return send(res, 403, { ok:false, error:'forbidden_master_host' });
