@@ -3041,18 +3041,21 @@ app.get('/api/wa/welcome_unpaid_text', async (req, res) => {
     const welcome = prompts.welcome_unpaid;
     if (!welcome) return send(res, 404, { ok:false, error:'welcome_unpaid_missing', lang });
 
-    // Pay link
+    // Pay link (in-process; no HTTP self-calls)
     let payShortLink = '';
     try {
-      const r = await fetch('http://127.0.0.1:18998/api/pay/link', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ uuid })
-      });
-      const t = await r.text();
-      const j = JSON.parse(t);
-      if (j?.ok && j?.payUrl) payShortLink = String(j.payUrl);
-    } catch {}
+      const r = await ensurePayShortlinkForUuid(db, uuid);
+      if (r?.payUrl) payShortLink = String(r.payUrl);
+    } catch {
+      // Fallback: reuse an existing unexpired shortlink if present (never blank when possible)
+      try {
+        const row = db.prepare(`SELECT code, expires_at FROM shortlinks WHERE provision_uuid=? AND kind='stripe_checkout' ORDER BY created_at DESC LIMIT 1`).get(uuid);
+        const now = Date.now();
+        if (row?.code && (!row.expires_at || Date.parse(row.expires_at) > now)) {
+          payShortLink = baseUrlForShortlinks() + row.code;
+        }
+      } catch {}
+    }
 
     // Specs (best-effort). Never allow blanks; hard-fallback to default 2/2/40.
     let cpu = '?', ram_gb = '?', disk_gb = '?';
@@ -3694,6 +3697,71 @@ app.get('/api/pay/confirm', async (req, res) => {
   }
 });
 
+async function ensurePayShortlinkForUuid(db, uuid) {
+  // Returns: { payUrl, expiresAt, delivery_id }
+  // IMPORTANT: do not call back into HTTP (self-fetch); keep it in-process to avoid intermittent deadlocks/timeouts.
+  const delivery = getOrCreateDeliveryForUuid(db, uuid);
+
+  const now = Date.now();
+  const expiresAt = new Date(now + 15*60*1000).toISOString();
+  const lockKey = `stripe_checkout:${uuid}`;
+  const ts = nowIso();
+
+  // Best-effort lock (idempotency)
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    tryAcquireShortlinkLock(db, lockKey, ts);
+    db.exec('COMMIT');
+  } catch {
+    try { db.exec('ROLLBACK'); } catch {}
+  }
+
+  // Reuse existing unexpired link if present
+  const existing = db.prepare(
+    `SELECT code, expires_at FROM shortlinks WHERE provision_uuid=? AND kind='stripe_checkout' ORDER BY created_at DESC LIMIT 1`
+  ).get(uuid);
+  if (existing?.code && (!existing.expires_at || Date.parse(existing.expires_at) > now)) {
+    try { setShortlinkLockCode(db, lockKey, existing.code); } catch {}
+    return { payUrl: baseUrlForShortlinks() + existing.code, expiresAt: existing.expires_at || expiresAt, delivery_id: delivery.delivery_id };
+  }
+
+  // Otherwise create a new Stripe checkout + shortlink
+  const checkout = await createStripeCheckout({ uuid, delivery_id: delivery.delivery_id });
+
+  let code;
+  for (let i=0;i<5;i++){
+    const c = randCode(7);
+    const used = db.prepare('SELECT 1 FROM shortlinks WHERE code=?').get(c);
+    if (!used) { code = c; break; }
+  }
+  if (!code) throw new Error('shortlink_code_exhausted');
+
+  const ts2 = nowIso();
+  upsertShortlink(db, {
+    code,
+    long_url: checkout.url,
+    created_at: ts2,
+    expires_at: expiresAt,
+    kind: 'stripe_checkout',
+    delivery_id: delivery.delivery_id,
+    provision_uuid: uuid,
+    meta: { stripe_session_id: checkout.id },
+  });
+
+  try { setShortlinkLockCode(db, lockKey, code); } catch {}
+
+  try {
+    db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+      crypto.randomUUID(), ts2, 'delivery', delivery.delivery_id, 'PAY_LINK_CREATED', JSON.stringify({ uuid, code, expires_at: expiresAt })
+    );
+    db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+      crypto.randomUUID(), ts2, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'created', attr: getAttributionForUuid(db, uuid) })
+    );
+  } catch {}
+
+  return { payUrl: baseUrlForShortlinks() + code, expiresAt, delivery_id: delivery.delivery_id };
+}
+
 // Create payment shortlink (Stripe checkout)
 app.post('/api/pay/link', async (req, res) => {
   try {
@@ -3701,93 +3769,8 @@ app.post('/api/pay/link', async (req, res) => {
     if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
 
     const { db } = openDb();
-    const delivery = getOrCreateDeliveryForUuid(db, uuid);    // Determine expiry: 15m window from link creation time
-    const now = Date.now();
-    const expiresAt = new Date(now + 15*60*1000).toISOString();
-    // Pay link idempotency (lock + reuse)
-    const lockKey = `stripe_checkout:${uuid}`;
-    const ts = nowIso();
-
-    db.exec('BEGIN IMMEDIATE');
-    let lockedCode = null;
-    try {
-      lockedCode = tryAcquireShortlinkLock(db, lockKey, ts);
-      db.exec('COMMIT');
-    } catch (e) {
-      try { db.exec('ROLLBACK'); } catch {}
-      lockedCode = null;
-    }
-
-    // If a code is already locked/assigned, reuse it (if unexpired)
-    if (lockedCode) {
-      const row = db.prepare('SELECT expires_at FROM shortlinks WHERE code=?').get(lockedCode);
-      if (!row || !row.expires_at || Date.parse(row.expires_at) > now) {
-        db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-          crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_LINK_REUSED', JSON.stringify({ uuid, code: lockedCode })
-        );
-        // Funnel: pay link opened/served
-        try {
-          db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-            crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'reused', attr: getAttributionForUuid(db, uuid) })
-          );
-        } catch {}
-        return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, payUrl: baseUrlForShortlinks()+lockedCode, expiresAt: (row && row.expires_at) ? row.expires_at : expiresAt });
-      }
-    }
-
-    // If an unexpired shortlink already exists for this uuid, reuse it
-    const existing = db.prepare(`SELECT code, expires_at FROM shortlinks WHERE provision_uuid=? AND kind='stripe_checkout' ORDER BY created_at DESC LIMIT 1`).get(uuid);
-    if (existing?.code && (!existing.expires_at || Date.parse(existing.expires_at) > now)) {
-      setShortlinkLockCode(db, lockKey, existing.code);
-      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-        crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_LINK_REUSED', JSON.stringify({ uuid, code: existing.code })
-      );
-      // Funnel: pay link opened/served
-      try {
-        db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-          crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'reused_existing', attr: getAttributionForUuid(db, uuid) })
-        );
-      } catch {}
-      return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, payUrl: baseUrlForShortlinks()+existing.code, expiresAt: existing.expires_at || expiresAt });
-    }
-
-    const checkout = await createStripeCheckout({ uuid, delivery_id: delivery.delivery_id });
-
-    let code;
-    for (let i=0;i<5;i++){
-      const c = randCode(7);
-      const used = db.prepare('SELECT 1 FROM shortlinks WHERE code=?').get(c);
-      if (!used) { code = c; break; }
-    }
-    if (!code) throw new Error('shortlink_code_exhausted');
-
-    const ts2 = nowIso();
-    upsertShortlink(db, {
-      code,
-      long_url: checkout.url,
-      created_at: ts2,
-      expires_at: expiresAt,
-      kind: 'stripe_checkout',
-      delivery_id: delivery.delivery_id,
-      provision_uuid: uuid,
-      meta: { stripe_session_id: checkout.id },
-    });
-
-    // persist lock code
-    try { setShortlinkLockCode(db, lockKey, code); } catch {}
-
-
-    db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-      crypto.randomUUID(), ts2, 'delivery', delivery.delivery_id, 'PAY_LINK_CREATED', JSON.stringify({ uuid, code, expires_at: expiresAt })
-    );
-    // Funnel: pay link opened/served
-    try {
-      db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-        crypto.randomUUID(), ts2, 'delivery', delivery.delivery_id, 'PAY_OPEN', JSON.stringify({ uuid, delivery_id: delivery.delivery_id, mode: 'created', attr: getAttributionForUuid(db, uuid) })
-      );
-    } catch {}
-
-    return send(res, 200, { ok:true, uuid, delivery_id: delivery.delivery_id, payUrl: baseUrlForShortlinks()+code, expiresAt });
+    const r = await ensurePayShortlinkForUuid(db, uuid);
+    return send(res, 200, { ok:true, uuid, delivery_id: r.delivery_id, payUrl: r.payUrl, expiresAt: r.expiresAt });
   } catch (e) {
     return send(res, e.statusCode || 500, { ok:false, error: e.message || 'server_error', detail: e.detail });
   }
