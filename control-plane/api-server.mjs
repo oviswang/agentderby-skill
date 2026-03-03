@@ -1429,6 +1429,26 @@ async function runPoolInitJob(job){
       throw new Error('bootstrap_validate_failed');
     }
 
+    // Extra hardening: ensure memorySearch patch applied (some boxes may have cached older patch script).
+    // Fetch and apply from p-site latest to avoid relying on /opt/bothook/scripts contents.
+    try {
+      pushJobLog(job, 'apply memorySearch patch (best-effort)');
+      poolSsh(inst,
+        `set -euo pipefail; `
+        + `curl -fsSL https://p.bothook.me/artifacts/${bootstrapVer}/scripts/patch_openclaw_enable_memory_search_openai.sh | sudo bash >/dev/null 2>&1 || true; `
+        + `sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true; `
+        + `echo ok`,
+        { timeoutMs: 60000, tty:false, retries: 0 }
+      );
+
+      const msDump = poolSsh(inst,
+        `python3 - <<'PY'\nimport json\np='/home/ubuntu/.openclaw/openclaw.json'\ntry:\n  j=json.load(open(p))\nexcept Exception as e:\n  print('ERR:'+str(e)); raise SystemExit(0)\nms=((j.get('agents') or {}).get('defaults') or {}).get('memorySearch')\nprint(json.dumps(ms,ensure_ascii=False))\nPY\n`,
+        { timeoutMs: 15000, tty:false, retries: 0 }
+      );
+      const out = String(msDump.stdout||msDump.stderr||'').trim().slice(0, 400);
+      pushJobLog(job, `memorySearch cfg: ${out || 'empty'}`);
+    } catch {}
+
     // Wait reboot
     pushJobLog(job, 'wait reboot ssh');
     const sshBack = await waitSshEcho(inst, { timeoutMs: 15*60*1000 });
