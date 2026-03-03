@@ -1287,6 +1287,15 @@ async function runPoolInitJob(job){
   } catch {}
   pushJobLog(job, `start (instance=${job.instance_id}, mode=${job.mode})`);
 
+  // UX: track init phase in instance meta_json so ops can distinguish "waiting for new machine" vs real NEEDS_VERIFY.
+  try {
+    const instRow0 = getInstanceById(db, job.instance_id);
+    if (instRow0) {
+      const meta0 = mergeMeta(instRow0.meta_json, { init_state: 'INIT_RUNNING', init_state_updated_at: ts0 });
+      db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta0, job.instance_id);
+    }
+  } catch {}
+
   try {
     const inst0 = getInstanceById(db, job.instance_id);
     if (!inst0) throw new Error('instance_not_found');
@@ -1347,9 +1356,20 @@ async function runPoolInitJob(job){
 
     // Wait SSH
     pushJobLog(job, 'wait port22');
+    try {
+      const meta = mergeMeta(inst.meta_json, { init_state: 'WAIT_PORT22', init_state_updated_at: nowIso() });
+      db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta, job.instance_id);
+    } catch {}
+
     const portOk = await waitPort22(inst.public_ip, { timeoutMs: 10*60*1000 });
     if (!portOk) throw new Error('port22_timeout');
+
     pushJobLog(job, 'wait ssh echo');
+    try {
+      const meta = mergeMeta(inst.meta_json, { init_state: 'WAIT_SSH', init_state_updated_at: nowIso() });
+      db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta, job.instance_id);
+    } catch {}
+
     const sshWait = await waitSshEcho(inst, { timeoutMs: 15*60*1000, phase: 'post-reimage', onProgress: (m) => pushJobLog(job, m) });
     if (!sshWait.ok) {
       // Preserve debug context for diagnosis.
@@ -1451,6 +1471,11 @@ async function runPoolInitJob(job){
         const ts = nowIso();
         job.status='DONE';
         job.endedAt=ts;
+        try {
+          const cur2 = getInstanceById(db, job.instance_id);
+          const meta2 = mergeMeta(cur2?.meta_json, { init_state: 'INIT_DONE', init_state_updated_at: ts });
+          db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta2, job.instance_id);
+        } catch {}
         try { job._db.prepare('UPDATE pool_init_jobs SET status=?, ended_at=? WHERE job_id=?').run('DONE', ts, job.job_id); } catch {}
         pushJobLog(job, 'done: READY');
         return;
@@ -1472,6 +1497,11 @@ async function runPoolInitJob(job){
               ).run('READY', ts, 'postboot_ok', 'init_pull', txt.slice(0, 2000), job.instance_id);
               job.status='DONE';
               job.endedAt=ts;
+              try {
+                const cur2 = getInstanceById(db, job.instance_id);
+                const meta2 = mergeMeta(cur2?.meta_json, { init_state: 'INIT_DONE', init_state_updated_at: ts });
+                db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta2, job.instance_id);
+              } catch {}
               try { job._db.prepare('UPDATE pool_init_jobs SET status=?, ended_at=? WHERE job_id=?').run('DONE', ts, job.job_id); } catch {}
               pushJobLog(job, 'done: READY (pulled postboot_verify.json)');
               return;
@@ -1496,6 +1526,13 @@ async function runPoolInitJob(job){
     job.endedAt = nowIso();
     try { job._db.prepare('UPDATE pool_init_jobs SET status=?, ended_at=? WHERE job_id=?').run('ERROR', job.endedAt, job.job_id); } catch {}
     pushJobLog(job, `error: ${e?.message || 'unknown'}`);
+
+    // Persist init phase for better ops visibility.
+    try {
+      const cur2 = getInstanceById(db, job.instance_id);
+      const meta2 = mergeMeta(cur2?.meta_json, { init_state: 'INIT_ERROR', init_error: String(e?.message || 'unknown'), init_state_updated_at: job.endedAt });
+      db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta2, job.instance_id);
+    } catch {}
     try {
       const { db } = openDb();
       // Do not mark DELIVERED instances as NEEDS_VERIFY from pool init failures.

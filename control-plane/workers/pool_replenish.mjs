@@ -505,7 +505,7 @@ function main() {
     'IN_POOL',
     'NEEDS_VERIFY',
     ts,
-    JSON.stringify({ created_by:'pool_replenish', client_token: clientToken, used_bundle_id: usedBundle || null, used_bundle_price_cny: usedPrice })
+    JSON.stringify({ created_by:'pool_replenish', client_token: clientToken, used_bundle_id: usedBundle || null, used_bundle_price_cny: usedPrice, init_state: 'INIT_PENDING', init_state_updated_at: ts })
   );
 
   db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
