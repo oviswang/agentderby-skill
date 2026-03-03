@@ -4008,12 +4008,24 @@ app.post('/api/stripe/webhook', async (req, res) => {
                   if (!Number.isFinite(n) || n <= 0) return null;
                   return new Date(n * 1000).toISOString();
                 };
+
+                // Some Stripe responses (observed) may omit current_period_end/start even when active.
+                // Fallback: derive from latest_invoice.lines[0].period.
+                let cpe = sj.current_period_end;
+                if (!cpe) {
+                  try {
+                    const lines = sj?.latest_invoice?.lines?.data || [];
+                    const per = lines?.[0]?.period || null;
+                    if (per?.end) cpe = per.end;
+                  } catch {}
+                }
+
                 const ts2 = nowIso();
                 db.prepare(
                   `UPDATE subscriptions SET status=?, current_period_end=?, cancel_at=?, canceled_at=?, ended_at=?, cancel_at_period_end=?, updated_at=? WHERE provider_sub_id=? AND provider='stripe'`
                 ).run(
                   String(sj.status || 'active'),
-                  unixToIso(sj.current_period_end),
+                  unixToIso(cpe),
                   unixToIso(sj.cancel_at),
                   unixToIso(sj.canceled_at),
                   unixToIso(sj.ended_at),
