@@ -1498,6 +1498,15 @@ async function runPoolInitJob(job){
           const meta2 = mergeMeta(cur2?.meta_json, { init_state: 'INIT_DONE', init_state_updated_at: ts });
           db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta2, job.instance_id);
         } catch {}
+        // Refresh last_verify_evidence even when already READY (otherwise evidence can lag behind config changes).
+        try {
+          const r = poolSsh(inst, 'sudo cat /opt/bothook/evidence/postboot_verify.json 2>/dev/null || echo missing', { timeoutMs: 12000, tty:false, retries:0 });
+          const txt = String(r.stdout||'').trim();
+          if (txt && txt !== 'missing') {
+            db.prepare('UPDATE instances SET last_verify_evidence=? WHERE instance_id=?').run(txt.slice(0, 2000), job.instance_id);
+          }
+        } catch {}
+
         try { job._db.prepare('UPDATE pool_init_jobs SET status=?, ended_at=? WHERE job_id=?').run('DONE', ts, job.job_id); } catch {}
         pushJobLog(job, 'done: READY');
         return;
