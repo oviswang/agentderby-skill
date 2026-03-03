@@ -609,6 +609,24 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
     throw e;
   }
 
+  // Best-effort: cache SPECS into instances.meta_json so /api/p/state can show cpu/memory without live SSH.
+  try {
+    const sr = poolSsh(chosen, 'sudo cat /opt/bothook/SPECS.json 2>/dev/null || echo missing', { timeoutMs: 6000, tty:false, retries: 0 });
+    const stxt = String(sr.stdout||'').trim();
+    if (stxt && stxt !== 'missing') {
+      const specs = JSON.parse(stxt);
+      const curX = getInstanceById(db, chosen.instance_id);
+      const meta = mergeMeta(curX?.meta_json, {
+        cpu: specs?.cpu ?? null,
+        memory: specs?.ram_gb ?? null,
+        disk_gb: specs?.disk_gb ?? null,
+        openclaw_version: specs?.openclaw_version ?? null,
+        specs_captured_at: specs?.captured_at ?? null,
+      });
+      db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta, chosen.instance_id);
+    }
+  } catch {}
+
   return db.prepare('SELECT * FROM deliveries WHERE delivery_id = ?').get(delivery_id);
 }
 
