@@ -154,6 +154,29 @@ async function main() {
   const sinceIso = new Date(Date.now() - 24*60*60_000).toISOString();
   const paymentSuccess24h = sqlScalar(dbPath, `SELECT COUNT(*) FROM events WHERE ts >= '${sinceIso}' AND event_type='PAYMENT_SUCCESS';`);
 
+  // Safety gate (owner): only run mutating keyword actions when the campaign has low/no volume.
+  // This prevents daily optimizer from constantly churning keywords once the campaign starts working.
+  const volQ = `
+SELECT segments.date, metrics.impressions, metrics.clicks, metrics.cost_micros
+FROM campaign
+WHERE campaign.id = ${campaignId}
+  AND segments.date DURING LAST_1_DAY
+LIMIT 50
+`;
+  let vol = { impressions: 0, clicks: 0, cost_micros: 0 };
+  try {
+    const stream = await googleAdsSearchStream({ developerToken, accessToken, customerId, loginCustomerId: mcc, query: volQ });
+    const rows = gaqlRows(stream);
+    for (const r of rows) {
+      vol.impressions += Number(r.metrics?.impressions || 0);
+      vol.clicks += Number(r.metrics?.clicks || 0);
+      vol.cost_micros += Number(r.metrics?.costMicros || 0);
+    }
+  } catch { /* ignore */ }
+
+  const MAX_IMP_TO_MUTATE = Number(policy.optimize?.safety?.maxImpressionsLast1DayToMutate ?? 50);
+  const mutateAllowed = vol.impressions <= MAX_IMP_TO_MUTATE;
+
   // ------------- (2) Keyword triage: pause rarely-served keywords -------------
   const rareQ = `
 SELECT ad_group_criterion.resource_name, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
@@ -252,19 +275,23 @@ LIMIT 50
 
   // Apply if requested
   let applied = { paused_keywords: 0, added_keywords: 0, rsa_replaced: false, rsa_result: null, kw_pause_result: null, kw_add_result: null };
-  let planned = { pause_keywords: pauseOps.length, add_keywords: addOps.length, rsa_ops: rsaOps.length, need_rsa: needRsa, rsa_plan: rsaPlan };
+  let planned = { pause_keywords: pauseOps.length, add_keywords: addOps.length, rsa_ops: rsaOps.length, need_rsa: needRsa, rsa_plan: rsaPlan, mutate_allowed: mutateAllowed, impressions_last_1_day: vol.impressions, max_impressions_to_mutate: MAX_IMP_TO_MUTATE };
 
   if (args.mode === 'apply') {
-    if (pauseOps.length) {
-      const r = await googleAdsMutateAdGroupCriteria({ developerToken, accessToken, customerId, loginCustomerId: mcc, operations: pauseOps, partialFailure: true });
-      applied.paused_keywords = pauseOps.length;
-      applied.kw_pause_result = r;
+    if (mutateAllowed) {
+      if (pauseOps.length) {
+        const r = await googleAdsMutateAdGroupCriteria({ developerToken, accessToken, customerId, loginCustomerId: mcc, operations: pauseOps, partialFailure: true });
+        applied.paused_keywords = pauseOps.length;
+        applied.kw_pause_result = r;
+      }
+      if (addOps.length) {
+        const r = await googleAdsMutateAdGroupCriteria({ developerToken, accessToken, customerId, loginCustomerId: mcc, operations: addOps, partialFailure: true });
+        applied.added_keywords = addOps.length;
+        applied.kw_add_result = r;
+      }
     }
-    if (addOps.length) {
-      const r = await googleAdsMutateAdGroupCriteria({ developerToken, accessToken, customerId, loginCustomerId: mcc, operations: addOps, partialFailure: true });
-      applied.added_keywords = addOps.length;
-      applied.kw_add_result = r;
-    }
+
+    // RSA replacement is safe and low-frequency; allow regardless of volume gate.
     if (rsaOps.length) {
       const r = await googleAdsMutateAdGroupAds({ developerToken, accessToken, customerId, loginCustomerId: mcc, operations: rsaOps });
       applied.rsa_replaced = true;
@@ -301,7 +328,8 @@ LIMIT 50
     customer: { mcc, customerId },
     facts_24h: { payment_success_events: paymentSuccess24h },
     rsa: { enabled_count: enabledRsa.length, enabled_counts: counts, need_rsa: needRsa, plan: planned.rsa_plan },
-    keywords: { rarely_served_enabled: rare.length, pause_planned: pauseOps.length, add_planned: addOps.length },
+    volume_last_1_day: vol,
+    keywords: { rarely_served_enabled: rare.length, pause_planned: pauseOps.length, add_planned: addOps.length, mutate_allowed: mutateAllowed, max_impressions_to_mutate: MAX_IMP_TO_MUTATE },
     search_terms_top_50: terms,
     actions: { planned, applied }
   };
