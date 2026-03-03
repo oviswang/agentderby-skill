@@ -210,12 +210,25 @@ export default {
           const wr = await getJson(`${controlPlane}/api/wa/welcome_unpaid_text?uuid=${encodeURIComponent(uuid)}`, 15000);
           const text = String(wr?.json?.text || '').trim();
           if (wr.ok && text) {
+            // Cache last known welcome text for offline fallback.
+            st.autoreply.cachedWelcomeUnpaidText = text;
+            st.autoreply.cachedWelcomeUnpaidAt = nowIso();
             await sendWhatsApp(api, self!, text);
             st.autoreply.lastWelcomeAt = nowIso();
             saveState(st);
             return;
           }
-          // If control-plane is temporarily unavailable, do not crash; fall through.
+
+          // Fallback: if control-plane is temporarily unavailable, reuse cached welcome text.
+          const cached = String(st.autoreply.cachedWelcomeUnpaidText || '').trim();
+          if (cached) {
+            await sendWhatsApp(api, self!, cached);
+            st.autoreply.lastWelcomeAt = nowIso();
+            saveState(st);
+            return;
+          }
+
+          // No cached copy available; fall through.
         }
 
         // 3) Paid: if key not verified -> repeat guide_key_paid for ANY non-verified-key message.
@@ -228,7 +241,15 @@ export default {
             const pr = await getJson(`${controlPlane}/api/i18n/whatsapp-prompts?lang=${encodeURIComponent(lang)}`, 12000);
             const guideTpl = String(pr?.json?.prompts?.guide_key_paid || '').trim();
             if (pr.ok && guideTpl) {
-              const msg = renderTplSimple(guideTpl, { uuid });
+              // Cache last known guide template for offline fallback.
+              st.autoreply.cachedGuideKeyPaidTpl = guideTpl;
+              st.autoreply.cachedGuideKeyPaidLang = lang;
+              st.autoreply.cachedGuideKeyPaidAt = nowIso();
+            }
+
+            const tpl = String(guideTpl || st.autoreply.cachedGuideKeyPaidTpl || '').trim();
+            if (tpl) {
+              const msg = renderTplSimple(tpl, { uuid });
               if (msg) {
                 await sendWhatsApp(api, self!, msg);
                 st.autoreply.lastGuideAt = nowIso();
