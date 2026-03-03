@@ -45,8 +45,18 @@ const EXPECT_RENEW_FLAG = process.env.BOTHOOK_POOL_EXPECT_RENEW_FLAG || 'NOTIFY_
 const MAX_BATCH = parseInt(process.env.BOTHOOK_RECONCILE_BATCH || '20', 10);
 
 function sh(cmd) {
-  const out = execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', shell: '/bin/bash' });
-  return out;
+  try {
+    return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', shell: '/bin/bash' });
+  } catch (e) {
+    const stderr = String(e?.stderr || '');
+    const stdout = String(e?.stdout || '');
+    const msg = String(e?.message || e);
+    const err = new Error([msg, stdout, stderr].filter(Boolean).join('\n'));
+    err._stderr = stderr;
+    err._stdout = stdout;
+    err._code = e?.status;
+    throw err;
+  }
 }
 
 function tccli(cmd) {
@@ -55,8 +65,27 @@ function tccli(cmd) {
   return sh(full);
 }
 
-function parseJson(s) {
-  try { return s ? JSON.parse(s) : {}; } catch { return {}; }
+function parseJsonStrict(s, { op, region, instance_id } = {}) {
+  try {
+    return s ? JSON.parse(s) : {};
+  } catch (e) {
+    const head = String(s || '').slice(0, 600);
+    const err = new Error(`tccli_non_json_output op=${op||'unknown'} region=${region||''} instance=${instance_id||''} head=${JSON.stringify(head)}`);
+    err._stdout = s;
+    throw err;
+  }
+}
+
+function classifyTccliError(e) {
+  const t = String(e?._stderr || e?.message || e || '');
+  if (t.includes('secretId is invalid') || t.includes('AuthFailure')) return { code: 'auth_invalid', retryable: false };
+  if (t.includes('RequestLimitExceeded') || t.includes('LimitExceeded')) return { code: 'rate_limited', retryable: true };
+  if (t.includes('InternalError') || t.includes('ServiceUnavailable')) return { code: 'cloud_unavailable', retryable: true };
+  if (t.includes('instance_not_found') || t.includes('InvalidInstanceId')) return { code: 'instance_not_found', retryable: false };
+  if (t.includes('LatestOperationUnfinished')) return { code: 'latest_op_unfinished', retryable: true };
+  // Sometimes tccli prints usage help text when args/env are wrong.
+  if (t.includes('usage: tccli')) return { code: 'tccli_usage', retryable: false };
+  return { code: 'unknown', retryable: false };
 }
 
 function mergeMeta(oldMetaStr, patch) {
@@ -67,7 +96,7 @@ function mergeMeta(oldMetaStr, patch) {
 function describe(region, instance_id) {
   const reg = String(region || '').trim() || DEFAULT_REGION;
   const text = tccli(`tccli lighthouse DescribeInstances --region ${reg} --InstanceIds '["${instance_id}"]' --output json`);
-  const j = JSON.parse(text);
+  const j = parseJsonStrict(text, { op: 'DescribeInstances', region: reg, instance_id });
   const it = (j.InstanceSet || [])[0];
   if (!it) throw new Error('instance_not_found');
   return it;
@@ -273,8 +302,18 @@ function main() {
       refreshed++;
     } catch (e) {
       fail++;
+      const cls = classifyTccliError(e);
+      const payload = {
+        error_code: cls.code,
+        retryable: cls.retryable,
+        instance_id,
+        region,
+        message: String(e?.message || e),
+        stderr_head: String(e?._stderr || '').slice(0, 800),
+        stdout_head: String(e?._stdout || '').slice(0, 800)
+      };
       db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-        .run(crypto.randomUUID(), ts, 'instance', instance_id, 'CLOUD_RECONCILE_FAIL', JSON.stringify({ error: String(e?.message || e) }));
+        .run(crypto.randomUUID(), ts, 'instance', instance_id, 'CLOUD_RECONCILE_FAIL', JSON.stringify(payload));
     }
   }
 
