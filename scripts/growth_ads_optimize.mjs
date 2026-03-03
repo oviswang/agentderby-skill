@@ -213,6 +213,72 @@ LIMIT 500
     }
   }));
 
+  // ------------- (3) Paid-based淘汰机制 (keyword-level) -------------
+  // Only pause keywords when we have enough click volume, and they produced 0 paid conversions.
+  const MIN_CLICKS_TO_EVAL = Number(policy.optimize?.safety?.minClicks14dToEvaluatePaid ?? 50);
+  const MAX_PAUSE_PAID_PER_RUN = Number(policy.optimize?.safety?.maxPausePaidLosersPerRun ?? 20);
+  const paidQ = `
+SELECT ad_group_criterion.resource_name,
+       ad_group_criterion.keyword.text,
+       ad_group_criterion.keyword.match_type,
+       metrics.clicks,
+       metrics.cost_micros,
+       metrics.conversions
+FROM keyword_view
+WHERE campaign.id = ${campaignId}
+  AND ad_group.id = ${adGroupId}
+  AND segments.date DURING LAST_14_DAYS
+LIMIT 1000
+`;
+
+  let paidRows = [];
+  try {
+    const stream = await googleAdsSearchStream({ developerToken, accessToken, customerId, loginCustomerId: mcc, query: paidQ });
+    paidRows = gaqlRows(stream).map(r => ({
+      rn: r.adGroupCriterion?.resourceName,
+      text: r.adGroupCriterion?.keyword?.text,
+      matchType: r.adGroupCriterion?.keyword?.matchType,
+      clicks: Number(r.metrics?.clicks || 0),
+      cost_micros: Number(r.metrics?.costMicros || 0),
+      conversions: Number(r.metrics?.conversions || 0)
+    })).filter(x => x.rn && x.text);
+  } catch { paidRows = []; }
+
+  // Aggregate by criterion resource_name across dates.
+  const byRn = new Map();
+  for (const r of paidRows) {
+    const k = String(r.rn);
+    const cur = byRn.get(k) || { resourceName: k, text: r.text, matchType: r.matchType, clicks: 0, cost_micros: 0, conversions: 0 };
+    cur.clicks += r.clicks;
+    cur.cost_micros += r.cost_micros;
+    cur.conversions += r.conversions;
+    byRn.set(k, cur);
+  }
+  const paidAgg = [...byRn.values()];
+
+  // Only consider non-negative keywords and those currently ENABLED.
+  // We don't include status in keyword_view query; fetch status map for safety.
+  const statusQ = `
+SELECT ad_group_criterion.resource_name, ad_group_criterion.status, ad_group_criterion.negative
+FROM ad_group_criterion
+WHERE ad_group.id=${adGroupId} AND ad_group_criterion.type='KEYWORD'
+LIMIT 500
+`;
+  let statusRows = [];
+  try {
+    const stream = await googleAdsSearchStream({ developerToken, accessToken, customerId, loginCustomerId: mcc, query: statusQ });
+    statusRows = gaqlRows(stream).map(r => r.adGroupCriterion).filter(Boolean);
+  } catch { statusRows = []; }
+  const statusMap = new Map(statusRows.map(r => [String(r.resourceName), { status: r.status, negative: Boolean(r.negative) }]));
+
+  const paidLosers = paidAgg
+    .filter(x => (statusMap.get(x.resourceName)?.status === 'ENABLED') && !(statusMap.get(x.resourceName)?.negative))
+    .filter(x => x.clicks >= MIN_CLICKS_TO_EVAL && x.conversions <= 0)
+    .sort((a,b) => (b.cost_micros - a.cost_micros) || (b.clicks - a.clicks))
+    .slice(0, MAX_PAUSE_PAID_PER_RUN);
+
+  const paidPauseOps = paidLosers.map(k => ({ update: { resourceName: k.resourceName, status: 'PAUSED' }, updateMask: 'status' }));
+
   // ------------- (1) RSA assets: ensure enough headlines/descriptions -------------
   const rsaQ = `
 SELECT ad_group_ad.resource_name, ad_group_ad.status,
@@ -274,10 +340,29 @@ LIMIT 50
   }
 
   // Apply if requested
-  let applied = { paused_keywords: 0, added_keywords: 0, rsa_replaced: false, rsa_result: null, kw_pause_result: null, kw_add_result: null };
-  let planned = { pause_keywords: pauseOps.length, add_keywords: addOps.length, rsa_ops: rsaOps.length, need_rsa: needRsa, rsa_plan: rsaPlan, mutate_allowed: mutateAllowed, impressions_last_1_day: vol.impressions, max_impressions_to_mutate: MAX_IMP_TO_MUTATE };
+  let applied = { paused_keywords: 0, added_keywords: 0, rsa_replaced: false, rsa_result: null, kw_pause_result: null, kw_add_result: null, paid_losers_paused: 0, paid_pause_result: null };
+  let planned = {
+    pause_keywords: pauseOps.length,
+    add_keywords: addOps.length,
+    rsa_ops: rsaOps.length,
+    need_rsa: needRsa,
+    rsa_plan: rsaPlan,
+    mutate_allowed: mutateAllowed,
+    impressions_last_1_day: vol.impressions,
+    max_impressions_to_mutate: MAX_IMP_TO_MUTATE,
+    paid_eval_min_clicks_14d: MIN_CLICKS_TO_EVAL,
+    paid_losers_found: paidLosers.length,
+    paid_pause_planned: paidPauseOps.length
+  };
 
   if (args.mode === 'apply') {
+    // Paid-based淘汰: always allowed (it's the point of optimization), but protected by MIN_CLICKS_TO_EVAL.
+    if (paidPauseOps.length) {
+      const r = await googleAdsMutateAdGroupCriteria({ developerToken, accessToken, customerId, loginCustomerId: mcc, operations: paidPauseOps, partialFailure: true });
+      applied.paid_losers_paused = paidPauseOps.length;
+      applied.paid_pause_result = r;
+    }
+
     if (mutateAllowed) {
       if (pauseOps.length) {
         const r = await googleAdsMutateAdGroupCriteria({ developerToken, accessToken, customerId, loginCustomerId: mcc, operations: pauseOps, partialFailure: true });
@@ -330,6 +415,7 @@ LIMIT 50
     rsa: { enabled_count: enabledRsa.length, enabled_counts: counts, need_rsa: needRsa, plan: planned.rsa_plan },
     volume_last_1_day: vol,
     keywords: { rarely_served_enabled: rare.length, pause_planned: pauseOps.length, add_planned: addOps.length, mutate_allowed: mutateAllowed, max_impressions_to_mutate: MAX_IMP_TO_MUTATE },
+    paid_elimination_14d: { min_clicks: MIN_CLICKS_TO_EVAL, losers_found: paidLosers.length, pause_planned: paidPauseOps.length, losers_sample: paidLosers.slice(0, 5) },
     search_terms_top_50: terms,
     actions: { planned, applied }
   };
