@@ -1978,6 +1978,40 @@ app.post('/api/ops/pool/cat-memorysearch', (req, res) => {
   }
 });
 
+app.post('/api/ops/instance/apply-memorysearch', (req, res) => {
+  try {
+    const instance_id = String(req.body?.instance_id || '').trim();
+    const confirm = String(req.body?.confirm || '').trim();
+    if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
+    if (instance_id === 'lhins-npsqfxvn') return send(res, 403, { ok:false, error:'forbidden_master_host' });
+    if (confirm !== 'APPLY_MEMORYSEARCH') return send(res, 400, { ok:false, error:'confirm_required', hint:"set confirm='APPLY_MEMORYSEARCH'" });
+
+    const { db } = openDb();
+    const inst = getInstanceById(db, instance_id);
+    if (!inst?.public_ip) return send(res, 404, { ok:false, error:'instance_not_found_or_missing_ip' });
+
+    // Safety: patch only OpenClaw config; do not touch channels/models/gateway.
+    const remote = `set -euo pipefail; `
+      + `mkdir -p /home/ubuntu/.openclaw/memory; `
+      + `chmod 700 /home/ubuntu/.openclaw/memory || true; `
+      + `curl -fsSL https://p.bothook.me/artifacts/latest/scripts/patch_openclaw_enable_memory_search_openai.sh | sudo bash >/dev/null 2>&1; `
+      + `sudo systemctl restart openclaw-gateway.service >/dev/null 2>&1 || true; `
+      + `python3 - <<'PY'\n`
+      + `import json\n`
+      + `p='/home/ubuntu/.openclaw/openclaw.json'\n`
+      + `j=json.load(open(p))\n`
+      + `ms=((j.get('agents') or {}).get('defaults') or {}).get('memorySearch')\n`
+      + `print(json.dumps(ms,ensure_ascii=False))\n`
+      + `PY\n`;
+
+    const rr = poolSsh(inst, remote, { timeoutMs: 120000, tty:false, retries: 1 });
+    const out = ((rr.stdout || '') + (rr.stderr || '')).trim();
+    return send(res, 200, { ok:true, instance_id, ip: inst.public_ip, code: rr.code, memorySearch: out.slice(0, 2000) });
+  } catch {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 app.post('/api/ops/pool/clear-auth', (req, res) => {
   try {
     const instance_id = String(req.body?.instance_id || '').trim();
