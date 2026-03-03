@@ -106,14 +106,67 @@ function describe(region, instance_id) {
   return it;
 }
 
+function resolvePoolKeyIdForRegion(targetRegion) {
+  const region = String(targetRegion || '').trim() || DEFAULT_REGION;
+  const desiredKeyId = String(POOL_KEY_ID || '').trim();
+  const sourceRegion = String(process.env.BOTHOOK_POOL_KEY_SOURCE_REGION || DEFAULT_REGION).trim() || DEFAULT_REGION;
+  const cachePath = process.env.BOTHOOK_POOL_KEY_REGION_CACHE_PATH || '/tmp/bothook_pool_key_by_region.json';
+
+  if (!desiredKeyId) throw new Error('pool_key_id_missing');
+  if (region === sourceRegion) return desiredKeyId;
+
+  // Cache lookup.
+  try {
+    const j = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    const hit = j?.[region];
+    if (hit) return String(hit);
+  } catch {}
+
+  // Describe public key in source region, then import into target region.
+  const txt = tccli(`tccli lighthouse DescribeKeyPairs --region ${sourceRegion} --KeyIds '["${desiredKeyId}"]' --output json`);
+  const dj = parseJsonStrict(txt, { op: 'DescribeKeyPairs', region: sourceRegion, instance_id: 'n/a' });
+  const kp = (dj.KeyPairSet || [])[0] || null;
+  const pub = String(kp?.PublicKey || '').trim();
+  const name = String(kp?.KeyName || 'bothook_pool_key').trim() || 'bothook_pool_key';
+  if (!pub) throw new Error('pool_key_public_key_missing');
+
+  const impTxt = tccli(`tccli lighthouse ImportKeyPair --region ${region} --KeyName '${name}' --PublicKey '${pub.replace(/'/g, "'\\''")}' --output json`);
+  const ij = parseJsonStrict(impTxt, { op: 'ImportKeyPair', region, instance_id: 'n/a' });
+  const newKeyId = String(ij?.KeyId || ij?.KeyPairId || '').trim();
+  if (!newKeyId) throw new Error('pool_key_import_failed');
+
+  // Persist cache best-effort.
+  try {
+    let j = {};
+    try { j = JSON.parse(fs.readFileSync(cachePath, 'utf8')); } catch { j = {}; }
+    j[region] = newKeyId;
+    fs.writeFileSync(cachePath, JSON.stringify(j, null, 2));
+  } catch {}
+
+  return newKeyId;
+}
+
 function associateKey(region, instance_id) {
   // Allow duplicate binds as ok.
   try {
     const reg = String(region || '').trim() || DEFAULT_REGION;
-    tccli(`tccli lighthouse AssociateInstancesKeyPairs --region ${reg} --InstanceIds '["${instance_id}"]' --KeyIds '["${POOL_KEY_ID}"]' --output json`);
-    return { ok: true };
+    let keyId = resolvePoolKeyIdForRegion(reg);
+
+    try {
+      tccli(`tccli lighthouse AssociateInstancesKeyPairs --region ${reg} --InstanceIds '["${instance_id}"]' --KeyIds '["${keyId}"]' --output json`);
+      return { ok: true, keyId };
+    } catch (e1) {
+      const msg1 = String(e1?._stderr || e1?.stderr || e1?.message || e1);
+      // If key not found in region (cache stale), re-resolve (import) and retry once.
+      if (msg1.includes('KeyIdNotFound') || msg1.includes('ResourceNotFound.KeyIdNotFound')) {
+        keyId = resolvePoolKeyIdForRegion(reg);
+        tccli(`tccli lighthouse AssociateInstancesKeyPairs --region ${reg} --InstanceIds '["${instance_id}"]' --KeyIds '["${keyId}"]' --output json`);
+        return { ok: true, keyId, retried: true };
+      }
+      throw e1;
+    }
   } catch (e) {
-    const msg = String(e?.stderr || e?.message || e);
+    const msg = String(e?._stderr || e?.stderr || e?.message || e);
     if (msg.includes('KeyPairBindDuplicate')) return { ok: true, duplicate: true };
     if (msg.includes('LatestOperationUnfinished')) return { ok: false, retryable: true };
     return { ok: false, error: 'associate_failed', msg };
