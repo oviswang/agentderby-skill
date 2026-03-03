@@ -20,29 +20,28 @@ fi
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 cp -a "${OPENCLAW_JSON}" "${OPENCLAW_JSON}.bak.${TS}"
 
-python3 - <<PY
-import json
-p = ${OPENCLAW_JSON!r}
-with open(p,'r') as f:
+export OPENCLAW_JSON MEM_DB
+python3 - <<'PY'
+import json, os
+p = os.environ.get('OPENCLAW_JSON')
+db = os.environ.get('MEM_DB')
+if not p or not db:
+  raise SystemExit(0)
+with open(p,'r',encoding='utf-8') as f:
   cfg = json.load(f)
-
 agents = cfg.setdefault('agents', {})
 defs = agents.setdefault('defaults', {})
-
-ms = {
+defs['memorySearch'] = {
   'enabled': True,
   'sources': ['memory'],
   'provider': 'openai',
   'model': 'text-embedding-3-small',
-  'store': { 'driver': 'sqlite', 'path': ${MEM_DB!r} },
+  'store': { 'driver': 'sqlite', 'path': db },
   'chunking': { 'tokens': 800, 'overlap': 100 },
   'query': { 'maxResults': 8, 'minScore': 0.35 },
   'sync': { 'onSearch': True, 'watch': False }
 }
-
-defs['memorySearch'] = ms
-
-with open(p,'w') as f:
+with open(p,'w',encoding='utf-8') as f:
   json.dump(cfg, f, indent=2, ensure_ascii=False)
   f.write('\n')
 PY
