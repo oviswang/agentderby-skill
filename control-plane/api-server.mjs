@@ -3847,12 +3847,30 @@ app.post('/api/stripe/webhook', async (req, res) => {
           uploadPaidConversionBestEffort({ uuid, delivery_id, paid_at_iso: ts, attr: attrSnap })
             .then((r) => {
               try {
+                const ok = Boolean(r?.ok);
+                const reason = r?.reason || null;
                 db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
-                  crypto.randomUUID(), nowIso(), 'delivery', delivery_id, 'ADS_OFFLINE_CONVERSION_UPLOAD', JSON.stringify({ ok: r?.ok, status: r?.status || null, reason: r?.reason || null })
+                  crypto.randomUUID(), nowIso(), 'delivery', delivery_id, 'ADS_OFFLINE_CONVERSION_UPLOAD',
+                  JSON.stringify({ ok, status: r?.status || null, reason, has_gclid: Boolean(attrSnap?.click?.gclid || attrSnap?.gclid || null) })
                 );
+
+                // Self-check alert event (for Telegram reporter / dashboards): if paid occurred but upload failed or gclid missing.
+                if (!ok) {
+                  db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                    crypto.randomUUID(), nowIso(), 'delivery', delivery_id, 'ADS_OFFLINE_CONVERSION_UPLOAD_WARN',
+                    JSON.stringify({ uuid, delivery_id, ok:false, reason: reason || 'upload_failed', has_gclid: Boolean(attrSnap?.click?.gclid || attrSnap?.gclid || null) })
+                  );
+                }
               } catch {}
             })
-            .catch(() => {});
+            .catch(() => {
+              try {
+                db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                  crypto.randomUUID(), nowIso(), 'delivery', delivery_id, 'ADS_OFFLINE_CONVERSION_UPLOAD_WARN',
+                  JSON.stringify({ uuid, delivery_id, ok:false, reason: 'exception', has_gclid: Boolean(attrSnap?.click?.gclid || attrSnap?.gclid || null) })
+                );
+              } catch {}
+            });
         }, 0);
         // If key already verified + linked, cutover now.
         try { tryCutoverDelivered(db, uuid, { reason: 'payment_confirmed' }); } catch {}
