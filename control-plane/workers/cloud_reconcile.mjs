@@ -11,6 +11,7 @@
  */
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { openDb, nowIso } from '../lib/db.mjs';
 
