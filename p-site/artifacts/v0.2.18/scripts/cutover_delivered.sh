@@ -129,16 +129,23 @@ main(){
 
   # 5) Post-cutover readiness wait + verification (best-effort, non-fatal)
   # Goal: avoid "config written but process not yet synced" confusion after updates/restarts.
+  # IMPORTANT: do not block for a long time (SSH cutover is time-bounded).
   if command -v openclaw >/dev/null 2>&1; then
-    for i in $(seq 1 18); do
-      if openclaw channels status --probe >/tmp/bothook_cutover_probe.txt 2>&1; then
-        if grep -qi "whatsapp.*connected" /tmp/bothook_cutover_probe.txt; then
-          log "whatsapp connected (probe ok)"
-          break
-        fi
+    if openclaw channels status --probe >/tmp/bothook_cutover_probe.txt 2>&1; then
+      if grep -qi "not linked" /tmp/bothook_cutover_probe.txt; then
+        log "whatsapp not linked; skip connected-wait"
+      else
+        # Wait up to ~30s for connected (best-effort)
+        for i in $(seq 1 6); do
+          if grep -qi "whatsapp.*connected" /tmp/bothook_cutover_probe.txt; then
+            log "whatsapp connected (probe ok)"
+            break
+          fi
+          sleep 5
+          openclaw channels status --probe >/tmp/bothook_cutover_probe.txt 2>&1 || true
+        done
       fi
-      sleep 5
-    done
+    fi
 
     # Capture probe output for evidence
     {

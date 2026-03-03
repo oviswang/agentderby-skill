@@ -871,7 +871,8 @@ function tryCutoverDelivered(db, uuid, { reason } = {}) {
   const remote = `set -euo pipefail; sudo -n true; `
     + `BOTHOOK_UUID='${uuid}' BOTHOOK_CONTROLLER_E164='${controller || ''}' sudo -E /opt/bothook/bin/cutover_delivered.sh`;
 
-  const r = poolSsh(inst, remote, { timeoutMs: 30000, tty: false, retries: 1 });
+  // Cutover can include a gateway restart + short probes; allow a longer window.
+  const r = poolSsh(inst, remote, { timeoutMs: 120000, tty: false, retries: 1 });
 
   // Mark delivered if remote ran (best-effort). If remote fails, keep status for retry.
   if((r.code ?? 1) === 0) {
