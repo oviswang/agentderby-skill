@@ -541,10 +541,17 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
     throw Object.assign(new Error('No provision-ready instances available'), { statusCode: 503 });
   }
 
+  // Extra guard: do not allocate any instance that already has other active/delivered deliveries.
+  // This prevents allocating a delivered user's machine to a new UUID (QR/start will fail and is a security issue).
+  const conflictFree = provisionReady.filter((c) => !hasOtherActiveDeliveriesOnInstance(db, c.instance_id, uuid).length);
+  if (!conflictFree.length) {
+    throw Object.assign(new Error('No conflict-free instances available. Please retry in a few minutes.'), { statusCode: 503 });
+  }
+
   // Pick the first instance that is WhatsApp-clean (NOT linked).
   // NOTE: we run a live probe here to prevent "connected != this UUID" false positives.
   let chosen = null;
-  for (const c of provisionReady) {
+  for (const c of conflictFree) {
     const inst = getInstanceById(db, c.instance_id);
     const probe = probeInstanceWhatsappClean(db, inst);
     if (probe.clean) { chosen = inst; break; }
