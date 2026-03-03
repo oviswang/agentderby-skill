@@ -1506,11 +1506,29 @@ async function runPoolInitJob(job){
           db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta2, job.instance_id);
         } catch {}
         // Refresh last_verify_evidence even when already READY (otherwise evidence can lag behind config changes).
+        // Also: pull /opt/bothook/SPECS.json into instances.meta_json so /api/p/state can show cpu/memory.
         try {
           const r = poolSsh(inst, 'sudo cat /opt/bothook/evidence/postboot_verify.json 2>/dev/null || echo missing', { timeoutMs: 12000, tty:false, retries:0 });
           const txt = String(r.stdout||'').trim();
           if (txt && txt !== 'missing') {
             db.prepare('UPDATE instances SET last_verify_evidence=? WHERE instance_id=?').run(txt.slice(0, 2000), job.instance_id);
+          }
+        } catch {}
+
+        try {
+          const sr = poolSsh(inst, 'sudo cat /opt/bothook/SPECS.json 2>/dev/null || echo missing', { timeoutMs: 8000, tty:false, retries:0 });
+          const stxt = String(sr.stdout||'').trim();
+          if (stxt && stxt !== 'missing') {
+            const specs = JSON.parse(stxt);
+            const curX = getInstanceById(db, job.instance_id);
+            const meta = mergeMeta(curX?.meta_json, {
+              cpu: specs?.cpu ?? null,
+              memory: specs?.ram_gb ?? null,
+              disk_gb: specs?.disk_gb ?? null,
+              openclaw_version: specs?.openclaw_version ?? null,
+              specs_captured_at: specs?.captured_at ?? null,
+            });
+            db.prepare('UPDATE instances SET meta_json=? WHERE instance_id=?').run(meta, job.instance_id);
           }
         } catch {}
 
