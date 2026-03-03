@@ -1978,6 +1978,26 @@ app.post('/api/ops/pool/cat-memorysearch', (req, res) => {
   }
 });
 
+app.post('/api/ops/instance/get-specs', (req, res) => {
+  try {
+    const instance_id = String(req.body?.instance_id || '').trim();
+    const confirm = String(req.body?.confirm || '').trim();
+    if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
+    if (instance_id === 'lhins-npsqfxvn') return send(res, 403, { ok:false, error:'forbidden_master_host' });
+    if (confirm !== 'GET_SPECS') return send(res, 400, { ok:false, error:'confirm_required', hint:"set confirm='GET_SPECS'" });
+
+    const { db } = openDb();
+    const inst = getInstanceById(db, instance_id);
+    if (!inst?.public_ip) return send(res, 404, { ok:false, error:'instance_not_found_or_missing_ip' });
+
+    const rr = poolSsh(inst, 'sudo cat /opt/bothook/SPECS.json 2>/dev/null || echo missing', { timeoutMs: 15000, tty:false, retries: 1 });
+    const txt = String(rr.stdout||'').trim();
+    return send(res, 200, { ok:true, instance_id, ip: inst.public_ip, code: rr.code, specs: txt.slice(0, 4000) });
+  } catch {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 app.post('/api/ops/instance/apply-memorysearch', (req, res) => {
   try {
     const instance_id = String(req.body?.instance_id || '').trim();
