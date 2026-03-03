@@ -65,6 +65,10 @@ function tccli(cmd) {
   return sh(full);
 }
 
+function parseJson(s) {
+  try { return s ? JSON.parse(s) : {}; } catch { return {}; }
+}
+
 function parseJsonStrict(s, { op, region, instance_id } = {}) {
   try {
     return s ? JSON.parse(s) : {};
