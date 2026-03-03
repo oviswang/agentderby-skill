@@ -1880,6 +1880,36 @@ app.get('/api/ops/pool/init/busy', (req, res) => {
 
 // Ops: clear OpenClaw auth on a pool instance (used to ensure smoke-test keys never linger on pool machines).
 // NOTE: This does not touch control-plane delivery_secrets; caller should delete secrets separately if desired.
+app.post('/api/ops/pool/apply-memorysearch', (req, res) => {
+  try {
+    const instance_id = String(req.body?.instance_id || '').trim();
+    if (!instance_id) return send(res, 400, { ok:false, error:'instance_id_required' });
+    if (instance_id === 'lhins-npsqfxvn') return send(res, 403, { ok:false, error:'forbidden_master_host' });
+
+    const { db } = openDb();
+    const inst = getInstanceById(db, instance_id);
+    if (!inst?.public_ip) return send(res, 404, { ok:false, error:'instance_not_found_or_missing_ip' });
+
+    const remote = `set -euo pipefail; `
+      + `sudo bash /opt/bothook/scripts/patch_openclaw_enable_memory_search_openai.sh 2>/dev/null || true; `
+      + `sudo systemctl restart openclaw-gateway.service 2>/dev/null || true; `
+      + `sudo bash /opt/bothook/bin/postboot_verify.sh 2>/dev/null || true; `
+      + `python3 - <<'PY'\n`
+      + `import json\n`
+      + `p='/home/ubuntu/.openclaw/openclaw.json'\n`
+      + `j=json.load(open(p))\n`
+      + `ms=((j.get('agents') or {}).get('defaults') or {}).get('memorySearch')\n`
+      + `print(json.dumps(ms,ensure_ascii=False))\n`
+      + `PY\n`;
+
+    const rr = poolSsh(inst, remote, { timeoutMs: 120000, tty:false, retries: 0 });
+    const out = ((rr.stdout || '') + (rr.stderr || '')).trim();
+    return send(res, 200, { ok:true, instance_id, ip: inst.public_ip, code: rr.code, out: out.slice(0, 4000) });
+  } catch {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 app.post('/api/ops/pool/cat-memorysearch', (req, res) => {
   try {
     const instance_id = String(req.body?.instance_id || '').trim();
