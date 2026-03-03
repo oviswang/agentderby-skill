@@ -3359,6 +3359,18 @@ app.get('/api/pay/confirm', async (req, res) => {
     } catch {}
 
     // Proactively trigger onboarding/cutover messaging immediately after payment.
+    // (0) Write a paid marker onto the user machine for offline autoreply fallback.
+    try {
+      const d2m = getDeliveryByUuid(db, uuid);
+      if (d2m?.instance_id) {
+        const instm = getInstanceById(db, d2m.instance_id);
+        if (instm?.public_ip) {
+          // best-effort; do not block pay confirm
+          poolSsh(instm, `sudo mkdir -p /opt/bothook/evidence && echo ${JSON.stringify(ts)} | sudo tee /opt/bothook/evidence/paid >/dev/null && sudo chmod 644 /opt/bothook/evidence/paid`, { timeoutMs: 8000, tty:false, retries:0 });
+        }
+      }
+    } catch {}
+
     // (1) Kick the status endpoint (best-effort)
     try { await fetch(`http://127.0.0.1:18998/api/wa/status?uuid=${encodeURIComponent(uuid)}`); } catch {}
 

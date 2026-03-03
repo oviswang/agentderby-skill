@@ -203,8 +203,16 @@ export default {
 
         // Fetch delivery status once (paid + lang)
         const dr = await getJson(`${controlPlane}/api/delivery/status?uuid=${encodeURIComponent(uuid)}`, 12000);
-        const paid = Boolean(dr?.json?.paid || dr?.json?.status === 'PAID');
+        let paid = Boolean(dr?.json?.paid || dr?.json?.status === 'PAID');
         const lang = String(dr?.json?.user_lang || '').trim().toLowerCase() || 'en';
+
+        // Offline fallback: if control-plane is down/unreachable, use a local paid marker.
+        // This keeps the state machine self-consistent: after payment, we should show guide not welcome.
+        if (!dr?.ok) {
+          try {
+            if (fs.existsSync('/opt/bothook/evidence/paid')) paid = true;
+          } catch {}
+        }
 
         // 1) Paid + key-looking input: verify FIRST.
         //    - verified: send success message and stop repeating.
