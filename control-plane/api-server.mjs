@@ -3977,6 +3977,55 @@ app.post('/api/stripe/webhook', async (req, res) => {
           crypto.randomUUID(), ts, 'delivery', delivery_id, 'PAYMENT_PAID', JSON.stringify({ uuid, delivery_id, stripe_event_id: eventId, attr: attrSnap })
         );
 
+        // Subscription upsert (needed by /api/p/state to show plan/status/ends_at)
+        // NOTE: checkout.session.completed may arrive before invoice.paid; we still want a row keyed by provider_sub_id.
+        try {
+          const subId = obj?.subscription || null;
+          if (subId) {
+            db.prepare(
+              `INSERT INTO subscriptions(provider_sub_id, provider, user_id, plan, status, current_period_end, cancel_at, canceled_at, ended_at, cancel_at_period_end, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(provider_sub_id) DO UPDATE SET
+                 status=excluded.status,
+                 user_id=excluded.user_id,
+                 plan=excluded.plan,
+                 updated_at=excluded.updated_at`
+            ).run(String(subId), 'stripe', String(uuid), 'standard', 'active', null, null, null, null, 0, ts, ts);
+
+            // Best-effort: refresh period end timestamps from Stripe subscription object.
+            setTimeout(async () => {
+              try {
+                const secret = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '';
+                if (!secret) return;
+                const resp = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(String(subId))}`, {
+                  headers: { authorization: `Bearer ${secret}` }
+                });
+                const sj = await resp.json().catch(()=>null);
+                if (!resp.ok || !sj) return;
+                const unixToIso = (u) => {
+                  if (!u) return null;
+                  const n = Number(u);
+                  if (!Number.isFinite(n) || n <= 0) return null;
+                  return new Date(n * 1000).toISOString();
+                };
+                const ts2 = nowIso();
+                db.prepare(
+                  `UPDATE subscriptions SET status=?, current_period_end=?, cancel_at=?, canceled_at=?, ended_at=?, cancel_at_period_end=?, updated_at=? WHERE provider_sub_id=? AND provider='stripe'`
+                ).run(
+                  String(sj.status || 'active'),
+                  unixToIso(sj.current_period_end),
+                  unixToIso(sj.cancel_at),
+                  unixToIso(sj.canceled_at),
+                  unixToIso(sj.ended_at),
+                  sj.cancel_at_period_end ? 1 : 0,
+                  ts2,
+                  String(subId)
+                );
+              } catch {}
+            }, 0);
+          }
+        } catch {}
+
         // Best-effort: persist gclid snapshot to delivery meta for later audits.
         try {
           const gclid = attrSnap?.click?.gclid || attrSnap?.gclid || null;
