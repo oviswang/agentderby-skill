@@ -12,13 +12,18 @@
  *   - past_due/payment_failed grace (24h since payment_failed_since)
  *   - Stripe API re-check (fail-closed: if Stripe check fails, do NOT terminate)
  * - Process at most 1 instance per run.
+ *
+ * Termination flow (2026-03-04 fix):
+ * - Use the instance's actual region from DB.
+ * - Robust destroy sequence to ensure the instance disappears from cloud list:
+ *   1) Try TerminateInstances
+ *   2) If blocked by instance state, StopInstances → IsolateInstances → TerminateInstances
  */
 
 import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { openDb, nowIso } from '../lib/db.mjs';
 
-const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 const GRACE_MS = 24 * 60 * 60 * 1000;
 const DELAY_MS = parseInt(process.env.BOTHOOK_RECLAIM_EXEC_DELAY_MS || String(30 * 60 * 1000), 10);
 
@@ -26,10 +31,18 @@ function sh(cmd) {
   return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', shell: '/bin/bash' });
 }
 
-function tccli(cmd) {
+function tccliTry(cmd) {
   const envFile = '/home/ubuntu/.openclaw/credentials/tencentcloud_bothook_provisioner.env';
   const full = `set -a; source ${envFile}; set +a; ${cmd}`;
-  return sh(full);
+  try {
+    const out = sh(full);
+    return { ok: true, out: String(out || '') };
+  } catch (e) {
+    const stderr = String(e?.stderr || '');
+    const stdout = String(e?.stdout || '');
+    const msg = String(e?.message || e);
+    return { ok: false, out: [msg, stdout, stderr].filter(Boolean).join('\n') };
+  }
 }
 
 function parseJson(s) {
@@ -75,14 +88,71 @@ function stripeGetSubscription(subId) {
   return j;
 }
 
-function describeInstance(instance_id) {
-  const txt = tccli(`tccli lighthouse DescribeInstances --region ${REGION} --InstanceIds '["${instance_id}"]' --output json`);
-  const j = JSON.parse(txt);
+function describeInstance(instance_id, region) {
+  const rgn = String(region || '').trim();
+  if (!rgn) throw new Error('missing_region');
+  const r = tccliTry(`tccli lighthouse DescribeInstances --region ${rgn} --version 2020-03-24 --InstanceIds '["${instance_id}"]' --output json`);
+  if (!r.ok) throw new Error(`describe_failed:${r.out}`);
+  const j = JSON.parse(r.out);
   return (j.InstanceSet || [])[0] || null;
 }
 
-function terminateInstance(instance_id) {
-  tccli(`tccli lighthouse TerminateInstances --region ${REGION} --cli-unfold-argument --InstanceIds ${instance_id} --output json`);
+function stopInstance(instance_id, region) {
+  const rgn = String(region || '').trim();
+  const r = tccliTry(`tccli lighthouse StopInstances --region ${rgn} --version 2020-03-24 --InstanceIds '["${instance_id}"]' --StopType SOFT_FIRST --output json`);
+  if (!r.ok) throw new Error(`stop_failed:${r.out}`);
+}
+
+function isolateInstance(instance_id, region) {
+  const rgn = String(region || '').trim();
+  const r = tccliTry(`tccli lighthouse IsolateInstances --region ${rgn} --version 2020-03-24 --InstanceIds '["${instance_id}"]' --output json`);
+  if (!r.ok) throw new Error(`isolate_failed:${r.out}`);
+}
+
+function terminateInstance(instance_id, region) {
+  const rgn = String(region || '').trim();
+  // Use array form for stability.
+  const r = tccliTry(`tccli lighthouse TerminateInstances --region ${rgn} --version 2020-03-24 --InstanceIds '["${instance_id}"]' --output json`);
+  return r;
+}
+
+async function sleepMs(ms) {
+  await new Promise(r => setTimeout(r, ms));
+}
+
+async function waitState(instance_id, region, { wantStates = new Set(['SHUTDOWN','STOPPED','ISOLATED']), timeoutMs = 5*60*1000 } = {}) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    let it = null;
+    try { it = describeInstance(instance_id, region); } catch { it = null; }
+    const st = String(it?.InstanceState || '').toUpperCase();
+    if (wantStates.has(st)) return st;
+    await sleepMs(5000);
+  }
+  return null;
+}
+
+async function robustTerminate(instance_id, region) {
+  // 1) Try terminate directly.
+  const t1 = terminateInstance(instance_id, region);
+  if (t1.ok) return { ok: true, mode: 'terminate_direct' };
+
+  const out = String(t1.out || '');
+  // Typical tccli error contains: UnsupportedOperation.InvalidInstanceState
+  if (!out.includes('InvalidInstanceState') && !out.includes('UnsupportedOperation.InvalidInstanceState')) {
+    return { ok: false, mode: 'terminate_direct_failed', detail: out.slice(0, 2000) };
+  }
+
+  // 2) Stop → Isolate → Terminate
+  try { stopInstance(instance_id, region); } catch {}
+  await waitState(instance_id, region, { wantStates: new Set(['STOPPED','SHUTDOWN','ISOLATED']), timeoutMs: 6*60*1000 });
+
+  try { isolateInstance(instance_id, region); } catch {}
+  await waitState(instance_id, region, { wantStates: new Set(['SHUTDOWN','ISOLATED']), timeoutMs: 6*60*1000 });
+
+  const t2 = terminateInstance(instance_id, region);
+  if (t2.ok) return { ok: true, mode: 'stop_isolate_terminate' };
+  return { ok: false, mode: 'stop_isolate_terminate_failed', detail: String(t2.out || '').slice(0, 2000) };
 }
 
 function main() {
@@ -94,6 +164,7 @@ function main() {
   const rows = db.prepare(
     `SELECT
         i.instance_id,
+        i.region,
         i.lifecycle_status,
         i.meta_json as instance_meta,
         d.delivery_id,
@@ -130,7 +201,6 @@ function main() {
     let reason = null;
 
     if (terminal.has(subStatus)) {
-      // Require time expiry too (avoid early cancel before end of period)
       if ((r.current_period_end && isExpiredByTime(r.current_period_end)) || (!r.current_period_end && r.cancel_at && isExpiredByTime(r.cancel_at))) {
         should = true;
         reason = `terminal_${subStatus}_expired`;
@@ -140,7 +210,6 @@ function main() {
     if (!should && graceStates.has(subStatus)) {
       const t0 = meta.payment_failed_since ? Date.parse(String(meta.payment_failed_since)) : NaN;
       if (Number.isFinite(t0) && (Date.now() - t0 >= GRACE_MS)) {
-        // Also require period end reached
         if ((r.current_period_end && isExpiredByTime(r.current_period_end)) || (!r.current_period_end && r.cancel_at && isExpiredByTime(r.cancel_at))) {
           should = true;
           reason = `grace_${subStatus}_expired`;
@@ -149,7 +218,6 @@ function main() {
     }
 
     if (!should) continue;
-
     chosen = { ...r, reason };
     break;
   }
@@ -160,11 +228,12 @@ function main() {
   }
 
   const instance_id = String(chosen.instance_id);
+  const region = String(chosen.region || '').trim();
   const delivery_id = String(chosen.delivery_id);
   const user_id = String(chosen.user_id);
   const subId = String(chosen.provider_sub_id || '').trim();
 
-  tgSend(`[bothook] reclaim_executor: evaluating instance=${instance_id} reason=${chosen.reason}`);
+  tgSend(`[bothook] reclaim_executor: evaluating instance=${instance_id} region=${region} reason=${chosen.reason}`);
 
   // Stripe re-check (fail-closed)
   let stripe = null;
@@ -182,7 +251,6 @@ function main() {
   const stripeStatus = String(stripe?.status || '').toLowerCase();
   const stripeCpeMs = (stripe && stripe.current_period_end) ? (Number(stripe.current_period_end) * 1000) : null;
 
-  // Decide terminate based on Stripe: require NOT active/trialing and require period end reached.
   const okStatuses = new Set(['canceled', 'unpaid', 'incomplete_expired', 'past_due', 'payment_failed']);
   if (!okStatuses.has(stripeStatus) || (stripeCpeMs !== null && Date.now() < stripeCpeMs)) {
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
@@ -192,38 +260,41 @@ function main() {
     return;
   }
 
-  // Cloud terminate
+  // Cloud terminate (robust)
   try {
-    const it = describeInstance(instance_id);
+    if (!region) throw new Error('missing_region');
+
+    let it = null;
+    try { it = describeInstance(instance_id, region); } catch { it = null; }
     if (!it) {
-      // Already gone
       db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
         .run(crypto.randomUUID(), ts, 'instance', instance_id, 'SUBSCRIPTION_RECLAIM_TERMINATED', JSON.stringify({ delivery_id, user_id, provider_sub_id: subId, note: 'instance_missing_cloud' }));
       console.log(JSON.stringify({ ok:true, ts, action:'already_terminated', instance_id }, null, 2));
       return;
     }
 
-    terminateInstance(instance_id);
+    const rr = await robustTerminate(instance_id, region);
+    if (!rr.ok) throw new Error(`terminate_failed:${rr.mode}:${rr.detail || ''}`);
 
     db.exec('BEGIN IMMEDIATE');
     try {
       db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
-        .run('EXPIRED_TERMINATED', ts, mergeMeta(chosen.delivery_meta, { reclaim_terminated_at: ts, reclaim_executor_reason: chosen.reason, provider_sub_id: subId, stripe_status: stripeStatus }), delivery_id);
+        .run('EXPIRED_TERMINATED', ts, mergeMeta(chosen.delivery_meta, { reclaim_terminated_at: ts, reclaim_executor_reason: chosen.reason, provider_sub_id: subId, stripe_status: stripeStatus, terminate_mode: rr.mode }), delivery_id);
       db.prepare('UPDATE instances SET lifecycle_status=?, health_status=?, meta_json=? WHERE instance_id=?')
-        .run('TERMINATING', 'NEEDS_VERIFY', mergeMeta(chosen.instance_meta, { reclaim_terminated_at: ts, reclaim_executor_reason: chosen.reason, provider_sub_id: subId, stripe_status: stripeStatus }), instance_id);
+        .run('TERMINATING', 'NEEDS_VERIFY', mergeMeta(chosen.instance_meta, { reclaim_terminated_at: ts, reclaim_executor_reason: chosen.reason, provider_sub_id: subId, stripe_status: stripeStatus, terminate_mode: rr.mode }), instance_id);
       db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-        .run(crypto.randomUUID(), ts, 'instance', instance_id, 'SUBSCRIPTION_RECLAIM_TERMINATE_REQUESTED', JSON.stringify({ delivery_id, user_id, provider_sub_id: subId, stripe_status: stripeStatus, reason: chosen.reason }));
+        .run(crypto.randomUUID(), ts, 'instance', instance_id, 'SUBSCRIPTION_RECLAIM_TERMINATE_REQUESTED', JSON.stringify({ delivery_id, user_id, provider_sub_id: subId, stripe_status: stripeStatus, reason: chosen.reason, region, terminate_mode: rr.mode }));
       db.exec('COMMIT');
     } catch (e) {
       try { db.exec('ROLLBACK'); } catch {}
       throw e;
     }
 
-    tgSend(`[bothook] reclaim_executor: terminate requested instance=${instance_id} user=${user_id} stripe_status=${stripeStatus}`);
-    console.log(JSON.stringify({ ok:true, ts, action:'terminate_requested', instance_id, delivery_id, user_id, stripe_status: stripeStatus, reason: chosen.reason }, null, 2));
+    tgSend(`[bothook] reclaim_executor: terminate requested instance=${instance_id} region=${region} mode=${rr.mode} user=${user_id} stripe_status=${stripeStatus}`);
+    console.log(JSON.stringify({ ok:true, ts, action:'terminate_requested', instance_id, region, delivery_id, user_id, stripe_status: stripeStatus, reason: chosen.reason, terminate_mode: rr.mode }, null, 2));
   } catch (e) {
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-      .run(crypto.randomUUID(), ts, 'instance', instance_id, 'SUBSCRIPTION_RECLAIM_TERMINATE_FAILED', JSON.stringify({ delivery_id, user_id, provider_sub_id: subId || null, err: String(e?.message||e) }));
+      .run(crypto.randomUUID(), ts, 'instance', instance_id, 'SUBSCRIPTION_RECLAIM_TERMINATE_FAILED', JSON.stringify({ delivery_id, user_id, provider_sub_id: subId || null, region: chosen?.region || null, err: String(e?.message||e) }));
     tgSend(`[bothook][WARN] reclaim_executor: terminate failed instance=${instance_id} err=${String(e?.message||e)}`);
     console.log(JSON.stringify({ ok:false, ts, action:'terminate_failed', instance_id, err: String(e?.message||e) }, null, 2));
   }
