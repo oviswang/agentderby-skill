@@ -155,7 +155,7 @@ async function robustTerminate(instance_id, region) {
   return { ok: false, mode: 'stop_isolate_terminate_failed', detail: String(t2.out || '').slice(0, 2000) };
 }
 
-function main() {
+async function main() {
   const { db } = openDb();
   const ts = nowIso();
 
@@ -300,4 +300,7 @@ function main() {
   }
 }
 
-main();
+main().catch((e)=>{
+  try { console.error(String(e?.stack||e)); } catch {}
+  process.exit(1);
+});
