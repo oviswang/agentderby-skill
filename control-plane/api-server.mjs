@@ -3000,6 +3000,41 @@ app.post('/api/wa/start', async (req, res) => {
       timeoutMs: 15000,
     });
 
+    // Self-heal: if user-machine provision server is down, try to start it once and retry QR fetch.
+    if (!rr.ok && /Failed to connect to 127\.0\.0\.1 port 18999|Couldn\u2019t connect to server|Connection refused/i.test(String(rr.text||''))) {
+      try {
+        poolSsh(
+          instance,
+          `set -euo pipefail; `
+            + `sudo systemctl start bothook-provision.service 2>/dev/null || true; `
+            + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-loopback >/dev/null 2>&1 || true; `
+            + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-sendguard >/dev/null 2>&1 || true; `
+            + `echo provision_started`,
+          { timeoutMs: 8000, tty: false, retries: 0 }
+        );
+      } catch {}
+
+      // Retry QR fetch once after attempting to start provision.
+      const rr2 = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, { method: 'GET', timeoutMs: 8000 });
+      if (rr2.ok && rr2.json) {
+        const payload = {
+          ok: true,
+          uuid,
+          instance_id: instance.instance_id,
+          status: rr2.json.status || 'qr',
+          qrDataUrl: rr2.json.qrDataUrl || null,
+          qrSeq: rr2.json.qrSeq || 0,
+          qrAt: rr2.json.qrAt || null,
+          mode: 'user_machine_provision',
+          recovered: true,
+        };
+        if (payload.qrDataUrl && isPlausiblePngDataUrl(payload.qrDataUrl)) {
+          qrCache.set(uuid, { qrDataUrl: payload.qrDataUrl, qrSeq: payload.qrSeq, qrAt: payload.qrAt, cachedAtMs: Date.now() });
+        }
+        return send(res, 200, payload);
+      }
+    }
+
     if (rr.ok && rr.json) {
       // After starting linking, proactively watch for WA becoming connected and trigger welcome.
       // This removes the dependency on the frontend polling /api/wa/status.
