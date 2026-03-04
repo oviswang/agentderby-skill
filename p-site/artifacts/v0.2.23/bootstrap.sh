@@ -71,8 +71,11 @@ ensure_openclaw(){
   local uhome="/home/ubuntu"
   local prefix="$uhome/.npm-global"
 
-  local pinned_ver="2026.2.26"
-  local tarball_url="https://p.bothook.me/artifacts/openclaw/openclaw-${pinned_ver}.tgz"
+  # Install pinned OpenClaw from the official npm registry (preferred).
+  # Rationale:
+  # - avoids version drift / missing self-hosted tarballs breaking pool init
+  # - still deterministic because we pin a version
+  local pinned_ver="${OPENCLAW_PINNED_VERSION:-2026.3.2}"
 
   # If already pinned, keep.
   if command -v openclaw >/dev/null 2>&1; then
@@ -92,34 +95,16 @@ ensure_openclaw(){
   # Ensure future `npm i -g` by ubuntu installs into ~/.npm-global.
   sudo -u ubuntu npm config set prefix "$prefix" >/dev/null
 
-
   # Harden npm behavior for flaky networks.
   sudo -u ubuntu npm config set fetch-retries 5 >/dev/null || true
   sudo -u ubuntu npm config set fetch-retry-mintimeout 20000 >/dev/null || true
   sudo -u ubuntu npm config set fetch-retry-maxtimeout 120000 >/dev/null || true
 
-
-  # 1) Prefer npm registry pinned version (unless forced to tarball).
-  log "Installing OpenClaw pinned (as ubuntu): openclaw@$pinned_ver"
-  local force_tarball="${BOTHOOK_FORCE_OPENCLAW_TARBALL:-0}"
-
-  if [[ "$force_tarball" = "1" ]]; then
-    log "BOTHOOK_FORCE_OPENCLAW_TARBALL=1; skipping npm registry"
-  else
-    # Use a hard timeout so pool init doesn't hang forever on npm.
-    if timeout 600 sudo -u ubuntu npm install -g "openclaw@${pinned_ver}"; then
-      :
-    else
-      log "npm registry install failed or timed out; fallback to tarball"
-      force_tarball="1"
-    fi
-  fi
-
-  if [[ "$force_tarball" = "1" ]]; then
-    log "Installing OpenClaw from tarball: $tarball_url"
-    local tmp=/tmp/openclaw.tgz
-    curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors "$tarball_url" -o "$tmp"
-    timeout 600 sudo -u ubuntu npm install -g "$tmp"
+  log "Installing OpenClaw pinned from npm (as ubuntu): openclaw@$pinned_ver"
+  # Use a hard timeout so pool init doesn't hang forever on npm.
+  if ! timeout 900 sudo -u ubuntu npm install -g "openclaw@${pinned_ver}"; then
+    log "FATAL: npm install openclaw@$pinned_ver failed"
+    exit 23
   fi
 
 
