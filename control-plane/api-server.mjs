@@ -724,20 +724,26 @@ function sh(cmd, { timeoutMs = 12000 } = {}) {
   return { code: res.status ?? 0, stdout: res.stdout || '', stderr: res.stderr || '' };
 }
 
-function poolSsh(instance, remoteCmd, { timeoutMs = 20000, tty = false, retries = 2 } = {}) {
+function poolSsh(instance, remoteCmd, { timeoutMs = 20000, tty = false, retries = 2, profile = 'fast' } = {}) {
   const ip = instance.public_ip;
   if (!ip) return { code: 1, stdout: '', stderr: 'instance_missing_ip' };
   const tflag = tty ? '-tt' : '';
-  // Keep SSH fast-fail for interactive QR polling.
-  // - ConnectTimeout: avoid hanging HTTP handlers
-  // - ServerAlive*: detect stuck connections
-  // - ConnectionAttempts: no long retries inside a single request
+
+  // SSH profiles:
+  // - fast: used for interactive QR polling / web handlers (fail fast)
+  // - init: used for pool init/verify (more tolerant to boot jitter / slow banner exchange)
+  const isInit = String(profile) === 'init';
+  const connectTimeout = isInit ? 25 : 8;
+  const connAttempts = isInit ? 2 : 1;
+  const aliveInterval = isInit ? 5 : 2;
+  const aliveMax = isInit ? 6 : 2;
+
   const cmd = `ssh ${tflag} -i '${POOL_SSH_KEY}' `
     + `-o BatchMode=yes -o StrictHostKeyChecking=no `
     + `-o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null `
     + `-o LogLevel=ERROR `
-    + `-o ConnectTimeout=8 -o ConnectionAttempts=1 `
-    + `-o ServerAliveInterval=2 -o ServerAliveCountMax=2 `
+    + `-o ConnectTimeout=${connectTimeout} -o ConnectionAttempts=${connAttempts} `
+    + `-o ServerAliveInterval=${aliveInterval} -o ServerAliveCountMax=${aliveMax} `
     + `ubuntu@${ip} '${String(remoteCmd).replace(/'/g, "'\\''")}'`;
 
   let last = null;
@@ -753,6 +759,9 @@ function poolSsh(instance, remoteCmd, { timeoutMs = 20000, tty = false, retries 
   }
   return last || { code: 255, stdout: '', stderr: 'ssh_failed' };
 }
+
+const poolSshInit = (instance, remoteCmd, opts = {}) => poolSsh(instance, remoteCmd, { ...opts, profile: 'init' });
+const poolSshFast = (instance, remoteCmd, opts = {}) => poolSsh(instance, remoteCmd, { ...opts, profile: 'fast' });
 
 async function poolFetch(instance, path, opts = {}) {
   const ip = instance.public_ip;
@@ -1200,7 +1209,7 @@ async function waitSshEcho(instance, { timeoutMs=15*60*1000, phase='ssh', onProg
   let lastCode = null;
   while (Date.now()-start < timeoutMs) {
     attempt++;
-    const r = poolSsh(instance, 'echo ssh_ok', { timeoutMs: 25000, tty: false, retries: 3 });
+    const r = poolSshInit(instance, 'echo ssh_ok', { timeoutMs: 60000, tty: false, retries: 3 });
     lastCode = (r.code ?? null);
     const detail = String((r.stdout || '') + (r.stderr || '')).trim();
     if (detail) lastDetail = detail.slice(-600);
@@ -1426,7 +1435,7 @@ async function runPoolInitJob(job){
 
     // Verify the token file exists on the instance (guard against write failures)
     try {
-      const chk = poolSsh(inst, 'test -s /opt/bothook/READY_REPORT.txt && echo ok || echo missing', { timeoutMs: 12000, tty:false, retries: 0 });
+      const chk = poolSshInit(inst, 'test -s /opt/bothook/READY_REPORT.txt && echo ok || echo missing', { timeoutMs: 20000, tty:false, retries: 0 });
       if (!String(chk.stdout||'').includes('ok')) {
         throw new Error('ready_report_file_missing');
       }
@@ -1441,7 +1450,7 @@ async function runPoolInitJob(job){
     // HARD RULE: always use /artifacts/latest for pool (re)image/init to ensure the newest fixes (e.g. autoreply hard gate) are applied.
     const bootstrapVer = 'latest';
     pushJobLog(job, `run bootstrap ${bootstrapVer}`);
-    const boot = poolSsh(
+    const boot = poolSshInit(
       inst,
       // IMPORTANT: enforce pipefail so curl failures do not get masked by a successful `bash` exit.
       `sudo bash -lc "set -euo pipefail; export DEBIAN_FRONTEND=noninteractive; curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors https://p.bothook.me/artifacts/${bootstrapVer}/bootstrap.sh | ARTIFACT_BASE_URL=https://p.bothook.me/artifacts/${bootstrapVer} bash"`,
@@ -1452,7 +1461,7 @@ async function runPoolInitJob(job){
     // Post-bootstrap strong validation (do not allow fake READY).
     // Ensure Node + OpenClaw + provision server are present. Provision may be inactive until started.
     try {
-      const chk2 = poolSsh(inst,
+      const chk2 = poolSshInit(inst,
         `set -euo pipefail; `
         + `command -v node >/dev/null; `
         + `command -v openclaw >/dev/null; `
@@ -1480,7 +1489,7 @@ async function runPoolInitJob(job){
         { timeoutMs: 60000, tty:false, retries: 0 }
       );
 
-      const msDump = poolSsh(inst,
+      const msDump = poolSshInit(inst,
         `python3 - <<'PY'\nimport json\np='/home/ubuntu/.openclaw/openclaw.json'\ntry:\n  j=json.load(open(p))\nexcept Exception as e:\n  print('ERR:'+str(e)); raise SystemExit(0)\nms=((j.get('agents') or {}).get('defaults') or {}).get('memorySearch')\nprint(json.dumps(ms,ensure_ascii=False))\nPY\n`,
         { timeoutMs: 15000, tty:false, retries: 0 }
       );
@@ -1507,7 +1516,7 @@ async function runPoolInitJob(job){
     // Ensure READY_REPORT.txt exists right before running postboot verify.
     // This is required for the push-based READY report path inside postboot_verify.sh.
     try {
-      const chk = poolSsh(inst, 'test -s /opt/bothook/READY_REPORT.txt && echo ok || echo missing', { timeoutMs: 12000, tty:false, retries: 0 });
+      const chk = poolSshInit(inst, 'test -s /opt/bothook/READY_REPORT.txt && echo ok || echo missing', { timeoutMs: 20000, tty:false, retries: 0 });
       if (!String(chk.stdout||'').includes('ok')) {
         pushJobLog(job, 're-issue ready_report_token (pre-postboot; file missing)');
         const instX = getInstanceById(db, job.instance_id);
@@ -1517,7 +1526,7 @@ async function runPoolInitJob(job){
 
     // Ensure postboot verify has run (kick once)
     pushJobLog(job, 'kick postboot verify');
-    poolSsh(inst, 'sudo systemctl start bothook-postboot-verify.service || true', { timeoutMs: 12000, tty:false, retries:0 });
+    poolSshInit(inst, 'sudo systemctl start bothook-postboot-verify.service || true', { timeoutMs: 20000, tty:false, retries:0 });
 
     // Wait DB READY (from push)
     // Kick postboot verify periodically to self-heal transient failures (e.g. gateway port not yet listening).
