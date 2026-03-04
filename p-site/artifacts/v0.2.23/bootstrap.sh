@@ -14,6 +14,14 @@ NODE_MAJOR="${NODE_MAJOR:-22}"
 
 log(){ echo "[bothook][bootstrap] $*"; }
 
+# Always persist bootstrap output on the instance for post-mortem debugging.
+# (Pool init is remote/async; stdout can be lost or truncated.)
+BOOTSTRAP_LOG_FILE="${INSTALL_DIR}/bootstrap.log"
+mkdir -p "${INSTALL_DIR}"
+touch "${BOOTSTRAP_LOG_FILE}" || true
+# shellcheck disable=SC2094
+exec > >(tee -a "${BOOTSTRAP_LOG_FILE}") 2>&1
+
 need_root(){
   if [[ "$(id -u)" != "0" ]]; then
     echo "Must run as root" >&2
