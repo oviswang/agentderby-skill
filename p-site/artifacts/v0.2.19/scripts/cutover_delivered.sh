@@ -80,6 +80,8 @@ main(){
     sudo -u ubuntu "$OC" config set hooks.internal.entries.bothook-onboarding.enabled false >/dev/null 2>&1 || true
     # Legacy plugin (avoid any more auto prompts)
     sudo -u ubuntu "$OC" plugins disable bothook-wa-autoreply >/dev/null 2>&1 || true
+    # Loopback is useful for onboarding/relink messaging, but should be disabled in delivered mode.
+    sudo -u ubuntu "$OC" plugins disable bothook-wa-loopback >/dev/null 2>&1 || true
 
     # Enforce OpenClaw auto-update config (idempotent)
     sudo -u ubuntu "$OC" config set update.channel stable >/dev/null 2>&1 || true

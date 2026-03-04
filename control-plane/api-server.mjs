@@ -2897,7 +2897,12 @@ app.post('/api/wa/start', async (req, res) => {
     try {
       poolSsh(
         instance,
-        `set -euo pipefail; sudo systemctl start bothook-provision.service 2>/dev/null || true; echo provision_started`,
+        // Ensure relink helpers are available on-demand (delivered mode may have disabled them).
+        `set -euo pipefail; `
+          + `sudo systemctl start bothook-provision.service 2>/dev/null || true; `
+          + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-loopback >/dev/null 2>&1 || true; `
+          + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-sendguard >/dev/null 2>&1 || true; `
+          + `echo provision_started`,
         { timeoutMs: 8000, tty: false, retries: 0 }
       );
     } catch {}
