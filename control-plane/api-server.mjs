@@ -52,15 +52,15 @@ function deliveryEntitled(db, delivery){
     const st0 = String(delivery?.status || '').toUpperCase();
 
     // Strong local signals (do not require subscriptions table):
-    // - historical PAID/DELIVERING/DELIVERED
-    // - ACTIVE *only if* we can see prior payment/delivery markers in meta
+    // - explicit lifecycle statuses
+    // - paid/delivered markers in meta (covers relink flows where status may temporarily be LINKING)
     if (st0 === 'PAID' || st0 === 'DELIVERING' || st0 === 'DELIVERED') return true;
-    if (st0 === 'ACTIVE') {
-      try {
-        const meta = jsonMeta(delivery?.meta_json) || {};
-        if (meta.paid_at || meta.delivered_at || meta.stripe_subscription_id) return true;
-      } catch {}
-    }
+    try {
+      const meta = jsonMeta(delivery?.meta_json) || {};
+      if (meta.paid_at || meta.delivered_at || meta.stripe_subscription_id) return true;
+    } catch {}
+    // ACTIVE is commonly used post-cutover; keep it as an allowed status even without subscriptions.
+    if (st0 === 'ACTIVE') return true;
 
     const uid = String(delivery?.user_id || '').trim();
     if (!uid) return false;
