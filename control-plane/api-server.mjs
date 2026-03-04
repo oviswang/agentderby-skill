@@ -3011,17 +3011,26 @@ app.post('/api/wa/start', async (req, res) => {
     });
 
     // Self-heal: if user-machine provision server is down, try to start it once and retry QR fetch.
-    if (!rr.ok && /Failed to connect to 127\.0\.0\.1 port 18999|Couldn\u2019t connect to server|Connection refused/i.test(String(rr.text||''))) {
+    if (!rr.ok && /Failed to connect to 127\.0\.0\.1 port 18999|Couldn\u2019t connect to server|Connection refused/i.test(String(rr.text||''))) {      let provisionKick = null;
       try {
-        poolSsh(
+        const r0 = poolSsh(
           instance,
           `set -euo pipefail; `
             + `sudo systemctl start bothook-provision.service; `
             + `for i in 1 2 3 4 5; do curl -sf -m 1 http://127.0.0.1:18999/healthz >/dev/null 2>&1 && break; sleep 0.4; done; `
             + `curl -sf -m 1 http://127.0.0.1:18999/healthz >/dev/null 2>&1 && echo provision_ready || echo provision_not_ready`,
-          { timeoutMs: 8000, tty: false, retries: 0 }
+          { timeoutMs: 12000, tty: false, retries: 0 }
         );
-      } catch {}
+        provisionKick = {
+          code: r0?.code ?? null,
+          stdout: String(r0?.stdout || '').slice(0, 200),
+          stderr: String(r0?.stderr || '').slice(0, 200),
+        };
+      } catch (e) {
+        provisionKick = { code: 255, stdout: '', stderr: 'poolSsh_throw' };
+      }
+      lastProvisionKick = provisionKick;
+
 
       // Retry QR fetch once after attempting to start provision.
       const rr2 = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, { method: 'GET', timeoutMs: 8000 });
@@ -3036,6 +3045,7 @@ app.post('/api/wa/start', async (req, res) => {
           qrAt: rr2.json.qrAt || null,
           mode: 'user_machine_provision',
           recovered: true,
+          provisionKick,
         };
         if (payload.qrDataUrl && isPlausiblePngDataUrl(payload.qrDataUrl)) {
           qrCache.set(uuid, { qrDataUrl: payload.qrDataUrl, qrSeq: payload.qrSeq, qrAt: payload.qrAt, cachedAtMs: Date.now() });
@@ -3188,6 +3198,7 @@ app.get('/api/wa/qr', async (req, res) => {
     }
 
     // Default: delegate to user machine (18999). Returns qrDataUrl.
+    let lastProvisionKick = null;
     const rr = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, {
       method: 'GET',
       timeoutMs: 8000,
@@ -3237,7 +3248,7 @@ app.get('/api/wa/qr', async (req, res) => {
 
     // Fallback: legacy control-plane tmux parsing.
     if (String(process.env.BOTHOOK_WA_FALLBACK_TMUX || '').toLowerCase() !== '1') {
-      return send(res, 409, { ok:false, error:'qr_not_ready', mode:'user_machine_provision', detail: (rr.text||'').slice(0,200) });
+      return send(res, 409, { ok:false, error:'qr_not_ready', mode:'user_machine_provision', detail: JSON.stringify({ fetch: String(rr.text||'').slice(0,200), kick: lastProvisionKick }).slice(0,500) });
     }
 
     // --- legacy tmux fallback below (unchanged) ---
