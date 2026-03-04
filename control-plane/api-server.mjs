@@ -1287,10 +1287,12 @@ async function resetInstance(instance_id, blueprint_id, { region } = {}){
   throw new Error('reset_instance_failed');
 }
 
-async function waitInstanceRunning(instance_id, { timeoutMs=15*60*1000 }={}){
+async function waitInstanceRunning(instance_id, { timeoutMs=15*60*1000, region }={}){
   const t0 = Date.now();
   while (Date.now()-t0 < timeoutMs) {
-    const it = await describeInstance(instance_id);
+    // IMPORTANT: must use the instance's region; otherwise cross-region instances
+    // will be reported as "instance_not_found".
+    const it = await describeInstance(instance_id, { region });
     const st = String(it?.InstanceState || '').toUpperCase();
     const op = String(it?.LatestOperation || '');
     const opSt = String(it?.LatestOperationState || '');
@@ -1358,7 +1360,7 @@ async function runPoolInitJob(job){
       }
 
       pushJobLog(job, 'wait instance RUNNING after reset');
-      const running = await waitInstanceRunning(job.instance_id, { timeoutMs: 20*60*1000 });
+      const running = await waitInstanceRunning(job.instance_id, { timeoutMs: 20*60*1000, region: inst0.region });
       if (!running) throw new Error('reset_not_running');
     }
 
@@ -2834,6 +2836,28 @@ app.post('/api/wa/start', async (req, res) => {
 
     const force = Boolean(req.body?.force);
 
+    // Anti-storm: /api/wa/start can be hit repeatedly by page refreshes / double-clicks.
+    // Without a cooldown, we end up restarting the user-machine login (tmux + openclaw channels login)
+    // which can spike CPU and cause gateway flapping on pool instances.
+    //
+    // Policy: for first-link (force=false), apply a short server-side cooldown window.
+    // (Force relink flows are gated separately by entitlement checks.)
+    try {
+      const meta0 = jsonMeta(delivery.meta_json) || {};
+      const lastAt = Date.parse(String(meta0.wa_start_last_at || ''));
+      const COOLDOWN_MS = parseInt(process.env.BOTHOOK_WA_START_COOLDOWN_MS || String(60_000), 10);
+      if (!force && lastAt && (Date.now() - lastAt) < COOLDOWN_MS) {
+        return send(res, 200, {
+          ok: true,
+          uuid,
+          instance_id: instance.instance_id,
+          status: 'cooldown',
+          cooldown_ms: COOLDOWN_MS - (Date.now() - lastAt),
+          mode: 'user_machine_provision'
+        });
+      }
+    } catch {}
+
     // Mark relink intent (force flow) so /api/wa/status can branch behavior without affecting first-link.
     try {
       if (force) {
@@ -2890,6 +2914,15 @@ app.post('/api/wa/start', async (req, res) => {
     // Control-plane should coordinate + persist state, not parse tmux QR.
     const startPath = '/api/wa/start';
     const body = JSON.stringify({ uuid, force });
+
+    // Persist a "start" timestamp early to suppress start storms even if delegation fails.
+    // (Clients should use /api/wa/status + /api/wa/qr polling after calling /api/wa/start once.)
+    try {
+      const tsS = nowIso();
+      const metaS = mergeMeta(delivery.meta_json, { wa_start_last_at: tsS, wa_start_last_force: force });
+      db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(metaS, tsS, delivery.delivery_id);
+      delivery = db.prepare('SELECT * FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+    } catch {}
 
 
 
@@ -4530,19 +4563,13 @@ app.post('/api/key/verify', async (req, res) => {
       throw e;
     }
 
-    // If paid + linked, enqueue an explicit success message via outbound_tasks.
-    // Cutover will be triggered AFTER that message is successfully sent.
-    try {
-      const { db } = openDb();
-      const d2 = db.prepare('SELECT delivery_id, instance_id, wa_jid, meta_json, user_lang FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
-      if (d2?.delivery_id && d2?.instance_id && d2?.wa_jid) {
-        const lang = getDeliveryLang(d2);
-        enqueueOutboundTask(db, { delivery_id: d2.delivery_id, uuid, instance_id: d2.instance_id, kind: 'key_verified_success', lang, to_jid: d2.wa_jid });
-        const ts2 = nowIso();
-        const meta2 = mergeMeta(d2.meta_json || null, { key_verified_success_enqueued_at: ts2, key_verified_success_lang: lang });
-        db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts2, d2.delivery_id);
-      }
-    } catch {}
+    // NOTE (2026-03-04): Do NOT enqueue a duplicate WhatsApp success message here.
+    // The user-machine guide/autoreply plugin calls /api/key/verify and will send `message`
+    // back to self-chat immediately. If we also enqueue an outbound task, the user receives
+    // two identical "key verified" messages.
+    //
+    // If we later want server-side gating (send-first-then-cutover), implement it as a single
+    // source of truth and update the plugin accordingly.
 
     // Return a localized success message (sent to WhatsApp by the user-machine autoreply plugin).
     let msg = '';

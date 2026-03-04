@@ -303,9 +303,27 @@ function killLogin(uuid){
 function startLogin(uuid, { force=false } = {}){
   const s = ensureSession(uuid);
   const now = Date.now();
-  if (!force && s.pty && (now - s.lastLoginAt) < LOGIN_DEDUP_MS) {
-    return;
+
+  // Idempotency / anti-storm:
+  // This service primarily runs login in tmux (not PTY), so `s.pty` is usually null.
+  // Older versions relied on a PTY handle for dedupe, which makes repeated /api/wa/start
+  // calls restart login and can spike CPU.
+  const tmuxSession = `wa-${uuid}`;
+  if (!force) {
+    // If a tmux login session already exists, treat start as idempotent.
+    try {
+      if (tmuxHasSession(tmuxSession)) {
+        s.lastLoginAt = s.lastLoginAt || now;
+        return;
+      }
+    } catch {}
+
+    // Rate-limit redundant starts in a short window.
+    if ((now - (s.lastLoginAt || 0)) < LOGIN_DEDUP_MS) {
+      return;
+    }
   }
+
 
   // Preflight tmux availability (surface failures to status instead of silently looping).
   try {
@@ -324,6 +342,20 @@ function startLogin(uuid, { force=false } = {}){
   // IMPORTANT: keep gateway running.
   // Stopping the gateway can prevent WhatsApp QR generation under this deployment model.
   setTimeout(() => { try { startGateway(); } catch {} }, 0);
+
+  // If WhatsApp is already linked, do not churn QR/login unless explicitly forced.
+  // This avoids a tight loop where the UI keeps calling /api/wa/start but there's nothing to scan.
+  if (!force) {
+    try {
+      const self = getSelfE164();
+      if (self) {
+        s.lastError = `already_linked:self=${self}`;
+        s.lastExit = { stage: 'already_linked', at: nowIso() };
+        s.lastLoginAt = now;
+        return;
+      }
+    } catch {}
+  }
 
   if (force) {
     // wipe whatsapp auth dir to force new QR rotation from scratch

@@ -33,7 +33,7 @@
     },
     "safety": {
       "maxPausePerRun": 5,
-      "maxEnablePerRun": 5,
+      "maxEnablePerRun": 0,
       "resumeWindowMinutes": 360
     }
   },
