@@ -813,7 +813,8 @@ function isKeyVerified(db, uuid){
     if(!row) return false;
     let meta={};
     try{ meta = row.meta_json ? JSON.parse(row.meta_json) : {}; }catch{ meta={}; }
-    return Boolean(meta.verified_at);
+    // Treat key as verified only when it is both syntactically valid AND chargeable (funded).
+    return Boolean(meta.verified_at) && Boolean(meta.funded_at);
   }catch{ return false; }
 }
 
@@ -4472,7 +4473,8 @@ app.get('/api/key/status', (req, res) => {
       } catch {}
     }
 
-    return send(res, 200, { ok:true, uuid, hasKey:true, verified: Boolean(verifiedAt), verifiedAt });
+    const fundedAt = meta.funded_at || null;
+    return send(res, 200, { ok:true, uuid, hasKey:true, verified: Boolean(verifiedAt), verifiedAt, funded: Boolean(fundedAt), fundedAt });
   } catch {
     return send(res, 500, { ok:false, error:'server_error' });
   }
@@ -4490,7 +4492,10 @@ app.post('/api/key/verify', async (req, res) => {
 
     const vr = await verifyOpenAiKey(key, { timeoutMs: 10000 });
     if (!vr.ok) {
-      return send(res, 200, { ok:true, verified:false, error:'key_invalid', detail: vr.error || null });
+      // Distinguish invalid key vs quota/billing issues.
+      const err = String(vr.error || 'key_invalid');
+      const code = (err === 'insufficient_quota') ? 'key_unfunded' : 'key_invalid';
+      return send(res, 200, { ok:true, verified:false, error: code, detail: vr.detail || vr.error || null });
     }
 
     const { ciphertext, iv, tag, alg } = encryptAesGcm(Buffer.from(key, 'utf8'));
@@ -4514,7 +4519,7 @@ app.post('/api/key/verify', async (req, res) => {
         alg,
         ts,
         ts,
-        JSON.stringify({ verified_at: ts })
+        JSON.stringify({ verified_at: ts, funded_at: ts, funded_model: vr.model || null })
       );
       db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
         crypto.randomUUID(), ts, 'delivery', uuid, 'OPENAI_KEY_VERIFIED', JSON.stringify({ uuid })
