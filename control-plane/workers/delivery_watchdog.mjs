@@ -24,7 +24,8 @@ const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || 'lhbp-1l4ptuvm';
 
 const STAGE_A_MS = 5 * 60 * 1000;
-const STAGE_B_MS = 15 * 60 * 1000;
+// Hard reclaim threshold: unpaid deliveries older than this (from assigned_at/created_at) are reclaimed.
+const STAGE_B_MS = 20 * 60 * 1000;
 // Cleanup: stale LINKING records (no wa_jid, no bound) that linger on pool instances.
 // These are usually abandoned test UUIDs and should not pin instance_id forever.
 const STALE_LINKING_MS = 30 * 60 * 1000;
@@ -276,24 +277,28 @@ async function main() {
 
     if (isPaid(db, r.delivery_status, r.delivery_meta, r.user_id)) continue;
 
-    // Stage A: not bound yet
+    // Anchor for unpaid timeout decisions: use instance.assigned_at when available (more accurate),
+    // otherwise fall back to delivery.created_at.
+    const anchor = r.assigned_at || r.delivery_created_at;
+    const t0 = Date.parse(anchor || '');
+    const elapsedMs = Number.isFinite(t0) ? (Date.now() - t0) : NaN;
+
+    // Hard reclaim: unpaid for >= STAGE_B_MS (20m) regardless of whether it is bound.
+    if (Number.isFinite(elapsedMs) && elapsedMs >= STAGE_B_MS) {
+      chosen = r;
+      stage = 'HARD_UNPAID_20M';
+      break;
+    }
+
+    // Stage A (soft): not bound yet and older than STAGE_A_MS (5m).
+    // We ONLY record + optionally self-heal; do NOT release the instance.
     if (!r.bound_at) {
-      const anchor = r.assigned_at || r.delivery_created_at;
-      const t0 = Date.parse(anchor || '');
-      if (Number.isFinite(t0) && (Date.now() - t0 >= STAGE_A_MS)) {
+      if (Number.isFinite(elapsedMs) && elapsedMs >= STAGE_A_MS) {
         chosen = r;
-        stage = 'A_PRE_BIND_5M';
+        stage = 'A_PRE_BIND_SOFT_5M';
         break;
       }
       continue;
-    }
-
-    // Stage B: bound but unpaid
-    const t1 = Date.parse(r.bound_at || '');
-    if (Number.isFinite(t1) && (Date.now() - t1 >= STAGE_B_MS)) {
-      chosen = r;
-      stage = 'B_POST_BIND_15M';
-      break;
     }
   }
 
@@ -305,46 +310,26 @@ async function main() {
   const instance_id = String(chosen.instance_id);
   const delivery_id = String(chosen.delivery_id);
 
-  if (stage === 'A_PRE_BIND_5M') {
-    // Pre-bind timeout: sanitize WA state (no reimage) then release allocation back to pool.
-    let sanitize = null;
+  if (stage === 'A_PRE_BIND_SOFT_5M') {
+    // Soft handling only: do NOT release allocation.
+    // Rationale: users can be slow to scan/confirm WhatsApp link; releasing here can create race conditions.
     try {
-      sanitize = postJson(`${API_BASE}/api/ops/pool/wa-sanitize`, { instance_id });
-    } catch {
-      sanitize = { ok:false, error:'wa_sanitize_call_failed' };
-    }
-
-    db.exec('BEGIN IMMEDIATE');
+      db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?')
+        .run(mergeMeta(chosen.delivery_meta, { prebind_soft_timeout_at: ts }), ts, delivery_id);
+    } catch {}
     try {
-      db.prepare('UPDATE deliveries SET status=?, instance_id=NULL, updated_at=?, meta_json=? WHERE delivery_id=?')
-        .run('LINKING_TIMEOUT', ts, mergeMeta(chosen.delivery_meta, { timeout_stage: stage, timeout_at: ts }), delivery_id);
-
-      db.prepare(
-        `UPDATE instances
-            SET lifecycle_status='IN_POOL',
-                health_status='NEEDS_VERIFY',
-                assigned_user_id=NULL,
-                assigned_order_id=NULL,
-                assigned_at=NULL,
-                meta_json=?
-          WHERE instance_id=?`
-      ).run(mergeMeta(chosen.instance_meta, { released_by: 'delivery_watchdog', released_at: ts, timeout_stage: stage }), instance_id);
-
       db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-        .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_LINKING_TIMEOUT_RELEASE', JSON.stringify({ instance_id, sanitize }));
-      db.exec('COMMIT');
-    } catch (e) {
-      try { db.exec('ROLLBACK'); } catch {}
-      throw e;
-    }
+        .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_PREBIND_SOFT_TIMEOUT', JSON.stringify({ instance_id }));
+    } catch {}
 
-    tgSend(`[bothook][watchdog] pre-bind timeout (5m): sanitized+released (no reimage) instance=${instance_id} delivery=${delivery_id}`);
-    console.log(JSON.stringify({ ok:true, ts, action:'sanitize_and_release_no_reimage', stage, instance_id, delivery_id, sanitize }, null, 2));
+    tgSend(`[bothook][watchdog] pre-bind soft timeout (5m): no release (instance=${instance_id} delivery=${delivery_id})`);
+    console.log(JSON.stringify({ ok:true, ts, action:'prebind_soft_timeout_no_release', stage, instance_id, delivery_id }, null, 2));
     return;
   }
 
-  // Stage B: bound but unpaid. Safeguard: confirm payment before any action.
-  // We DO NOT auto-reimage here (L2). We sanitize WA state (no reimage) then release back to pool.
+  // Hard reclaim (unpaid >= 20m). Safeguard: confirm payment before any action.
+  // Policy: if still unpaid, we reclaim the instance back to IN_POOL and enqueue reimage+init,
+  // so it returns to READY (true pool return).
   let confirmPaid = false;
   try {
     const u = String(chosen.provision_uuid || chosen.user_id || '').trim();
@@ -368,10 +353,18 @@ async function main() {
     sanitize = { ok:false, error:'wa_sanitize_call_failed' };
   }
 
+  // Enqueue pool reimage+init so the instance truly returns to READY.
+  let initJob = null;
+  try {
+    initJob = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'reimage_and_init' });
+  } catch {
+    initJob = { ok:false, error:'pool_init_call_failed' };
+  }
+
   db.exec('BEGIN IMMEDIATE');
   try {
-    db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
-      .run('PAYMENT_TIMEOUT', ts, mergeMeta(chosen.delivery_meta, { timeout_stage: stage, timeout_at: ts, reclaim_plan: 'release_only_no_reimage' }), delivery_id);
+    db.prepare('UPDATE deliveries SET status=?, instance_id=NULL, updated_at=?, meta_json=? WHERE delivery_id=?')
+      .run('PAYMENT_TIMEOUT', ts, mergeMeta(chosen.delivery_meta, { timeout_stage: stage, timeout_at: ts, reclaim_plan: 'reimage_and_init' }), delivery_id);
 
     db.prepare(
       `UPDATE instances
@@ -385,15 +378,15 @@ async function main() {
     ).run(mergeMeta(chosen.instance_meta, { released_by: 'delivery_watchdog', released_at: ts, timeout_stage: stage }), instance_id);
 
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-      .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_PAYMENT_TIMEOUT_RELEASE', JSON.stringify({ instance_id, sanitize }));
+      .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_HARD_UNPAID_RECLAIM', JSON.stringify({ instance_id, sanitize, initJob }));
     db.exec('COMMIT');
   } catch (e) {
     try { db.exec('ROLLBACK'); } catch {}
     throw e;
   }
 
-  tgSend(`[bothook][watchdog] post-bind unpaid timeout (15m): sanitized+released (no reimage) instance=${instance_id} delivery=${delivery_id}`);
-  console.log(JSON.stringify({ ok:true, ts, action:'sanitize_and_release_no_reimage', stage, instance_id, delivery_id, sanitize }, null, 2));
+  tgSend(`[bothook][watchdog] hard reclaim (unpaid>=20m): released + init(enqueued) instance=${instance_id} delivery=${delivery_id}`);
+  console.log(JSON.stringify({ ok:true, ts, action:'hard_reclaim_unpaid', stage, instance_id, delivery_id, sanitize, initJob }, null, 2));
 }
 
 main();
