@@ -46,10 +46,21 @@ function getDeliveryLang(delivery){
 }
 function deliveryEntitled(db, delivery){
   try {
-    // Legacy paid flow: some rows are marked PAID without a corresponding subscriptions row.
-    // Treat delivery.status=PAID as entitled (non-expired) for relink/key-setup guidance.
+    // Legacy/ops reality: deliveries can be marked ACTIVE after delivery cutover.
+    // Also some rows may not have user_id populated (legacy), so relying solely on subscriptions
+    // would misclassify paid users as unpaid (causing welcome_unpaid to be sent on relink).
     const st0 = String(delivery?.status || '').toUpperCase();
+
+    // Strong local signals (do not require subscriptions table):
+    // - historical PAID/DELIVERING/DELIVERED
+    // - ACTIVE *only if* we can see prior payment/delivery markers in meta
     if (st0 === 'PAID' || st0 === 'DELIVERING' || st0 === 'DELIVERED') return true;
+    if (st0 === 'ACTIVE') {
+      try {
+        const meta = jsonMeta(delivery?.meta_json) || {};
+        if (meta.paid_at || meta.delivered_at || meta.stripe_subscription_id) return true;
+      } catch {}
+    }
 
     const uid = String(delivery?.user_id || '').trim();
     if (!uid) return false;
