@@ -10,7 +10,7 @@
 
 ## ar
 ### index.html — leftovers 39
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - View this page in another language?
 - Chinese (Traditional)
 - Português (Brasil)
@@ -70,7 +70,7 @@
 
 ## de
 ### index.html — leftovers 8
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - Chinese (Traditional)
 - Português (Brasil)
 - Portuguese (Brazil)
@@ -122,7 +122,7 @@
 
 ## es
 ### index.html — leftovers 8
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - Chinese (Traditional)
 - Português (Brasil)
 - Portuguese (Brazil)
@@ -174,7 +174,7 @@
 
 ## fr
 ### index.html — leftovers 8
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - Chinese (Traditional)
 - Português (Brasil)
 - Portuguese (Brazil)
@@ -189,7 +189,7 @@
 
 ## hi
 ### index.html — leftovers 39
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - View this page in another language?
 - Chinese (Traditional)
 - Português (Brasil)
@@ -249,7 +249,7 @@
 
 ## id
 ### index.html — leftovers 39
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - View this page in another language?
 - Bahasa Indonesia
 - Chinese (Traditional)
@@ -309,7 +309,7 @@
 
 ## ja
 ### index.html — leftovers 8
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - Chinese (Traditional)
 - Português (Brasil)
 - Portuguese (Brazil)
@@ -323,7 +323,7 @@
 
 ## ko
 ### index.html — leftovers 8
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - Chinese (Traditional)
 - Português (Brasil)
 - Portuguese (Brazil)
@@ -337,7 +337,7 @@
 
 ## pt-br
 ### index.html — leftovers 39
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - View this page in another language?
 - Português (Brasil)
 - Chinese (Traditional)
@@ -397,7 +397,7 @@
 
 ## ru
 ### index.html — leftovers 39
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - View this page in another language?
 - Chinese (Traditional)
 - Português (Brasil)
@@ -457,7 +457,7 @@
 
 ## th
 ### index.html — leftovers 39
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - View this page in another language?
 - Chinese (Traditional)
 - Português (Brasil)
@@ -519,7 +519,7 @@
 
 ## vi
 ### index.html — leftovers 39
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - View this page in another language?
 - Chinese (Traditional)
 - Português (Brasil)
@@ -579,7 +579,7 @@
 
 ## zh-tw
 ### index.html — leftovers 8
-- BOTHook — OpenClaw on WhatsApp (No setup) — $119.8/mo
+- BOTHook — OpenClaw on WhatsApp (No setup) — $19.8/mo
 - Chinese (Traditional)
 - Português (Brasil)
 - Portuguese (Brazil)
