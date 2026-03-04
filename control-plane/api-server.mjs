@@ -3825,18 +3825,11 @@ app.get('/api/wa/status', async (req, res) => {
             const isRelink = Boolean(meta?.relink_force);
 
             if (isRelink) {
-              // Relink: send an explicit success message first (must be deliverable), then trigger cutover AFTER send.
-              // This avoids the "success message lost during restart" race.
-              try {
-                const sentAt = meta.relink_success_sent_at ? Date.parse(meta.relink_success_sent_at) : null;
-                const enqAt = meta.relink_success_enqueued_at ? Date.parse(meta.relink_success_enqueued_at) : null;
-                if (!sentAt && (!enqAt || (Date.now() - enqAt) > 30_000)) {
-                  const tsX = nowIso();
-                  enqueueOutboundTask(db2, { delivery_id: d2.delivery_id, uuid, instance_id: inst2.instance_id, kind: 'relink_success', lang, to_jid: d2.wa_jid });
-                  const metaX = mergeMeta(d2.meta_json, { relink_success_enqueued_at: tsX, relink_success_lang: lang });
-                  db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(metaX, tsX, d2.delivery_id);
-                }
-              } catch {}
+              // Relink: do NOT send a "success" message. Control-plane cannot perfectly guarantee end-to-end success,
+              // and any extra system message is noisy. Instead, immediately run the same idempotent delivered cutover
+              // convergence steps (auth/model/config), then let the user continue chatting normally.
+              try { tryCutoverDelivered(db2, uuid, { reason: 'relink_connected' }); } catch {}
+              try { writeOpenAiAuthOnInstance(db2, inst2, { uuid }); } catch {}
             } else {
               // First-link paid path (or non-force paid connect): keep legacy behavior.
               // Self-heal delivered cutover (auth/model/config). Idempotent.
