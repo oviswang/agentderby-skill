@@ -2836,6 +2836,59 @@ app.post('/api/wa/start', async (req, res) => {
 
     const force = Boolean(req.body?.force);
 
+    // Turnstile enforcement (relink only): require a valid Turnstile token when force=true.
+    // Frontend already performs Turnstile verification, but backend must enforce it to prevent bypass.
+    if (force) {
+      const token = String(req.body?.turnstileToken || '').trim();
+      if (!token) {
+        return send(res, 403, { ok: false, error: 'turnstile_required' });
+      }
+      try {
+        let secret = String(process.env.TURNSTILE_SECRET_KEY || '').trim();
+        if (!secret) {
+          // Fallback: read local credentials file (service may not load EnvironmentFile).
+          try {
+            const envTxt = fs.readFileSync('/home/ubuntu/.openclaw/credentials/cloudflare_turnstile.env', 'utf8');
+            for (const line of envTxt.split(/\r?\n/)) {
+              const m = line.match(/^TURNSTILE_SECRET_KEY=(.*)$/);
+              if (m) { secret = String(m[1] || '').trim(); break; }
+            }
+          } catch {}
+        }
+        if (!secret) {
+          // Misconfiguration: fail closed for relink.
+          return send(res, 500, { ok: false, error: 'turnstile_misconfigured' });
+        }
+
+        const params = new URLSearchParams();
+        params.set('secret', secret);
+        params.set('response', token);
+
+        // Best-effort: forward a client IP if present (Cloudflare headers / proxy).
+        const rip = String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+        if (rip) params.set('remoteip', rip);
+
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 6000);
+        try {
+          const vr = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: params,
+            signal: ctrl.signal,
+          });
+          const vj = await vr.json().catch(() => ({}));
+          if (!vr.ok || !vj || vj.success !== true) {
+            return send(res, 403, { ok: false, error: 'turnstile_failed' });
+          }
+        } finally {
+          clearTimeout(t);
+        }
+      } catch {
+        return send(res, 403, { ok: false, error: 'turnstile_failed' });
+      }
+    }
+
     // Anti-storm: /api/wa/start can be hit repeatedly by page refreshes / double-clicks.
     // Without a cooldown, we end up restarting the user-machine login (tmux + openclaw channels login)
     // which can spike CPU and cause gateway flapping on pool instances.
