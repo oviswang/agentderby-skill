@@ -3293,7 +3293,9 @@ app.get('/api/wa/qr', async (req, res) => {
           qrSeq: cached.qrSeq || 0,
           qrAt: cached.qrAt || null,
           mode: 'user_machine_provision_cached',
-          stale: true,
+          cached: true,
+          // IMPORTANT: cached QR may still be valid; do not force UI to hide it.
+          stale: false,
         });
       }
     }
