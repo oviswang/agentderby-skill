@@ -53,6 +53,7 @@
   - Public IP: `43.160.236.20`
   - Role: **workstation/master** (this is where the agent runs; hosts bothook.me / p.bothook.me)
   - **Hard rule:** never treat this instance as a pool/deliverable machine; never recycle/terminate it as part of pool ops.
+  - **Reporting rule:** when listing “user machines / undelivered machines / pool machines”, DO NOT include this host; only mention it if explicitly asked about the workstation.
 
 ## Reporting / comms routing (owner preference)
 - Keep WhatsApp chat clean: WhatsApp is for owner↔agent work coordination（仅临时讨论/指令/确认）。
