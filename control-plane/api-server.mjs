@@ -5360,8 +5360,31 @@ async function runOpsWorkerLoop(){
     fd = fs.openSync(lockPath, 'wx');
     fs.writeFileSync(lockPath, String(process.pid));
   } catch {
-    // another worker running
-    return;
+    // Lock exists. Attempt stale-lock recovery (e.g. prior worker crashed).
+    try {
+      const s = String(fs.readFileSync(lockPath, 'utf8') || '').trim();
+      const pid = Number(s);
+      if (pid && pid > 1) {
+        try {
+          process.kill(pid, 0);
+          // Another worker is alive.
+          return;
+        } catch {
+          // Stale lock; remove and retry once.
+          try { fs.unlinkSync(lockPath); } catch {}
+          fd = fs.openSync(lockPath, 'wx');
+          fs.writeFileSync(lockPath, String(process.pid));
+        }
+      } else {
+        // Unknown lock contents; best-effort remove.
+        try { fs.unlinkSync(lockPath); } catch {}
+        fd = fs.openSync(lockPath, 'wx');
+        fs.writeFileSync(lockPath, String(process.pid));
+      }
+    } catch {
+      // another worker running (or unable to recover)
+      return;
+    }
   }
 
   try {
