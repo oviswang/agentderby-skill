@@ -1456,7 +1456,15 @@ async function runPoolInitJob(job){
       `sudo bash -lc "set -euo pipefail; export DEBIAN_FRONTEND=noninteractive; curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors https://p.bothook.me/artifacts/${bootstrapVer}/bootstrap.sh | ARTIFACT_BASE_URL=https://p.bothook.me/artifacts/${bootstrapVer} bash"`,
       { timeoutMs: 20*60*1000, tty:false, retries:0 }
     );
-    if ((boot.code ?? 1) !== 0) throw new Error('bootstrap_failed');
+    if ((boot.code ?? 1) !== 0) {
+      try {
+        const out = String((boot.stdout || '')).trim();
+        const err = String((boot.stderr || '')).trim();
+        if (out) pushJobLog(job, `bootstrap stdout: ${out.replace(/\s+/g,' ').slice(-600)}`);
+        if (err) pushJobLog(job, `bootstrap stderr: ${err.replace(/\s+/g,' ').slice(-600)}`);
+      } catch {}
+      throw new Error('bootstrap_failed');
+    }
 
     // Post-bootstrap strong validation (do not allow fake READY).
     // Ensure Node + OpenClaw + provision server are present. Provision may be inactive until started.
