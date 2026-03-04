@@ -3204,6 +3204,47 @@ app.get('/api/wa/qr', async (req, res) => {
       timeoutMs: 8000,
     });
 
+    // Self-heal: if provision server is down, try to start it and retry once.
+    if (!rr.ok && /Failed to connect to 127\.0\.0\.1 port 18999|Couldn\u2019t connect to server|Connection refused/i.test(String(rr.text||''))) {
+      try {
+        const k = poolSsh(
+          instance,
+          `set -euo pipefail; `
+            + `sudo systemctl start bothook-provision.service; `
+            + `for i in 1 2 3 4 5; do curl -sf -m 1 http://127.0.0.1:18999/healthz >/dev/null 2>&1 && break; sleep 0.4; done; `
+            + `curl -sf -m 1 http://127.0.0.1:18999/healthz >/dev/null 2>&1 && echo provision_ready || echo provision_not_ready`,
+          { timeoutMs: 12000, tty: false, retries: 0 }
+        );
+        lastProvisionKick = {
+          code: k?.code ?? null,
+          stdout: String(k?.stdout || '').slice(0, 200),
+          stderr: String(k?.stderr || '').slice(0, 200),
+        };
+      } catch (e) {
+        lastProvisionKick = { code: 255, stdout: '', stderr: 'poolSsh_throw' };
+      }
+
+      const rr2 = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, { method: 'GET', timeoutMs: 8000 });
+      if (rr2.ok && rr2.json) {
+        const payload = {
+          ok: true,
+          uuid,
+          instance_id: instance.instance_id,
+          status: rr2.json.status || 'qr',
+          qrDataUrl: rr2.json.qrDataUrl || null,
+          qrSeq: rr2.json.qrSeq || 0,
+          qrAt: rr2.json.qrAt || null,
+          mode: 'user_machine_provision',
+          recovered: true,
+          provisionKick: lastProvisionKick,
+        };
+        if (payload.qrDataUrl && isPlausiblePngDataUrl(payload.qrDataUrl)) {
+          qrCache.set(uuid, { qrDataUrl: payload.qrDataUrl, qrSeq: payload.qrSeq, qrAt: payload.qrAt, cachedAtMs: Date.now() });
+        }
+        return send(res, 200, payload);
+      }
+    }
+
     if (rr.ok && rr.json) {
       const payload = {
         ok: true,
