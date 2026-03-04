@@ -2977,22 +2977,32 @@ app.post('/api/wa/start', async (req, res) => {
       delivery = db.prepare('SELECT * FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
     } catch {}
 
-
-
     // Ensure user-machine provisioning server (18999) is running before delegating QR/login.
     // Delivered-mode convergence may have disabled it; relink must be able to start it on-demand.
+    //
+    // STRICT MODE (relink only): when force=true, require provision to actually start and pass /healthz,
+    // otherwise fail fast (do NOT let UI spin forever on qr_not_ready).
+    const STRICT_RELINK = force && String(process.env.BOTHOOK_RELINK_STRICT_PROVISION_START || '1') === '1';
     try {
-      poolSsh(
-        instance,
-        // Ensure relink helpers are available on-demand (delivered mode may have disabled them).
-        `set -euo pipefail; `
-          + `sudo systemctl start bothook-provision.service 2>/dev/null || true; `
-          + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-loopback >/dev/null 2>&1 || true; `
-          + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-sendguard >/dev/null 2>&1 || true; `
-          + `echo provision_started`,
-        { timeoutMs: 8000, tty: false, retries: 0 }
-      );
-    } catch {}
+      const cmd = `set -euo pipefail; `
+        + `sudo systemctl start bothook-provision.service; `
+        + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-loopback >/dev/null 2>&1 || true; `
+        + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-sendguard >/dev/null 2>&1 || true; `
+        + (STRICT_RELINK
+            ? `for i in 1 2 3 4 5; do curl -sf -m 1 http://127.0.0.1:18999/healthz >/dev/null 2>&1 && break; sleep 0.4; done; `
+              + `curl -sf -m 1 http://127.0.0.1:18999/healthz >/dev/null 2>&1`
+            : `true`)
+        + `; echo provision_started`;
+
+      const pr = poolSsh(instance, cmd, { timeoutMs: STRICT_RELINK ? 15000 : 8000, tty: false, retries: 0 });
+      if (STRICT_RELINK && (pr.code ?? 1) !== 0) {
+        return send(res, 502, { ok: false, error: 'provision_start_failed' });
+      }
+    } catch {
+      if (STRICT_RELINK) {
+        return send(res, 502, { ok: false, error: 'provision_start_failed' });
+      }
+    }
     const rr = await poolFetch(instance, startPath, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -3208,6 +3218,11 @@ app.get('/api/wa/qr', async (req, res) => {
       if (!isPlausiblePngDataUrl(cached.qrDataUrl)) {
         try { qrCache.delete(uuid); } catch {}
       } else {
+        // best-effort kick provision back on (do not block UI when cached QR exists)
+        try {
+          poolSsh(instance, `set -euo pipefail; sudo systemctl start bothook-provision.service >/dev/null 2>&1 || true; echo kicked`, { timeoutMs: 6000, tty:false, retries:0 });
+        } catch {}
+
         return send(res, 200, {
           ok: true,
           uuid,
