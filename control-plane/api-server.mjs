@@ -3006,10 +3006,11 @@ app.post('/api/wa/start', async (req, res) => {
         poolSsh(
           instance,
           `set -euo pipefail; `
-            + `sudo systemctl start bothook-provision.service 2>/dev/null || true; `
             + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-loopback >/dev/null 2>&1 || true; `
             + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-sendguard >/dev/null 2>&1 || true; `
-            + `echo provision_started`,
+            + `sudo systemctl start bothook-provision.service; `
+            + `for i in 1 2 3 4 5; do curl -sf -m 1 http://127.0.0.1:18999/healthz >/dev/null 2>&1 && break; sleep 0.4; done; `
+            + `curl -sf -m 1 http://127.0.0.1:18999/healthz >/dev/null 2>&1 && echo provision_ready || echo provision_not_ready`,
           { timeoutMs: 8000, tty: false, retries: 0 }
         );
       } catch {}
