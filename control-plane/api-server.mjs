@@ -4762,28 +4762,24 @@ app.get('/api/delivery/status', (req, res) => {
     const uuid = String(req.query?.uuid || '').trim();
     if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
     const { db } = openDb();
-    const d = db.prepare('SELECT delivery_id, status, wa_jid, bound_at, updated_at, user_lang FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
+    const d = db.prepare('SELECT * FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
     if (!d) return send(res, 404, { ok:false, error:'unknown_uuid' });
 
-    // paid: delivery.status=PAID OR an active subscription exists for this UUID-scoped user_id.
-    let paid = (d.status === 'PAID');
-    try {
-      const sub = db.prepare('SELECT status, ended_at, cancel_at, current_period_end FROM subscriptions WHERE user_id=? ORDER BY updated_at DESC LIMIT 1').get(uuid);
-      if (sub) {
-        const st = String(sub.status || '').toLowerCase();
-        const now = Date.now();
-        const endedAt = sub.ended_at ? Date.parse(sub.ended_at) : null;
-        const cancelAt = sub.cancel_at ? Date.parse(sub.cancel_at) : null;
-        const cpe = sub.current_period_end ? Date.parse(sub.current_period_end) : null;
-        const notEnded = !endedAt || endedAt > now;
-        const inPeriod = (cancelAt && cancelAt > now) || (cpe && cpe > now);
-        if (!paid && (st === 'active' || st === 'trialing') && notEnded && inPeriod) {
-          paid = true;
-        }
-      }
-    } catch {}
+    // IMPORTANT: this endpoint is consumed by the user-machine onboarding/autoreply plugin.
+    // If we misclassify a paid user as unpaid, the plugin will spam welcome_unpaid on every inbound message.
+    const paid = deliveryEntitled(db, d);
 
-    return send(res, 200, { ok:true, uuid, delivery_id: d.delivery_id, status: d.status, paid, wa_jid: d.wa_jid, bound_at: d.bound_at, user_lang: d.user_lang || null, updated_at: d.updated_at });
+    return send(res, 200, {
+      ok:true,
+      uuid,
+      delivery_id: d.delivery_id,
+      status: d.status,
+      paid,
+      wa_jid: d.wa_jid,
+      bound_at: d.bound_at,
+      user_lang: d.user_lang || null,
+      updated_at: d.updated_at
+    });
   } catch (e) {
     return send(res, 500, { ok:false, error:'server_error' });
   }
