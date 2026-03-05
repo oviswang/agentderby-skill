@@ -284,6 +284,28 @@
       const existing = params.get('uuid') || getUuidFromPath() || loadStoredUuid();
       setUuid(existing || uuidv4());
 
+      // Canonical URL: always prefer /p/<uuid> (or /<lang>/p/<uuid>) so downstream logic never depends on query form.
+      (function canonicalizeUrl(){
+        try {
+          const u = el.textContent;
+          if (!u) return;
+          const hasP = /^\/p\//.test(location.pathname) || /^\/[a-z]{2}(?:-[a-z]{2})?\/p\//i.test(location.pathname);
+          if (hasP) return;
+
+          const mLangRoot = location.pathname.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\/?$/i);
+          const langRoot = (mLangRoot && mLangRoot[1] && mLangRoot[1] !== 'api') ? mLangRoot[1] : null;
+
+          const q = new URLSearchParams(location.search);
+          q.delete('uuid');
+          q.delete('lang');
+          const qs = q.toString();
+
+          const targetPath = langRoot ? ('/' + langRoot + '/p/' + encodeURIComponent(u)) : ('/p/' + encodeURIComponent(u));
+          const target = targetPath + (qs ? ('?' + qs) : '');
+          location.replace(target);
+        } catch {}
+      })();
+
       async function fetchState(){
         try {
           const u = el.textContent;
