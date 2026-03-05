@@ -41,6 +41,8 @@ const QR_PARSE_INTERVAL_MS = parseInt(process.env.PROVISION_QR_PARSE_INTERVAL_MS
 // Session lifecycle control (prevents stale sessions causing endless polling / high CPU).
 const SESSION_IDLE_TTL_MS = parseInt(process.env.PROVISION_SESSION_IDLE_TTL_MS || String(15 * 60 * 1000), 10); // default 15m
 const STATUS_POLL_WINDOW_MS = parseInt(process.env.PROVISION_STATUS_POLL_WINDOW_MS || String(10 * 60 * 1000), 10); // default 10m
+// Reduce CPU impact: `openclaw channels status` can be expensive. Default to a gentler polling cadence.
+const STATUS_POLL_INTERVAL_MS = parseInt(process.env.PROVISION_STATUS_POLL_INTERVAL_MS || String(8000), 10); // default 8s
 
 function nowIso(){ return new Date().toISOString(); }
 
@@ -492,7 +494,7 @@ setInterval(() => {
       try { pollStatus(uuid); } catch {}
     }
   }
-}, 2500);
+}, STATUS_POLL_INTERVAL_MS);
 
 // Cleanup idle sessions to avoid memory/process buildup on machines that receive repeated /wa/start.
 setInterval(() => {
