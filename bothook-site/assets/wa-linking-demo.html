@@ -16,6 +16,9 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI"
 .wa-stage{ padding:14px 16px 16px; }
 .caption{ display:flex; gap:10px; align-items:flex-start; margin-top:10px; color:var(--muted); font-size:13px; line-height:1.5; }
 .badge{ flex:0 0 auto; width:26px;height:26px;border-radius:8px; background:rgba(37,211,102,.12); display:flex;align-items:center;justify-content:center; color:var(--wa-green); font-weight:800; font-size:13px; }
+.steps{ display:flex; flex-direction:column; gap:6px; }
+.step{ display:flex; gap:10px; align-items:flex-start; }
+.step .badge{ width:22px; height:22px; border-radius:7px; font-size:12px; }
 @media (max-width:520px){
   .wa-header{padding:14px 14px}
   .wa-stage{padding:12px 12px 14px}
@@ -174,8 +177,11 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI"
     </svg>
 
     <div class="caption">
-      <div class="badge">1</div>
-      <div data-i18n="caption">1 Open WhatsApp → Linked Devices<br>2 Scan this QR<br>3 Your AI assistant will appear in chat</div>
+      <div class="steps" data-i18n="caption">
+        <div class="step"><span class="badge">1</span><span>Open WhatsApp → Linked Devices</span></div>
+        <div class="step"><span class="badge">2</span><span>Scan this QR</span></div>
+        <div class="step"><span class="badge">3</span><span>Your AI assistant will appear in chat</span></div>
+      </div>
     </div>
   </div>
 </div>
@@ -202,7 +208,7 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI"
       domain: 'p.bothook.me',
       scanHint: 'Scan the QR code on the screen',
       phoneHint: 'Point your phone at the QR code',
-      caption: '1 Open WhatsApp → Linked Devices<br>2 Scan this QR<br>3 Your AI assistant will appear in chat',
+      caption: '<div class="step"><span class="badge">1</span><span>Open WhatsApp → Linked Devices</span></div><div class="step"><span class="badge">2</span><span>Scan this QR</span></div><div class="step"><span class="badge">3</span><span>Your AI assistant will appear in chat</span></div>',
       aria: 'WhatsApp device linking demo: a desktop shows a QR code, a phone scans it, then a checkmark appears.'
     },
     zh: {
