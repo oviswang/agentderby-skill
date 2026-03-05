@@ -699,6 +699,13 @@
             getQrBtn.disabled = true;
             restartBtn.style.display = 'inline-block';
             restartBtn.disabled = false;
+            // UX: auto-trigger a single restart so users don't have to click Retry manually.
+            try {
+              if (!window.__bothook_autoRestarted) {
+                window.__bothook_autoRestarted = true;
+                restartBtn.click();
+              }
+            } catch {}
             return;
           }
         } catch {}
