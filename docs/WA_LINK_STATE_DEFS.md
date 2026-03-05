@@ -18,6 +18,11 @@ Operational definition (control-plane DB):
 
 > Note: do **not** rely on `deliveries.status` alone for this decision.
 > We have observed cases where status becomes `PAYMENT_TIMEOUT` (or similar) **after** a successful WhatsApp bind, i.e. `wa_jid` exists.
+>
+> Watchdog timeouts write additional details to `deliveries.meta_json`:
+> - `timeout_stage`: `PRE_BIND` | `POST_BIND`
+> - `timeout_stage_detail`: policy stage label (e.g. `HARD_UNPAID_20M`)
+> - `reclaim_plan`: `release_only` | `reimage_and_init`
 
 ## Responsibilities (control-plane vs user machine)
 

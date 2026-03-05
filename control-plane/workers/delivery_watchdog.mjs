@@ -353,18 +353,36 @@ async function main() {
     sanitize = { ok:false, error:'wa_sanitize_call_failed' };
   }
 
-  // Enqueue pool reimage+init so the instance truly returns to READY.
+  // Decide reclaim plan based on whether WhatsApp is already bound.
+  // - PRE_BIND: user never linked → release_only (avoid expensive reimage)
+  // - POST_BIND: already linked → reimage_and_init (return to clean pool)
+  const timeoutStage = chosen.bound_at ? 'POST_BIND' : 'PRE_BIND';
+  const reclaimPlan = timeoutStage === 'PRE_BIND' ? 'release_only' : 'reimage_and_init';
+
+  // Enqueue pool reimage+init only when needed.
   let initJob = null;
-  try {
-    initJob = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'reimage_and_init' });
-  } catch {
-    initJob = { ok:false, error:'pool_init_call_failed' };
+  if (reclaimPlan === 'reimage_and_init') {
+    try {
+      initJob = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'reimage_and_init' });
+    } catch {
+      initJob = { ok:false, error:'pool_init_call_failed' };
+    }
   }
 
   db.exec('BEGIN IMMEDIATE');
   try {
     db.prepare('UPDATE deliveries SET status=?, instance_id=NULL, updated_at=?, meta_json=? WHERE delivery_id=?')
-      .run('PAYMENT_TIMEOUT', ts, mergeMeta(chosen.delivery_meta, { timeout_stage: stage, timeout_at: ts, reclaim_plan: 'reimage_and_init' }), delivery_id);
+      .run(
+        'PAYMENT_TIMEOUT',
+        ts,
+        mergeMeta(chosen.delivery_meta, {
+          timeout_stage: timeoutStage,
+          timeout_stage_detail: stage,
+          timeout_at: ts,
+          reclaim_plan: reclaimPlan
+        }),
+        delivery_id
+      );
 
     db.prepare(
       `UPDATE instances
@@ -375,18 +393,34 @@ async function main() {
               assigned_at=NULL,
               meta_json=?
         WHERE instance_id=?`
-    ).run(mergeMeta(chosen.instance_meta, { released_by: 'delivery_watchdog', released_at: ts, timeout_stage: stage }), instance_id);
+    ).run(
+      mergeMeta(chosen.instance_meta, {
+        released_by: 'delivery_watchdog',
+        released_at: ts,
+        timeout_stage: timeoutStage,
+        timeout_stage_detail: stage,
+        reclaim_plan: reclaimPlan
+      }),
+      instance_id
+    );
 
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-      .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_HARD_UNPAID_RECLAIM', JSON.stringify({ instance_id, sanitize, initJob }));
+      .run(
+        crypto.randomUUID(),
+        ts,
+        'delivery',
+        delivery_id,
+        'DELIVERY_HARD_UNPAID_RECLAIM',
+        JSON.stringify({ instance_id, timeoutStage, reclaimPlan, sanitize, initJob })
+      );
     db.exec('COMMIT');
   } catch (e) {
     try { db.exec('ROLLBACK'); } catch {}
     throw e;
   }
 
-  tgSend(`[bothook][watchdog] hard reclaim (unpaid>=20m): released + init(enqueued) instance=${instance_id} delivery=${delivery_id}`);
-  console.log(JSON.stringify({ ok:true, ts, action:'hard_reclaim_unpaid', stage, instance_id, delivery_id, sanitize, initJob }, null, 2));
+  tgSend(`[bothook][watchdog] hard reclaim (unpaid>=20m): released plan=${reclaimPlan} stage=${timeoutStage} instance=${instance_id} delivery=${delivery_id}`);
+  console.log(JSON.stringify({ ok:true, ts, action:'hard_reclaim_unpaid', stage, timeoutStage, reclaimPlan, instance_id, delivery_id, sanitize, initJob }, null, 2));
 }
 
 main();
