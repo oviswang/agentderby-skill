@@ -212,8 +212,8 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI"
       aria: 'WhatsApp device linking demo: a desktop shows a QR code, a phone scans it, then a checkmark appears.'
     },
     zh: {
-      title: '关联设备',
-      subtitle: '扫描二维码以连接',
+      title: '如何关联设备？',
+      subtitle: '',
       domain: 'p.bothook.me',
       scanHint: '扫描屏幕上的二维码',
       phoneHint: '用手机对准二维码',
@@ -355,6 +355,12 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI"
     // caption contains markup, so use innerHTML
     el.innerHTML = t[key] ?? el.innerHTML;
   });
+
+  // If subtitle is empty for a language, hide it to avoid awkward blank spacing.
+  try {
+    const subEl = document.querySelector('[data-i18n="subtitle"]');
+    if (subEl && !(String(t.subtitle || '')).trim()) subEl.style.display = 'none';
+  } catch {}
 
   document.querySelectorAll('[data-i18n-svg]').forEach(el => {
     const key = el.getAttribute('data-i18n-svg');
