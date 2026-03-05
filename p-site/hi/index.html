@@ -636,17 +636,22 @@
 
       async function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
-      async function startProvision(uuid, force=false){
-        // Notify control-plane: QR generated (starts 5-min A-stage window)
+      // Notify control-plane ONLY after QR is actually rendered (prevents expiry before user sees it).
+      let qrGeneratedNotified = false;
+      async function notifyQrGenerated(uuid){
+        if (qrGeneratedNotified) return;
+        qrGeneratedNotified = true;
         try {
           const lang = (new URLSearchParams(location.search).get('lang') || '').trim() || (location.pathname.startsWith('/zh-tw') ? 'zh-tw' : (location.pathname.startsWith('/zh') ? 'zh' : 'en'));
-
           await fetch('/api/ops/qr-generated', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ uuid, lang })
           });
         } catch {}
+      }
+
+      async function startProvision(uuid, force=false){
 
         const r = await fetch('/api/wa/start', {
           method: 'POST',
@@ -850,6 +855,7 @@
               if (q.qrDataUrl) {
                 await renderPngDataUrlToCanvas(q.qrDataUrl, canvas);
                 hadQr = true;
+                await notifyQrGenerated(uuid);
                 {
                   const s = window.__bothook_i18n || {};
                   qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
@@ -859,6 +865,7 @@
               if (q.qrText) {
                 renderAsciiQrToCanvas(q.qrText, canvas);
                 hadQr = true;
+                await notifyQrGenerated(uuid);
                 {
                   const s = window.__bothook_i18n || {};
                   qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
@@ -885,6 +892,7 @@
                 lastQr = q.qrDataUrl;
                 await renderPngDataUrlToCanvas(q.qrDataUrl, canvas);
                 hadQr = true;
+                await notifyQrGenerated(uuid);
                 {
                   const s = window.__bothook_i18n || {};
                   qrStatus.textContent = s.qrReady || 'QR ready. Scan it in WhatsApp → Linked devices.';
