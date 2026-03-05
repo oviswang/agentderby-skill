@@ -50,7 +50,7 @@
   "closePageHint": "你可以关闭此页面。以后需要 relink 时，打开你保存的交付链接即可。",
   "nextStepTitle": "下一步",
   "afterScanningHint": "扫码成功后，本页面会自动确认设备已连接。",
-  "deliveryLinkTitle": "你的交付链接（请保存）",
+  "deliveryLinkTitle": "",
   "paidTitle": "订阅状态",
   "paidActiveLine": "✅ 订阅已激活",
   "paidHint": "你可以在这里重新关联 WhatsApp 设备（Relink）。如需取消订阅/更换支付方式等操作，请提交客服表单（邮箱 + WhatsApp 手机号 + UUID/交付链接），我们会通过邮件协助。",
