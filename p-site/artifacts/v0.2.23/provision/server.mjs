@@ -38,6 +38,10 @@ const OPENCLAW_CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH || path.join(OPENC
 const LOGIN_DEDUP_MS = parseInt(process.env.PROVISION_LOGIN_DEDUP_MS || '15000', 10);
 const QR_PARSE_INTERVAL_MS = parseInt(process.env.PROVISION_QR_PARSE_INTERVAL_MS || '1500', 10);
 
+// Session lifecycle control (prevents stale sessions causing endless polling / high CPU).
+const SESSION_IDLE_TTL_MS = parseInt(process.env.PROVISION_SESSION_IDLE_TTL_MS || String(15 * 60 * 1000), 10); // default 15m
+const STATUS_POLL_WINDOW_MS = parseInt(process.env.PROVISION_STATUS_POLL_WINDOW_MS || String(10 * 60 * 1000), 10); // default 10m
+
 function nowIso(){ return new Date().toISOString(); }
 
 function safeUuid(s) {
@@ -280,9 +284,17 @@ function ensureSession(uuid){
       _logPath: null,
       loginMode: null,
       lastStartAt: null,
+      lastApiAt: null,
+      _pollUntil: 0,
     };
     sessions.set(uuid, s);
   }
+  return s;
+}
+
+function touchSession(uuid){
+  const s = ensureSession(uuid);
+  s.lastApiAt = nowIso();
   return s;
 }
 
@@ -373,6 +385,7 @@ function startLogin(uuid, { force=false } = {}){
   // Record session info for observability.
   s.loginMode = 'tmux';
   s.lastStartAt = nowIso();
+  s._pollUntil = Date.now() + STATUS_POLL_WINDOW_MS;
   s._tmuxSession = tr.session;
   s._tmuxReused = Boolean(tr.reused);
 
@@ -456,6 +469,9 @@ function pollStatus(uuid){
   s.lastStatusRaw = st.raw;
   s.lastStatusAt = nowIso();
   if (s.status) {
+    // Stop status polling once connected.
+    s._pollUntil = 0;
+
     // Once connected, gateway can be started.
     startGateway();
     // Autoresponder/onboarding: do NOT send welcome from user-machine by default.
@@ -468,13 +484,28 @@ function pollStatus(uuid){
 }
 
 setInterval(() => {
-  // poll status for active sessions only
+  // Poll status only during a bounded window after /wa/start.
+  // This prevents stale sessions from causing endless `openclaw channels status` spawning.
+  const now = Date.now();
   for (const [uuid, s] of sessions.entries()) {
-    if (s.pty || s.lastQrDataUrl) {
+    if (s._pollUntil && now < s._pollUntil) {
       try { pollStatus(uuid); } catch {}
     }
   }
 }, 2500);
+
+// Cleanup idle sessions to avoid memory/process buildup on machines that receive repeated /wa/start.
+setInterval(() => {
+  const now = Date.now();
+  for (const [uuid, s] of sessions.entries()) {
+    const lastApiMs = s.lastApiAt ? Date.parse(String(s.lastApiAt)) : NaN;
+    const idleMs = Number.isFinite(lastApiMs) ? (now - lastApiMs) : Infinity;
+    if (idleMs > SESSION_IDLE_TTL_MS) {
+      try { tmuxKillSession(`wa-${uuid}`); } catch {}
+      sessions.delete(uuid);
+    }
+  }
+}, 60 * 1000);
 
 // Parse latest QR from terminal output at a fixed interval to avoid event-loop stalls.
 setInterval(() => {
@@ -518,6 +549,8 @@ app.post('/api/wa/start', async (req, res) => {
     if (!uuid) return res.status(400).json({ ok:false, error:'uuid_required' });
     const force = Boolean(req.body?.force);
 
+    touchSession(uuid);
+
     console.log(`[bothook-provision] wa.start uuid=${uuid} force=${force}`);
 
     // Respond immediately; login work happens in background.
@@ -542,7 +575,7 @@ app.get('/api/wa/qr', async (req, res) => {
     const uuid = safeUuid(req.query?.uuid);
     if (!uuid) return res.status(400).json({ ok:false, error:'uuid_required' });
 
-    const s = ensureSession(uuid);
+    const s = touchSession(uuid);
 
     // If the interval parser hasn't produced a QR yet, parse on-demand.
     // This makes the UI more responsive and resilient under load.
@@ -596,7 +629,7 @@ app.get('/api/wa/status', async (req, res) => {
     const uuid = safeUuid(req.query?.uuid);
     if (!uuid) return res.status(400).json({ ok:false, error:'uuid_required' });
 
-    const s = ensureSession(uuid);
+    const s = touchSession(uuid);
     return res.json({
       ok:true,
       uuid,
