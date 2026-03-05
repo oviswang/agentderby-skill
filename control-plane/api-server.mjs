@@ -717,7 +717,8 @@ function getInstanceById(db, instance_id) {
 function sh(cmd, { timeoutMs = 12000 } = {}) {
   const res = spawnSync('bash', ['-lc', cmd], {
     encoding: 'utf8',
-    maxBuffer: 5 * 1024 * 1024,
+    // NOTE: QR PNG data URLs can exceed a few MB; keep buffer large to avoid silent truncation.
+    maxBuffer: 25 * 1024 * 1024,
     timeout: timeoutMs,
     env: { ...process.env }
   });
