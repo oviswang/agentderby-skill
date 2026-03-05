@@ -3062,7 +3062,7 @@ app.post('/api/wa/start', async (req, res) => {
 
 
       // Retry QR fetch once after attempting to start provision.
-      const rr2 = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, { method: 'GET', timeoutMs: 8000 });
+      const rr2 = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, { method: 'GET', timeoutMs: 20000 });
       if (rr2.ok && rr2.json) {
         const payload = {
           ok: true,
@@ -3230,7 +3230,8 @@ app.get('/api/wa/qr', async (req, res) => {
     let lastProvisionKick = null;
     const rr = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, {
       method: 'GET',
-      timeoutMs: 8000,
+      // SSH + curl can occasionally exceed a few seconds due to banner exchange / jitter.
+      timeoutMs: 20000,
     });
 
     // Self-heal: if provision server is down, try to start it and retry once.
@@ -3253,7 +3254,7 @@ app.get('/api/wa/qr', async (req, res) => {
         lastProvisionKick = { code: 255, stdout: '', stderr: 'poolSsh_throw' };
       }
 
-      const rr2 = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, { method: 'GET', timeoutMs: 8000 });
+      const rr2 = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, { method: 'GET', timeoutMs: 20000 });
       if (rr2.ok && rr2.json) {
         const payload = {
           ok: true,
