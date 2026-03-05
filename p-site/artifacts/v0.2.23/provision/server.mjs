@@ -487,12 +487,16 @@ function pollStatus(uuid){
 
 setInterval(() => {
   // Poll status only during a bounded window after /wa/start.
-  // This prevents stale sessions from causing endless `openclaw channels status` spawning.
+  // Additional guard: only poll when there was recent API activity (UI is actively checking).
+  // This prevents background polling from burning CPU when nobody is looking.
   const now = Date.now();
+  const ACTIVE_WINDOW_MS = parseInt(process.env.PROVISION_STATUS_ACTIVE_WINDOW_MS || String(60 * 1000), 10); // default 60s
   for (const [uuid, s] of sessions.entries()) {
-    if (s._pollUntil && now < s._pollUntil) {
-      try { pollStatus(uuid); } catch {}
-    }
+    if (!(s._pollUntil && now < s._pollUntil)) continue;
+    const lastApiMs = s.lastApiAt ? Date.parse(String(s.lastApiAt)) : NaN;
+    const active = Number.isFinite(lastApiMs) ? (now - lastApiMs) <= ACTIVE_WINDOW_MS : false;
+    if (!active) continue;
+    try { pollStatus(uuid); } catch {}
   }
 }, STATUS_POLL_INTERVAL_MS);
 
