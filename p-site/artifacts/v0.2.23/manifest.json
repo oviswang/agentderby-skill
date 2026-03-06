@@ -8,8 +8,8 @@
     },
     {
       "path": "bootstrap.sh",
-      "sha256": "06333619554d4f7cc83a974373595e8927f343fb6ab525e5ef7356ed24686530",
-      "bytes": 22168
+      "sha256": "37d0c2f2090d5c4888c91c561e2891c52d42df92ee13cb5a38617450fd4631bb",
+      "bytes": 22072
     },
     {
       "path": "hooks/bothook-onboarding/handler.ts",

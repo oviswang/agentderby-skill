@@ -213,7 +213,6 @@ main(){
   # Fetch watchdog script (verified)
   fetch_verified "scripts/openclaw_watchdog.sh" "$INSTALL_DIR/bin/openclaw_watchdog.sh" "$INSTALL_DIR/artifacts/sha256sums.txt"
   chmod +x "$INSTALL_DIR/bin/openclaw_watchdog.sh"
-  install -m 0755 "$INSTALL_DIR/bin/openclaw_watchdog.sh" /opt/bothook/bin/openclaw_watchdog.sh
 
   # Fetch units (verified)
   fetch_verified "systemd/openclaw-gateway.service" "$INSTALL_DIR/artifacts/openclaw-gateway.service" "$INSTALL_DIR/artifacts/sha256sums.txt"
