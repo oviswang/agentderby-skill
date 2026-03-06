@@ -21,7 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { Worker } from 'node:worker_threads';
 
 import express from 'express';
@@ -134,15 +134,41 @@ function tmuxStartLoginSession(uuid, { force=false } = {}){
   return { ok:true, session, reused:false };
 }
 
-function tmuxCaptureTail(uuid, lines=320){
+function tmuxCaptureTailAsync(uuid, lines=320){
   const session = `wa-${uuid}`;
-  // Use capture-pane output directly.
-  // NOTE: `tmux show-buffer` requires a prior `tmux save-buffer`; the previous implementation
-  // could return empty output and prevent QR parsing.
-  // Keep this tight: spawnSync blocks the Node event loop and can stall HTTP handlers.
-  const r = sh(`tmux capture-pane -pt ${JSON.stringify(session)} -S -${lines} 2>/dev/null`, { timeoutMs: 800 });
-  if (r.code !== 0) return '';
-  return r.stdout || '';
+
+  // IMPORTANT: do NOT use spawnSync here; it can stall all HTTP handlers.
+  // Use async spawn with a tight timeout and drop output if slow.
+  return new Promise((resolve) => {
+    const baseEnv = { ...process.env };
+    baseEnv.PATH = baseEnv.PATH || '';
+    if (!baseEnv.PATH.includes('/home/ubuntu/.npm-global/bin')) {
+      baseEnv.PATH = `/home/ubuntu/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${baseEnv.PATH}`;
+    }
+
+    const cmd = `tmux capture-pane -pt ${JSON.stringify(session)} -S -${lines} 2>/dev/null`;
+    const child = spawn('bash', ['-lc', cmd], {
+      env: { ...baseEnv, HOME: OPENCLAW_HOME, OPENCLAW_STATE_DIR },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (d) => { out += d.toString('utf8'); });
+    child.stderr.on('data', (d) => { err += d.toString('utf8'); });
+
+    const t = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch {}
+      resolve('');
+    }, 900);
+
+    child.on('close', (code) => {
+      clearTimeout(t);
+      if (code === 0) return resolve(out || '');
+      // best-effort: keep silent; this is a polling path.
+      resolve('');
+    });
+  });
 }
 
 function stripAnsi(s){
@@ -297,6 +323,7 @@ function ensureSession(uuid){
       _startInFlight: false,
       _startCooldownUntil: 0,
       _lastStartRequestedAt: 0,
+      _captureInFlight: false,
     };
     sessions.set(uuid, s);
   }
@@ -500,27 +527,35 @@ setInterval(() => {
     if (s.loginMode !== 'tmux') continue;
 
     try {
-      const text = tmuxCaptureTail(uuid, 420);
-      if (!text) continue;
+      if (s._captureInFlight) continue;
+      s._captureInFlight = true;
 
-      const tailLines = stripAnsi(text).split(/\r?\n/).slice(-340);
-      const blocks = extractQrBlocksFromLines(tailLines);
-      if (!blocks.length) continue;
+      tmuxCaptureTailAsync(uuid, 420).then((text) => {
+        if (!text) return;
 
-      const last = blocks[blocks.length - 1];
-      const h = crypto.createHash('sha1').update(last.join('\n')).digest('hex');
-      if (s._lastQrHash === h) continue;
-      s._lastQrHash = h;
+        const tailLines = stripAnsi(text).split(/\r?\n/).slice(-340);
+        const blocks = extractQrBlocksFromLines(tailLines);
+        if (!blocks.length) return;
 
-      // Generate PNG in a worker (avoid blocking the HTTP server event loop).
-      if (s._pendingQr) continue;
-      s._pendingQr = true;
-      try {
-        qrWorker.postMessage({ uuid, hash: h, lines: last, scale: 2, border: 1 });
-      } catch (e) {
-        s._pendingQr = false;
+        const last = blocks[blocks.length - 1];
+        const h = crypto.createHash('sha1').update(last.join('\n')).digest('hex');
+        if (s._lastQrHash === h) return;
+        s._lastQrHash = h;
+
+        // Generate PNG in a worker (avoid blocking the HTTP server event loop).
+        if (s._pendingQr) return;
+        s._pendingQr = true;
+        try {
+          qrWorker.postMessage({ uuid, hash: h, lines: last, scale: 2, border: 1 });
+        } catch (e) {
+          s._pendingQr = false;
+          s.lastError = s.lastError || String(e?.message || e);
+        }
+      }).catch((e) => {
         s.lastError = s.lastError || String(e?.message || e);
-      }
+      }).finally(() => {
+        s._captureInFlight = false;
+      });
     } catch (e) {
       s.lastError = s.lastError || String(e?.message || e);
     }
