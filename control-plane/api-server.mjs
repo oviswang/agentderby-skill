@@ -348,7 +348,7 @@ function parseChannelsStatusJson(text) {
 
 // (normalizeWaBase already defined above)
 
-function probeInstanceWhatsappClean(db, instance) {
+function probeInstanceWhatsappClean(db, instance, { timeoutMs = 3500 } = {}) {
   // A-mode strict gate: pool instances must be WhatsApp-unlinked before allocation.
   // Returns { ok, clean, linked, connected, selfJid, detail }
   const cmd = `set -euo pipefail; `
@@ -357,7 +357,8 @@ function probeInstanceWhatsappClean(db, instance) {
     + `sleep 1; `
     + `openclaw channels status --json 2>/dev/null || openclaw channels status`;
 
-  const r = poolSsh(instance, cmd, { timeoutMs: 12000, tty: false, retries: 1 });
+  // Fail-fast: do NOT let web handlers block on slow/overloaded instances.
+  const r = poolSsh(instance, cmd, { timeoutMs, tty: false, retries: 0, profile: 'fast' });
   const text = (r.stdout || r.stderr || '').trim();
   const parsed = parseChannelsStatusJson(text);
 
@@ -378,16 +379,17 @@ function probeInstanceWhatsappClean(db, instance) {
 
   const clean = !linked; // strict
   const ts = nowIso();
+  const evidence = JSON.stringify({ linked, connected, selfJid, via: 'probeInstanceWhatsappClean' });
   try {
     db.prepare('UPDATE instances SET last_probe_at=? WHERE instance_id=?').run(ts, instance.instance_id);
     if (clean) {
       db.prepare(
         'UPDATE instances SET health_status=?, last_ok_at=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
-      ).run('READY', ts, 'whatsapp_unlinked', 'probe_pull', detail, instance.instance_id);
+      ).run('READY', ts, 'whatsapp_unlinked', 'probe_pull', evidence, instance.instance_id);
     } else {
       db.prepare(
         'UPDATE instances SET health_status=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
-      ).run('DIRTY', 'whatsapp_linked', 'probe_pull', detail, instance.instance_id);
+      ).run('DIRTY', 'whatsapp_linked', 'probe_pull', evidence, instance.instance_id);
     }
   } catch {}
 
@@ -535,6 +537,28 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
     }
 
     return updated;
+  }
+
+  // Allocation is triggered explicitly by user action (/api/wa/start). Do NOT allocate here.
+  // This keeps /api/p/state and simple page visits fast and prevents control-plane hangs.
+  {
+    const delivery_id = crypto.randomUUID();
+    const ts = nowIso();
+    db.prepare(`
+      INSERT INTO deliveries(delivery_id, order_id, user_id, instance_id, status, provision_uuid, created_at, updated_at, meta_json)
+      VALUES (?,?,?,?,?,?,?,?,?)
+    `).run(
+      delivery_id,
+      null,
+      uuid,
+      null,
+      'NEW',
+      uuid,
+      ts,
+      ts,
+      JSON.stringify({ allocated_from: null, note: 'created_without_allocation; allocate on /api/wa/start' })
+    );
+    return db.prepare('SELECT * FROM deliveries WHERE delivery_id=?').get(delivery_id);
   }
 
   // A-mode strict allocation: choose only pool instances and reserve exclusively.
@@ -700,7 +724,8 @@ function writeUuidStateFilesOnInstance(instance, { uuid, lang } = {}) {
       + `sudo chmod 664 /opt/bothook/state.json || true; `
       + `echo ok`;
 
-    poolSsh(instance, remote, { timeoutMs: 12000, tty: false, retries: 1 });
+    // Fail-fast: this is best-effort metadata, never block user flows on slow SSH.
+    poolSsh(instance, remote, { timeoutMs: 1800, tty: false, retries: 0, profile: 'fast' });
   } catch {}
 }
 
@@ -2781,11 +2806,16 @@ app.post('/api/wa/start', async (req, res) => {
         FROM instances
         WHERE public_ip IS NOT NULL AND public_ip != ''
           AND lifecycle_status='IN_POOL'
+          AND health_status='READY'
         ORDER BY created_at ASC
         LIMIT 50
       `).all();
 
-      const provisionReady = candidates.filter((i) => (jsonMeta(i.meta_json) || {}).provision_ready === true);
+      const provisionReady = candidates.filter((i) => {
+        const meta = (jsonMeta(i.meta_json) || {});
+        // Back-compat: older pool init sets init_state=INIT_DONE but not provision_ready.
+        return meta.provision_ready === true || String(meta.init_state || '') === 'INIT_DONE';
+      });
       if (!provisionReady.length) {
         return send(res, 503, { ok:false, error:'no_provision_ready_instances' });
       }
@@ -2794,9 +2824,15 @@ app.post('/api/wa/start', async (req, res) => {
       const conflictFree = provisionReady.filter((c) => !hasOtherActiveDeliveriesOnInstance(db, c.instance_id, uuid).length);
 
       let chosen = null;
+      // Fail-fast: never let /api/wa/start spend unbounded time probing instances.
+      // We cap probes and use a short SSH timeout to avoid control-plane hangs.
+      const PROBE_LIMIT = parseInt(process.env.BOTHOOK_WA_START_PROBE_LIMIT || '2', 10);
+      let probed = 0;
       for (const c of conflictFree) {
+        if (probed >= PROBE_LIMIT) break;
         const inst = getInstanceById(db, c.instance_id);
-        const probe = probeInstanceWhatsappClean(db, inst);
+        const probe = probeInstanceWhatsappClean(db, inst, { timeoutMs: 2500 });
+        probed++;
         if (probe.clean) { chosen = inst; break; }
       }
       if (!chosen) {
@@ -3032,6 +3068,28 @@ app.post('/api/wa/start', async (req, res) => {
         return send(res, 502, { ok: false, error: 'provision_start_failed' });
       }
     }
+    // For first-link (force=false), do NOT block the web request on slow SSH/remote provision.
+    // Kick the start in background and let the frontend poll /api/wa/qr + /api/wa/status.
+    if (!force) {
+      Promise.resolve().then(() => poolFetch(instance, startPath, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+        timeoutMs: 8000,
+      })).catch(() => {});
+
+      try { startWelcomeWatch(uuid); } catch {}
+
+      return send(res, 200, {
+        ok: true,
+        uuid,
+        instance_id: instance.instance_id,
+        status: 'starting',
+        queued: true,
+        mode: 'user_machine_provision',
+      });
+    }
+
     const rr = await poolFetch(instance, startPath, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
