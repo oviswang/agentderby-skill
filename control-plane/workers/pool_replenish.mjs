@@ -28,12 +28,12 @@ const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || 'lhbp-1l4ptuvm'
 
 // Region selection policy:
 // - BOTHOOK_POOL_REGIONS=auto_non_cn (default): discover all Lighthouse regions and exclude China regions.
-// - BOTHOOK_POOL_REGIONS=<comma-separated>: only consider these regions.
+// - BOTHOOK_POOL_REGIONS=<region> OR <comma-separated>: only consider these regions.
 // - BOTHOOK_POOL_REGIONS=single: use DEFAULT_REGION only.
 const POOL_REGIONS_MODE = String(process.env.BOTHOOK_POOL_REGIONS || 'auto_non_cn').trim();
-const POOL_REGIONS_EXPLICIT = POOL_REGIONS_MODE.includes(',')
-  ? POOL_REGIONS_MODE.split(',').map(s=>s.trim()).filter(Boolean)
-  : [];
+const POOL_REGIONS_EXPLICIT = (!POOL_REGIONS_MODE || ['auto_non_cn','single'].includes(POOL_REGIONS_MODE))
+  ? []
+  : POOL_REGIONS_MODE.split(',').map(s=>s.trim()).filter(Boolean);
 const REGION_CACHE_PATH = process.env.BOTHOOK_POOL_REGION_CACHE_PATH || '/tmp/bothook_region_cache.json';
 const REGION_CACHE_TTL_MS = parseInt(process.env.BOTHOOK_POOL_REGION_CACHE_TTL_MS || String(6*60*60*1000), 10);
 
