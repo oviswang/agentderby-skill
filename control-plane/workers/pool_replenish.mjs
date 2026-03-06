@@ -26,6 +26,11 @@ const DEFAULT_REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
 const API_VERSION = process.env.BOTHOOK_CLOUD_API_VERSION || '2020-03-24';
 const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || 'lhbp-1l4ptuvm';
 
+// Cross-region compatibility
+const POOL_KEY_NAME = process.env.BOTHOOK_POOL_KEY_NAME || 'bothook_pool_key';
+const POOL_SSH_PUB_PATH = process.env.BOTHOOK_POOL_SSH_PUB_PATH || '/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519.pub';
+const DRY_RUN = String(process.env.BOTHOOK_POOL_REPLENISH_DRY_RUN || '') === '1';
+
 // Region selection policy:
 // - BOTHOOK_POOL_REGIONS=auto_non_cn (default): discover all Lighthouse regions and exclude China regions.
 // - BOTHOOK_POOL_REGIONS=<region> OR <comma-separated>: only consider these regions.
@@ -113,6 +118,124 @@ function tgSend(text) {
     sh(`curl -s -X POST https://api.telegram.org/bot${token}/sendMessage -d chat_id=${chatId} -d text=${JSON.stringify(text)} >/dev/null`);
     return { ok:true };
   } catch { return { ok:false, error:'telegram_send_failed' }; }
+}
+
+// Map bundle type → quota bucket name for DescribeGeneralResourceQuotas
+function quotaResourceNameForBundleType(bundleType) {
+  const t = String(bundleType || '').trim();
+  const m = {
+    GENERAL_BUNDLE: 'GENERAL_BUNDLE_INSTANCE',
+    STARTER_BUNDLE: 'STARTER_BUNDLE_INSTANCE',
+    ECONOMY_BUNDLE: 'ECONOMY_BUNDLE_INSTANCE',
+    BUDGET_BUNDLE: 'BUDGET_BUNDLE_INSTANCE',
+    BANDWIDTH_BUNDLE: 'BANDWIDTH_BUNDLE_INSTANCE',
+    RAZOR_SPEED_BUNDLE: 'RAZOR_SPEED_BUNDLE_INSTANCE',
+    EXCLUSIVE_BUNDLE_02: 'EXCLUSIVE_BUNDLE_02_INSTANCE',
+    EXCLUSIVE_BUNDLE: 'EXCLUSIVE_BUNDLE_INSTANCE',
+    HK_EXCLUSIVE_BUNDLE: 'HK_EXCLUSIVE_BUNDLE_INSTANCE',
+    CAREFREE_BUNDLE: 'CAREFREE_BUNDLE_INSTANCE',
+    NEWCOMER_BUNDLE: 'NEWCOMER_BUNDLE_INSTANCE',
+  };
+  return m[t] || null;
+}
+
+const _quotaCache = new Map(); // key: `${region}:${resourceName}` -> { tsMs, avail, total }
+function getQuota(region, resourceName) {
+  const key = `${region}:${resourceName}`;
+  const hit = _quotaCache.get(key);
+  if (hit && (Date.now() - hit.tsMs) < 60_000) return hit;
+
+  const txt = tccli(`tccli lighthouse DescribeGeneralResourceQuotas --region ${region} --version ${API_VERSION} --ResourceNames '["${resourceName}"]' --output json`);
+  const j = JSON.parse(txt);
+  const row = (j.GeneralResourceQuotaSet || [])[0] || null;
+  const out = {
+    tsMs: Date.now(),
+    avail: Number(row?.ResourceQuotaAvailable ?? 0),
+    total: Number(row?.ResourceQuotaTotal ?? 0),
+  };
+  _quotaCache.set(key, out);
+  return out;
+}
+
+const _keyByRegionCachePath = process.env.BOTHOOK_POOL_KEY_BY_REGION_CACHE_PATH || '/tmp/bothook_pool_key_by_region.json';
+function resolveOrImportKeyId(region) {
+  // Cache format: { ts, byRegion: { [region]: { keyName, keyId } } }
+  try {
+    const c = JSON.parse(fs.readFileSync(_keyByRegionCachePath, 'utf8'));
+    const e = c?.byRegion?.[region];
+    if (e?.keyName === POOL_KEY_NAME && e?.keyId) return String(e.keyId);
+  } catch {}
+
+  const listTxt = tccli(`tccli lighthouse DescribeKeyPairs --region ${region} --version ${API_VERSION} --output json`);
+  const list = JSON.parse(listTxt);
+  const ks = list.KeyPairSet || [];
+  const hit = ks.find(k => String(k?.KeyName || '') === POOL_KEY_NAME);
+  let keyId = hit?.KeyId ? String(hit.KeyId) : null;
+
+  if (!keyId) {
+    const pub = fs.readFileSync(POOL_SSH_PUB_PATH, 'utf8').trim();
+    const payload = { KeyName: POOL_KEY_NAME, PublicKey: pub };
+    const tmp = `/tmp/bothook_import_key_${region}_${Date.now()}.json`;
+    fs.writeFileSync(tmp, JSON.stringify(payload));
+    try {
+      const itxt = tccli(`tccli lighthouse ImportKeyPair --region ${region} --version ${API_VERSION} --cli-input-json file://${tmp} --output json`);
+      const ij = JSON.parse(itxt);
+      keyId = String(ij?.KeyId || '');
+    } finally {
+      try { fs.unlinkSync(tmp); } catch {}
+    }
+  }
+
+  if (!keyId) throw new Error(`resolve_key_id_failed region=${region} keyName=${POOL_KEY_NAME}`);
+
+  try {
+    const cur = (()=>{ try { return JSON.parse(fs.readFileSync(_keyByRegionCachePath,'utf8')); } catch { return {}; } })();
+    cur.ts = new Date().toISOString();
+    cur.byRegion = cur.byRegion || {};
+    cur.byRegion[region] = { keyName: POOL_KEY_NAME, keyId };
+    fs.writeFileSync(_keyByRegionCachePath, JSON.stringify(cur, null, 2));
+  } catch {}
+
+  return keyId;
+}
+
+const _blueprintCachePath = process.env.BOTHOOK_BLUEPRINT_BY_REGION_CACHE_PATH || '/tmp/bothook_blueprint_by_region.json';
+function pickUbuntuBlueprintId(region) {
+  try {
+    const c = JSON.parse(fs.readFileSync(_blueprintCachePath, 'utf8'));
+    const e = c?.byRegion?.[region];
+    if (e?.blueprintId) return String(e.blueprintId);
+  } catch {}
+
+  const txt = tccli(`tccli lighthouse DescribeBlueprints --region ${region} --version ${API_VERSION} --output json`);
+  const j = JSON.parse(txt);
+  const bs = j.BlueprintSet || [];
+  const cand = [];
+  for (const b of bs) {
+    const id = String(b?.BlueprintId || '').trim();
+    const name = String(b?.BlueprintName || '').trim();
+    const plat = String(b?.Platform || '').trim();
+    const btype = String(b?.BlueprintType || '').trim();
+    if (!id || !name) continue;
+    if (plat && plat !== 'LINUX') continue;
+    if (btype && btype !== 'PUBLIC_IMAGE') continue;
+    if (!/ubuntu/i.test(name)) continue;
+    cand.push({ id, name });
+  }
+  // Prefer newer Ubuntu versions by name; fallback first.
+  cand.sort((a,b)=> b.name.localeCompare(a.name));
+  const chosen = cand[0]?.id || null;
+  if (!chosen) return BLUEPRINT_ID; // fallback
+
+  try {
+    const cur = (()=>{ try { return JSON.parse(fs.readFileSync(_blueprintCachePath,'utf8')); } catch { return {}; } })();
+    cur.ts = new Date().toISOString();
+    cur.byRegion = cur.byRegion || {};
+    cur.byRegion[region] = { blueprintId: chosen, blueprintName: cand[0]?.name || null };
+    fs.writeFileSync(_blueprintCachePath, JSON.stringify(cur, null, 2));
+  } catch {}
+
+  return chosen;
 }
 
 function chooseZone() {
@@ -231,12 +354,13 @@ function pickCheapestBundlesDetailed(region) {
     const price = Number(b?.Price?.InstancePrice?.DiscountPrice ?? b?.Price?.InstancePrice?.OriginalPrice ?? NaN);
     const p = Number.isFinite(price) ? price : 1e18;
     if (Number.isFinite(MAX_PRICE_CNY) && p > MAX_PRICE_CNY) continue;
-    cand.push({ bundleId, cpu, mem, price: p });
+    const bundleType = String(b?.BundleType || '').trim() || null;
+    cand.push({ bundleId, cpu, mem, price: p, bundleType });
   }
 
   cand.sort((a,b)=> (a.price-b.price) || (a.cpu-b.cpu) || (a.mem-b.mem) || a.bundleId.localeCompare(b.bundleId));
 
-  const bundlesDetailed = cand.map(x => ({ bundleId: x.bundleId, price: x.price }));
+  const bundlesDetailed = cand.map(x => ({ bundleId: x.bundleId, price: x.price, bundleType: x.bundleType }));
   if (bundlesDetailed.length) setBundlesCache(region, bundlesDetailed);
   return bundlesDetailed;
 }
@@ -247,14 +371,25 @@ function pickCheapestBundleAcrossRegions(regions) {
     try {
       const detailed = pickCheapestBundlesDetailed(region);
       if (!detailed?.length) continue;
-      // cheapest first by construction
-      const first = detailed[0];
-      if (!first?.bundleId) continue;
-      out.push({ region, bundleId: first.bundleId, price: first.price });
+
+      // Pick the cheapest bundle in this region that also has quota available in its bucket.
+      let chosen = null;
+      for (const b of detailed.slice(0, 12)) {
+        if (!b?.bundleId) continue;
+        const resName = quotaResourceNameForBundleType(b.bundleType);
+        if (!resName) continue; // unknown bucket; skip (fail-closed)
+        const q = getQuota(region, resName);
+        if ((q?.avail ?? 0) > 0) {
+          chosen = { region, bundleId: b.bundleId, price: b.price, bundleType: b.bundleType, quota: { resourceName: resName, avail: q.avail, total: q.total } };
+          break;
+        }
+      }
+      if (chosen) out.push(chosen);
     } catch {
       // ignore region failures; keep going
     }
   }
+
   out.sort((a,b) => (Number(a.price||1e18) - Number(b.price||1e18)) || String(a.region).localeCompare(String(b.region)));
   return out[0] || null;
 }
@@ -412,19 +547,38 @@ function main() {
 
   const regions = pickCreateRegions();
   const pick = pickCheapestBundleAcrossRegions(regions) || null;
-  const chosenRegion = pick?.region || DEFAULT_REGION;
+  if (!pick?.region || !pick?.bundleId) {
+    console.log(JSON.stringify({ ok:true, ts, action:'noop', reason:'no_region_bundle_available', total, ready, raw_ready: readyRaw, reserved, manual }, null, 2));
+    return;
+  }
 
-  // Candidate bundles (sorted cheapest first) — do NOT hardcode a default.
-  // This avoids manual intervention when bundle stock/discount changes.
+  const chosenRegion = pick.region;
+  const chosenBundleId = pick.bundleId;
+
+  // Resolve region-scoped dependencies so init/SSH won't get stuck.
+  const chosenKeyId = resolveOrImportKeyId(chosenRegion);
+  const chosenBlueprintId = pickUbuntuBlueprintId(chosenRegion);
+
+  if (DRY_RUN) {
+    console.log(JSON.stringify({ ok:true, ts, action:'dry_run', chosenRegion, chosenBundleId, chosenPriceCny: pick.price ?? null, chosenBundleType: pick.bundleType ?? null, quota: pick.quota ?? null, keyId: chosenKeyId, blueprintId: chosenBlueprintId, maxPriceCny: MAX_PRICE_CNY, minCpu: MIN_CPU, minMemGb: MIN_MEM_GB, maxMemGb: MAX_MEM_GB }, null, 2));
+    return;
+  }
+
+  // Candidate bundles within the chosen region (cheapest first), but prefer the globally-chosen bundle.
   const cheapestDetailed = pickCheapestBundlesDetailed(chosenRegion);
-  const cheapest = cheapestDetailed.map(x => x.bundleId);
   const priceByBundle = new Map(cheapestDetailed.map(x => [x.bundleId, x.price]));
 
   const baseList = BUNDLE_ALLOWLIST.length
     ? BUNDLE_ALLOWLIST
-    : (cheapest.length ? cheapest : FALLBACK_BUNDLES);
+    : [
+        chosenBundleId,
+        ...cheapestDetailed
+          .map(x => x.bundleId)
+          .filter(Boolean)
+      ];
 
-  const bundlesToTry = baseList.filter(Boolean)
+  const bundlesToTry = baseList
+    .filter(Boolean)
     .filter((v, i, a) => a.indexOf(v) === i)
     .slice(0, 8); // avoid huge loops
 
@@ -442,7 +596,8 @@ function main() {
     for (const z of (zonesToTry.length ? zonesToTry : [null])) {
       const payload = {
         BundleId: bundleId,
-        BlueprintId: BLUEPRINT_ID,
+        BlueprintId: chosenBlueprintId,
+        KeyIds: [chosenKeyId],
         InstanceChargePrepaid: { Period: 1, RenewFlag: 'NOTIFY_AND_AUTO_RENEW' },
         InstanceName: name,
         InstanceCount: 1,
@@ -501,11 +656,11 @@ function main() {
     chosenRegion,
     usedZone || null,
     usedBundle || null,
-    BLUEPRINT_ID,
+    chosenBlueprintId,
     'IN_POOL',
     'NEEDS_VERIFY',
     ts,
-    JSON.stringify({ created_by:'pool_replenish', client_token: clientToken, used_bundle_id: usedBundle || null, used_bundle_price_cny: usedPrice, init_state: 'INIT_PENDING', init_state_updated_at: ts })
+    JSON.stringify({ created_by:'pool_replenish', client_token: clientToken, used_bundle_id: usedBundle || null, used_bundle_price_cny: usedPrice, key_id: chosenKeyId, blueprint_id: chosenBlueprintId, init_state: 'INIT_PENDING', init_state_updated_at: ts })
   );
 
   db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
@@ -515,7 +670,7 @@ function main() {
       'instance',
       instance_id,
       'POOL_INSTANCE_CREATED',
-      JSON.stringify({ bundle_id: usedBundle || null, bundle_price_cny: usedPrice, blueprint_id: BLUEPRINT_ID, region: chosenRegion, zone: usedZone || null, request_id: resp.RequestId })
+      JSON.stringify({ bundle_id: usedBundle || null, bundle_price_cny: usedPrice, blueprint_id: chosenBlueprintId, key_id: chosenKeyId, region: chosenRegion, zone: usedZone || null, request_id: resp.RequestId })
     );
 
   const job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
