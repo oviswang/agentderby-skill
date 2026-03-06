@@ -27,8 +27,11 @@ const API_VERSION = process.env.BOTHOOK_CLOUD_API_VERSION || '2020-03-24';
 const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || 'lhbp-1l4ptuvm';
 
 // Cross-region compatibility
-const POOL_KEY_NAME = process.env.BOTHOOK_POOL_KEY_NAME || 'bothook_pool_key';
 const POOL_SSH_PUB_PATH = process.env.BOTHOOK_POOL_SSH_PUB_PATH || '/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519.pub';
+// Fingerprinted key name avoids cross-account / cross-region name collisions.
+const _pubForName = (()=>{ try { return fs.readFileSync(POOL_SSH_PUB_PATH,'utf8').trim(); } catch { return ''; } })();
+const _fp8 = _pubForName ? crypto.createHash('sha256').update(_pubForName).digest('hex').slice(0,8) : 'unknown';
+const POOL_KEY_NAME = process.env.BOTHOOK_POOL_KEY_NAME || `bothook_pool_key_${_fp8}`;
 const DRY_RUN = String(process.env.BOTHOOK_POOL_REPLENISH_DRY_RUN || '') === '1';
 
 // Region selection policy:
