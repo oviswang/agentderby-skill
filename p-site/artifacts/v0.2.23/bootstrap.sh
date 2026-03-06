@@ -205,17 +205,28 @@ main(){
 
   chmod +x "$INSTALL_DIR/bin/openclaw-gateway-start.sh" "$INSTALL_DIR/bin/postboot_verify.sh" "$INSTALL_DIR/bin/cutover_delivered.sh"
 
+  # Fetch watchdog script (verified)
+  fetch_verified "scripts/openclaw_watchdog.sh" "$INSTALL_DIR/bin/openclaw_watchdog.sh" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  chmod +x "$INSTALL_DIR/bin/openclaw_watchdog.sh"
+  install -m 0755 "$INSTALL_DIR/bin/openclaw_watchdog.sh" /opt/bothook/bin/openclaw_watchdog.sh
+
   # Fetch units (verified)
   fetch_verified "systemd/openclaw-gateway.service" "$INSTALL_DIR/artifacts/openclaw-gateway.service" "$INSTALL_DIR/artifacts/sha256sums.txt"
   fetch_verified "systemd/bothook-provision.service" "$INSTALL_DIR/artifacts/bothook-provision.service" "$INSTALL_DIR/artifacts/sha256sums.txt"
   fetch_verified "systemd/bothook-postboot-verify.service" "$INSTALL_DIR/artifacts/bothook-postboot-verify.service" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "systemd/bothook-openclaw-watchdog.service" "$INSTALL_DIR/artifacts/bothook-openclaw-watchdog.service" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "systemd/bothook-openclaw-watchdog.timer" "$INSTALL_DIR/artifacts/bothook-openclaw-watchdog.timer" "$INSTALL_DIR/artifacts/sha256sums.txt"
 
   # Install units
   install -m 0644 "$INSTALL_DIR/artifacts/openclaw-gateway.service" "$SYSTEMD_DIR/openclaw-gateway.service"
   install -m 0644 "$INSTALL_DIR/artifacts/bothook-provision.service" "$SYSTEMD_DIR/bothook-provision.service"
   install -m 0644 "$INSTALL_DIR/artifacts/bothook-postboot-verify.service" "$SYSTEMD_DIR/bothook-postboot-verify.service"
+  install -m 0644 "$INSTALL_DIR/artifacts/bothook-openclaw-watchdog.service" "$SYSTEMD_DIR/bothook-openclaw-watchdog.service"
+  install -m 0644 "$INSTALL_DIR/artifacts/bothook-openclaw-watchdog.timer" "$SYSTEMD_DIR/bothook-openclaw-watchdog.timer"
 
   systemctl daemon-reload
+
+  systemctl enable --now bothook-openclaw-watchdog.timer >/dev/null 2>&1 || true
 
   # Write a minimal OpenClaw config so the gateway can actually come up.
   # NOTE: No secrets here. Token is randomly generated per machine.

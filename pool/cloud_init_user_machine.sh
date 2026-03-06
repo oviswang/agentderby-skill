@@ -174,6 +174,11 @@ main(){
 
   place_assets
   install_provision_deps
+
+  # Mark as pool machine for watchdog / future guardrails.
+  mkdir -p /opt/bothook
+  echo "pool" > /opt/bothook/POOL_MACHINE
+
   install_units
   ensure_onboarding_plugins
 

@@ -36,13 +36,7 @@ const OPENCLAW_STATE_DIR = process.env.OPENCLAW_STATE_DIR || path.join(OPENCLAW_
 const OPENCLAW_CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH || path.join(OPENCLAW_STATE_DIR, 'openclaw.json');
 
 const LOGIN_DEDUP_MS = parseInt(process.env.PROVISION_LOGIN_DEDUP_MS || '15000', 10);
-const QR_PARSE_INTERVAL_MS = parseInt(process.env.PROVISION_QR_PARSE_INTERVAL_MS || '1500', 10);
-
-// Session lifecycle control (prevents stale sessions causing endless polling / high CPU).
-const SESSION_IDLE_TTL_MS = parseInt(process.env.PROVISION_SESSION_IDLE_TTL_MS || String(15 * 60 * 1000), 10); // default 15m
-const STATUS_POLL_WINDOW_MS = parseInt(process.env.PROVISION_STATUS_POLL_WINDOW_MS || String(10 * 60 * 1000), 10); // default 10m
-// Reduce CPU impact: `openclaw channels status` can be expensive. Default to a gentler polling cadence.
-const STATUS_POLL_INTERVAL_MS = parseInt(process.env.PROVISION_STATUS_POLL_INTERVAL_MS || String(8000), 10); // default 8s
+const QR_PARSE_INTERVAL_MS = parseInt(process.env.PROVISION_QR_PARSE_INTERVAL_MS || '800', 10);
 
 function nowIso(){ return new Date().toISOString(); }
 
@@ -96,14 +90,9 @@ function tmuxStartLoginSession(uuid, { force=false } = {}){
 
   if (force) {
     // wipe whatsapp auth dir to force new QR rotation from scratch
-    // NOTE: OpenClaw stores WhatsApp auth under credentials/whatsapp.
-    // Keep this consistent with control-plane binding logic that reads creds.json.
-    const authDir = path.join(OPENCLAW_STATE_DIR, 'credentials', 'whatsapp');
+    const authDir = path.join(OPENCLAW_STATE_DIR, 'channels', 'whatsapp');
     try { fs.rmSync(authDir, { recursive:true, force:true }); } catch {}
-
-    // Kill both new and legacy session names to avoid conflicts.
     tmuxKillSession(session);
-    tmuxKillSession(`wa-login-${uuid}`);
   }
 
   if (tmuxHasSession(session)) return { ok:true, session, reused:true };
@@ -127,18 +116,6 @@ function tmuxStartLoginSession(uuid, { force=false } = {}){
     };
   }
 
-  // Strong validation: tmux may return 0 even if session creation immediately failed/exited.
-  if (!tmuxHasSession(session)) {
-    return {
-      ok:false,
-      session,
-      error: 'tmux_session_missing_after_create',
-      stdout: (r.stdout||'').slice(-2000),
-      stderr: (r.stderr||'').slice(-2000),
-      probe: tmuxProbe()
-    };
-  }
-
   return { ok:true, session, reused:false };
 }
 
@@ -147,7 +124,7 @@ function tmuxCaptureTail(uuid, lines=320){
   // Use capture-pane output directly.
   // NOTE: `tmux show-buffer` requires a prior `tmux save-buffer`; the previous implementation
   // could return empty output and prevent QR parsing.
-  const r = sh(`tmux capture-pane -p -t ${JSON.stringify(session)} -S -${lines} 2>/dev/null`, { timeoutMs: 4000 });
+  const r = sh(`tmux capture-pane -pt ${JSON.stringify(session)} -S -${lines} 2>/dev/null`, { timeoutMs: 4000 });
   if (r.code !== 0) return '';
   return r.stdout || '';
 }
@@ -201,45 +178,37 @@ function extractQrBlocksFromLines(lines){
   return blocks;
 }
 
-function asciiQrToPngDataUrl(blockLines, { scale = 5, border = 4 } = {}) {
-  // Convert OpenClaw ASCII QR (half-block glyphs) to a monochrome PNG.
-  // '█' => top+bottom, '▀' => top, '▄' => bottom.
+function asciiQrToPngDataUrl(blockLines, { scale = 6, border = 2 } = {}) {
+  // Convert the ASCII QR (with box drawing chars) to a monochrome PNG.
+  // Heuristic: treat any non-space char as black.
   const lines = blockLines.slice();
   const w = Math.max(...lines.map(l => l.length));
-  const hChars = lines.length;
+  const h = lines.length;
 
-  const pxW = w;
-  const pxH = hChars * 2;
-
-  const imgW = (pxW + border*2) * scale;
-  const imgH = (pxH + border*2) * scale;
+  const imgW = (w + border*2) * scale;
+  const imgH = (h + border*2) * scale;
   const png = new PNG({ width: imgW, height: imgH });
 
-  function setPixel(x,y,black){
+  function setPixel(x,y,r,g,b,a=255){
     const idx = (png.width*y + x) << 2;
-    const c = black ? 0 : 255;
-    png.data[idx]=c; png.data[idx+1]=c; png.data[idx+2]=c; png.data[idx+3]=255;
+    png.data[idx]=r; png.data[idx+1]=g; png.data[idx+2]=b; png.data[idx+3]=a;
   }
 
   // fill white
-  for (let y=0;y<imgH;y++) for (let x=0;x<imgW;x++) setPixel(x,y,false);
+  for (let y=0;y<imgH;y++) for (let x=0;x<imgW;x++) setPixel(x,y,255,255,255,255);
 
-  for (let yy=0; yy<hChars; yy++) {
+  for (let yy=0; yy<h; yy++) {
     const line = lines[yy].padEnd(w, ' ');
     for (let xx=0; xx<w; xx++) {
       const ch = line[xx];
-      const top = (ch === '█' || ch === '▀');
-      const bot = (ch === '█' || ch === '▄');
-
-      if (top) {
-        const px0 = (xx + border) * scale;
-        const py0 = ((yy*2) + border) * scale;
-        for (let sy=0; sy<scale; sy++) for (let sx=0; sx<scale; sx++) setPixel(px0+sx, py0+sy, true);
-      }
-      if (bot) {
-        const px0 = (xx + border) * scale;
-        const py0 = ((yy*2 + 1) + border) * scale;
-        for (let sy=0; sy<scale; sy++) for (let sx=0; sx<scale; sx++) setPixel(px0+sx, py0+sy, true);
+      const black = (ch !== ' ');
+      if (!black) continue;
+      const px0 = (xx + border) * scale;
+      const py0 = (yy + border) * scale;
+      for (let sy=0; sy<scale; sy++) {
+        for (let sx=0; sx<scale; sx++) {
+          setPixel(px0+sx, py0+sy, 0,0,0,255);
+        }
       }
     }
   }
@@ -270,7 +239,6 @@ function ensureSession(uuid){
       pty: null,
       buf: '',
       lastQrDataUrl: null,
-      lastQrText: null,
       lastQrAt: null,
       lastLoginAt: 0,
       status: false,
@@ -280,23 +248,17 @@ function ensureSession(uuid){
       welcomeSentAt: null,
       _pendingQr: false,
       _lastQrHash: null,
-      _lastQrPngHash: null,
       lastError: null,
       lastExit: null,
       _logPath: null,
       loginMode: null,
       lastStartAt: null,
-      lastApiAt: null,
-      _pollUntil: 0,
+      _startInFlight: false,
+      _startCooldownUntil: 0,
+      _lastStartRequestedAt: 0,
     };
     sessions.set(uuid, s);
   }
-  return s;
-}
-
-function touchSession(uuid){
-  const s = ensureSession(uuid);
-  s.lastApiAt = nowIso();
   return s;
 }
 
@@ -317,21 +279,24 @@ function killLogin(uuid){
 function startLogin(uuid, { force=false } = {}){
   const s = ensureSession(uuid);
   const now = Date.now();
-  if (!force && s.pty && (now - s.lastLoginAt) < LOGIN_DEDUP_MS) {
+
+  // Hard guardrails: prevent start storms from constantly killing/restarting login.
+  if (!force && now < (s._startCooldownUntil || 0)) {
+    return;
+  }
+  if (s._startInFlight) {
     return;
   }
 
-  // Preflight tmux availability (surface failures to status instead of silently looping).
-  try {
-    const pr = sh('tmux -V', { timeoutMs: 1500 });
-    if ((pr.code ?? 1) !== 0) {
-      s.lastError = `tmux preflight failed (code=${pr.code})\nstdout:\n${(pr.stdout||'').slice(-400)}\nstderr:\n${(pr.stderr||'').slice(-800)}`;
-      s.lastExit = { stage: 'tmux_preflight', at: nowIso() };
-      return;
-    }
-  } catch (e) {
-    s.lastError = `tmux preflight exception: ${String(e?.message||e)}`;
-    s.lastExit = { stage: 'tmux_preflight', at: nowIso() };
+  // If a tmux login session already exists and this is not a force relink,
+  // do NOT restart it. Restarting clears QR and can amplify browser polling into a storm.
+  if (!force && tmuxHasSession(`wa-${uuid}`)) {
+    s.lastLoginAt = now;
+    s.loginMode = 'tmux';
+    return;
+  }
+
+  if (!force && s.pty && (now - s.lastLoginAt) < LOGIN_DEDUP_MS) {
     return;
   }
 
@@ -344,6 +309,8 @@ function startLogin(uuid, { force=false } = {}){
     const authDir = path.join(OPENCLAW_STATE_DIR, 'channels', 'whatsapp');
     try { fs.rmSync(authDir, { recursive:true, force:true }); } catch {}
   }
+
+  s._startInFlight = true;
 
   killLogin(uuid);
   s.lastLoginAt = now;
@@ -376,24 +343,23 @@ function startLogin(uuid, { force=false } = {}){
   // Use tmux to run login in a real terminal session.
   // This avoids OpenClaw suppressing QR output in non-terminal contexts.
   const tr = tmuxStartLoginSession(uuid, { force });
-  // Persist tmux start result for observability.
-  s._tmuxStartResult = tr;
   if (!tr.ok) {
     s.lastError = JSON.stringify(tr, null, 2);
-    s.lastExit = { stage: 'tmuxStartLoginSession', at: nowIso() };
+    s._startInFlight = false;
+    // Cooldown to avoid tight error loops when tmux/openclaw is unhealthy.
+    s._startCooldownUntil = Date.now() + (force ? 15000 : 30000);
     return;
   }
-
-  // Record session info for observability.
-  s.loginMode = 'tmux';
-  s.lastStartAt = nowIso();
-  s._pollUntil = Date.now() + STATUS_POLL_WINDOW_MS;
-  s._tmuxSession = tr.session;
-  s._tmuxReused = Boolean(tr.reused);
 
   s.pty = null;
   s.buf = '';
   s._logPath = null;
+  s.loginMode = 'tmux';
+  s.lastStartAt = nowIso();
+
+  s._startInFlight = false;
+  // Even on success, avoid immediate restarts due to UI/network retries.
+  s._startCooldownUntil = Date.now() + (force ? 8000 : 15000);
 }
 
 function shellReadUuidLink(uuid){
@@ -471,47 +437,21 @@ function pollStatus(uuid){
   s.lastStatusRaw = st.raw;
   s.lastStatusAt = nowIso();
   if (s.status) {
-    // Stop status polling once connected.
-    s._pollUntil = 0;
-
     // Once connected, gateway can be started.
     startGateway();
-    // Autoresponder/onboarding: do NOT send welcome from user-machine by default.
-    // The control-plane is the single source of truth for onboarding copy (welcome/payment/key).
-    // To re-enable for emergency debugging, set PROVISION_SEND_WELCOME=1.
-    if (String(process.env.PROVISION_SEND_WELCOME || '0') === '1') {
-      try { sendWelcomeIfNeeded(uuid); } catch {}
-    }
+    // Autoresponder/onboarding: send welcome + relink guidance to self-chat (best-effort).
+    try { sendWelcomeIfNeeded(uuid); } catch {}
   }
 }
 
 setInterval(() => {
-  // Poll status only during a bounded window after /wa/start.
-  // Additional guard: only poll when there was recent API activity (UI is actively checking).
-  // This prevents background polling from burning CPU when nobody is looking.
-  const now = Date.now();
-  const ACTIVE_WINDOW_MS = parseInt(process.env.PROVISION_STATUS_ACTIVE_WINDOW_MS || String(60 * 1000), 10); // default 60s
+  // poll status for active sessions only
   for (const [uuid, s] of sessions.entries()) {
-    if (!(s._pollUntil && now < s._pollUntil)) continue;
-    const lastApiMs = s.lastApiAt ? Date.parse(String(s.lastApiAt)) : NaN;
-    const active = Number.isFinite(lastApiMs) ? (now - lastApiMs) <= ACTIVE_WINDOW_MS : false;
-    if (!active) continue;
-    try { pollStatus(uuid); } catch {}
-  }
-}, STATUS_POLL_INTERVAL_MS);
-
-// Cleanup idle sessions to avoid memory/process buildup on machines that receive repeated /wa/start.
-setInterval(() => {
-  const now = Date.now();
-  for (const [uuid, s] of sessions.entries()) {
-    const lastApiMs = s.lastApiAt ? Date.parse(String(s.lastApiAt)) : NaN;
-    const idleMs = Number.isFinite(lastApiMs) ? (now - lastApiMs) : Infinity;
-    if (idleMs > SESSION_IDLE_TTL_MS) {
-      try { tmuxKillSession(`wa-${uuid}`); } catch {}
-      sessions.delete(uuid);
+    if (s.pty || s.lastQrDataUrl) {
+      try { pollStatus(uuid); } catch {}
     }
   }
-}, 60 * 1000);
+}, 2500);
 
 // Parse latest QR from terminal output at a fixed interval to avoid event-loop stalls.
 setInterval(() => {
@@ -531,8 +471,7 @@ setInterval(() => {
       if (s._lastQrHash === h) continue;
       s._lastQrHash = h;
 
-      s.lastQrText = last.join('\n');
-      s.lastQrDataUrl = null;
+      s.lastQrDataUrl = asciiQrToPngDataUrl(last, { scale: 3, border: 2 });
       s.lastQrAt = nowIso();
       s.qrSeq += 1;
     } catch (e) {
@@ -555,18 +494,18 @@ app.post('/api/wa/start', async (req, res) => {
     if (!uuid) return res.status(400).json({ ok:false, error:'uuid_required' });
     const force = Boolean(req.body?.force);
 
-    touchSession(uuid);
-
     console.log(`[bothook-provision] wa.start uuid=${uuid} force=${force}`);
 
+    const s0 = ensureSession(uuid);
+    s0._lastStartRequestedAt = Date.now();
+
     // Respond immediately; login work happens in background.
-    // NOTE: errors are reported via /api/wa/status lastError/lastExit.
     res.json({ ok:true, uuid, status:'starting' });
     setTimeout(() => {
       try {
         startLogin(uuid, { force });
         const s = ensureSession(uuid);
-        console.log(`[bothook-provision] wa.start dispatched uuid=${uuid} loginMode=${s.loginMode} tmuxOk=${s._tmuxStartResult? (s._tmuxStartResult.ok?'yes':'no'):'na'} lastError=${s.lastError ? 'yes' : 'no'}`);
+        console.log(`[bothook-provision] wa.start dispatched uuid=${uuid} loginMode=${s.loginMode} inFlight=${s._startInFlight?'yes':'no'} lastError=${s.lastError ? 'yes' : 'no'}`);
       } catch (e) {
         console.log(`[bothook-provision] wa.start exception uuid=${uuid} err=${String(e?.message||e)}`);
       }
@@ -581,46 +520,7 @@ app.get('/api/wa/qr', async (req, res) => {
     const uuid = safeUuid(req.query?.uuid);
     if (!uuid) return res.status(400).json({ ok:false, error:'uuid_required' });
 
-    const s = touchSession(uuid);
-
-    // If the interval parser hasn't produced a QR yet, parse on-demand.
-    // This makes the UI more responsive and resilient under load.
-    if (!s.lastQrDataUrl && s.loginMode === 'tmux') {
-      try {
-        const text = tmuxCaptureTail(uuid, 420);
-        if (text) {
-          const tailLines = stripAnsi(text).split(/\r?\n/).slice(-340);
-          const blocks = extractQrBlocksFromLines(tailLines);
-          if (blocks.length) {
-            const last = blocks[blocks.length - 1];
-            const h = crypto.createHash('sha1').update(last.join('\n')).digest('hex');
-            if (s._lastQrHash !== h) {
-              s._lastQrHash = h;
-              s.lastQrText = last.join('\n');
-              s.lastQrDataUrl = null;
-              s.lastQrAt = nowIso();
-              s.qrSeq += 1;
-            }
-          }
-        }
-      } catch (e) {
-        s.lastError = s.lastError || String(e?.message || e);
-      }
-    }
-
-    // Generate PNG on-demand (cached) to avoid blocking the event loop on a tight interval.
-    if (!s.lastQrDataUrl && s.lastQrText) {
-      try {
-        const h2 = crypto.createHash('sha1').update(String(s.lastQrText||''), 'utf8').digest('hex');
-        if (s._lastQrPngHash !== h2) {
-          s._lastQrPngHash = h2;
-          s.lastQrDataUrl = asciiQrToPngDataUrl(String(s.lastQrText||'').split('\n'), { scale: 5, border: 4 });
-        }
-      } catch (e) {
-        s.lastError = s.lastError || String(e?.message || e);
-      }
-    }
-
+    const s = ensureSession(uuid);
     if (!s.lastQrDataUrl) {
       return res.status(409).json({ ok:false, error:'qr_not_ready' });
     }
@@ -635,7 +535,7 @@ app.get('/api/wa/status', async (req, res) => {
     const uuid = safeUuid(req.query?.uuid);
     if (!uuid) return res.status(400).json({ ok:false, error:'uuid_required' });
 
-    const s = touchSession(uuid);
+    const s = ensureSession(uuid);
     return res.json({
       ok:true,
       uuid,
@@ -647,13 +547,6 @@ app.get('/api/wa/status', async (req, res) => {
       qrAt: s.lastQrAt || null,
       lastError: s.lastError || null,
       lastExit: s.lastExit || null,
-      loginMode: s.loginMode || null,
-      tmuxSession: s._tmuxSession || null,
-      tmuxReused: (typeof s._tmuxReused === 'boolean') ? s._tmuxReused : null,
-      tmuxStartOk: s._tmuxStartResult ? Boolean(s._tmuxStartResult.ok) : null,
-      tmuxStartError: (s._tmuxStartResult && !s._tmuxStartResult.ok) ? (s._tmuxStartResult.error || null) : null,
-      tmuxStartStderr: (s._tmuxStartResult && !s._tmuxStartResult.ok) ? (String(s._tmuxStartResult.stderr||'').slice(-800) || null) : null,
-      tmuxStartProbe: (s._tmuxStartResult && !s._tmuxStartResult.ok) ? (s._tmuxStartResult.probe || null) : null,
       bufTail: stripAnsi(s.buf || '').slice(-2000) || null,
       logPath: s._logPath || null,
       logExists: s._logPath ? fs.existsSync(s._logPath) : null,
