@@ -1276,7 +1276,7 @@ async function resolvePoolKeyIdForRegion(targetRegion) {
   } catch {}
 
   // If key already exists in this region, reuse it.
-  const list1 = await tccli(`tccli lighthouse DescribeKeyPairs --region ${region} --version ${API_VERSION} --output json`);
+  const list1 = await tccli(`tccli lighthouse DescribeKeyPairs --region ${region} --version 2020-03-24 --output json`);
   const dj1 = JSON.parse(String(list1.stdout||'{}'));
   const ks1 = dj1.KeyPairSet || [];
   const hit1 = ks1.find(k => String(k?.KeyName || '') === keyName);
@@ -1285,13 +1285,13 @@ async function resolvePoolKeyIdForRegion(targetRegion) {
   if (!keyId) {
     // Import (best-effort); if it fails due to exists/race, re-describe.
     try {
-      const imp = await tccli(`tccli lighthouse ImportKeyPair --region ${region} --version ${API_VERSION} --KeyName '${keyName}' --PublicKey '${pub.replace(/'/g, "'\\''")}' --output json`);
+      const imp = await tccli(`tccli lighthouse ImportKeyPair --region ${region} --version 2020-03-24 --KeyName '${keyName}' --PublicKey '${pub.replace(/'/g, "'\\''")}' --output json`);
       const ij = JSON.parse(String(imp.stdout||'{}'));
       keyId = String(ij?.KeyId || ij?.KeyPairId || '').trim();
     } catch {}
 
     if (!keyId) {
-      const list2 = await tccli(`tccli lighthouse DescribeKeyPairs --region ${region} --version ${API_VERSION} --output json`);
+      const list2 = await tccli(`tccli lighthouse DescribeKeyPairs --region ${region} --version 2020-03-24 --output json`);
       const dj2 = JSON.parse(String(list2.stdout||'{}'));
       const ks2 = dj2.KeyPairSet || [];
       const hit2 = ks2.find(k => String(k?.KeyName || '') === keyName);
