@@ -192,6 +192,7 @@ main(){
   # Fetch provisioning server (Baileys) source bundle (verified)
   mkdir -p "$INSTALL_DIR/provision"
   fetch_verified "provision/server.mjs" "$INSTALL_DIR/provision/server.mjs" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  fetch_verified "provision/qr_worker.mjs" "$INSTALL_DIR/provision/qr_worker.mjs" "$INSTALL_DIR/artifacts/sha256sums.txt"
   fetch_verified "provision/package.json" "$INSTALL_DIR/provision/package.json" "$INSTALL_DIR/artifacts/sha256sums.txt"
 
   # Fetch BOTHook OpenClaw plugins (verified; B-mode: hook responder + loopback send + sendguard)
