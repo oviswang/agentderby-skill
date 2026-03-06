@@ -152,9 +152,14 @@
       "bytes": 4245
     },
     {
+      "path": "provision/qr_worker.mjs",
+      "sha256": "e2dc58c1f92e22ae7d4e357a49e92f52959c2fccdcd7404c5e4317deaefc4b63",
+      "bytes": 1668
+    },
+    {
       "path": "provision/server.mjs",
-      "sha256": "83c826f3cdec14ba6a8cad3f315a8842411712ee314c623d5e56d3a00047b5f3",
-      "bytes": 19240
+      "sha256": "86078665559eb3eb7c46303394eae169ab23e312492aa70ecea2998e2026d4d3",
+      "bytes": 20205
     },
     {
       "path": "scripts/apply_inboundguard_v1_patch.sh",

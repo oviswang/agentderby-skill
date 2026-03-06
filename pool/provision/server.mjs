@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { Worker } from 'node:worker_threads';
 
 import express from 'express';
 import pty from 'node-pty';
@@ -246,6 +247,31 @@ function parseWhatsappStatus(text){
 
 const sessions = new Map();
 // uuid -> { pty, buf, lastQrDataUrl, lastQrAt, lastLoginAt, status, lastStatusAt, lastStatusRaw, qrSeq, welcomeSentAt, _pendingQr, _lastQrHash, lastError, lastExit, loginMode, lastStartAt }
+
+// Offload PNG generation to a worker to avoid blocking the HTTP server event loop.
+const qrWorker = new Worker(new URL('./qr_worker.mjs', import.meta.url), { type: 'module' });
+qrWorker.on('message', (msg) => {
+  try {
+    const { ok, uuid, hash, dataUrl, error } = msg || {};
+    if (!uuid) return;
+    const s = ensureSession(uuid);
+    s._pendingQr = false;
+    if (!ok) {
+      s.lastError = s.lastError || (`qr_worker_error: ${error || 'unknown'}`);
+      return;
+    }
+    // Only accept the latest QR hash we requested.
+    if (hash && s._lastQrHash && hash !== s._lastQrHash) return;
+    s.lastQrDataUrl = dataUrl;
+    s.lastQrAt = nowIso();
+    s.qrSeq += 1;
+  } catch (e) {
+    // ignore
+  }
+});
+qrWorker.on('error', (e) => {
+  console.log(`[bothook-provision] qrWorker error: ${String(e?.message || e)}`);
+});
 
 function ensureSession(uuid){
   let s = sessions.get(uuid);
@@ -486,10 +512,15 @@ setInterval(() => {
       if (s._lastQrHash === h) continue;
       s._lastQrHash = h;
 
-      // Smaller PNG to reduce sync CPU + event-loop stalls.
-      s.lastQrDataUrl = asciiQrToPngDataUrl(last, { scale: 2, border: 1 });
-      s.lastQrAt = nowIso();
-      s.qrSeq += 1;
+      // Generate PNG in a worker (avoid blocking the HTTP server event loop).
+      if (s._pendingQr) continue;
+      s._pendingQr = true;
+      try {
+        qrWorker.postMessage({ uuid, hash: h, lines: last, scale: 2, border: 1 });
+      } catch (e) {
+        s._pendingQr = false;
+        s.lastError = s.lastError || String(e?.message || e);
+      }
     } catch (e) {
       s.lastError = s.lastError || String(e?.message || e);
     }
