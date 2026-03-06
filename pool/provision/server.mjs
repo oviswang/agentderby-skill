@@ -38,6 +38,8 @@ const OPENCLAW_CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH || path.join(OPENC
 
 const LOGIN_DEDUP_MS = parseInt(process.env.PROVISION_LOGIN_DEDUP_MS || '15000', 10);
 const QR_PARSE_INTERVAL_MS = parseInt(process.env.PROVISION_QR_PARSE_INTERVAL_MS || '2000', 10);
+const STATUS_POLL_MS = parseInt(process.env.PROVISION_STATUS_POLL_MS || '12000', 10);
+const LOGIN_TTL_MS = parseInt(process.env.PROVISION_LOGIN_TTL_MS || String(3 * 60 * 1000), 10);
 
 function nowIso(){ return new Date().toISOString(); }
 
@@ -498,28 +500,48 @@ function sendWelcomeIfNeeded(uuid){
 
 function pollStatus(uuid){
   const s = ensureSession(uuid);
-  const r = sh('openclaw channels status', { timeoutMs: 5000 });
+  // Use --probe to avoid expensive operations where possible.
+  const r = sh('openclaw channels status --probe', { timeoutMs: 4000 });
   const out = (r.stdout || r.stderr || '').trim();
   const st = parseWhatsappStatus(out);
   s.status = Boolean(st.connected);
   s.lastStatusRaw = st.raw;
   s.lastStatusAt = nowIso();
   if (s.status) {
-    // Once connected, gateway can be started.
     startGateway();
-    // Autoresponder/onboarding: send welcome + relink guidance to self-chat (best-effort).
     try { sendWelcomeIfNeeded(uuid); } catch {}
   }
 }
 
+function expireIfOverTtl(uuid){
+  const s = ensureSession(uuid);
+  const now = Date.now();
+  // Only expire linking/login sessions.
+  if (s.status) return false;
+  if (!s.loginMode) return false;
+  if (!s.lastLoginAt) return false;
+  if ((now - s.lastLoginAt) < LOGIN_TTL_MS) return false;
+
+  // Stop the login session to prevent runaway CPU usage.
+  try { tmuxKillSession(`wa-${uuid}`); } catch {}
+  s.lastExit = `ttl_expired_${LOGIN_TTL_MS}`;
+  s.lastError = s.lastError || 'login_ttl_expired';
+  s.loginMode = null;
+  s.lastQrDataUrl = null;
+  s.lastQrAt = null;
+  s.qrSeq = 0;
+  return true;
+}
+
 setInterval(() => {
-  // poll status for active sessions only
   for (const [uuid, s] of sessions.entries()) {
+    try { expireIfOverTtl(uuid); } catch {}
+    // poll status for active sessions only
     if (s.pty || s.lastQrDataUrl) {
       try { pollStatus(uuid); } catch {}
     }
   }
-}, 2500);
+}, STATUS_POLL_MS);
 
 // Parse latest QR from terminal output at a fixed interval to avoid event-loop stalls.
 setInterval(() => {
