@@ -16,6 +16,20 @@ export function openDb() {
   db.exec('PRAGMA synchronous = NORMAL;');
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec('PRAGMA busy_timeout = 5000;');
+
+  // Minimal outbox for smoketests + auditing of user-visible copy.
+  db.exec(`CREATE TABLE IF NOT EXISTS outbox_messages(
+    outbox_id TEXT PRIMARY KEY,
+    ts TEXT NOT NULL,
+    uuid TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    channel TEXT,
+    target TEXT,
+    text TEXT NOT NULL,
+    text_hash TEXT NOT NULL
+  );`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_outbox_uuid_ts ON outbox_messages(uuid, ts);');
+
   return { db, dbPath };
 }
 

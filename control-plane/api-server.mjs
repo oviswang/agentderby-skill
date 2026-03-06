@@ -2084,6 +2084,118 @@ app.get('/api/ops/pool/init/busy', (req, res) => {
   }
 });
 
+// ===== Smoketest (test mode only) =====
+function requireTestMode(res){
+  if (String(process.env.BOTHOOK_TEST_MODE || '') !== '1') {
+    send(res, 403, { ok:false, error:'test_mode_disabled' });
+    return false;
+  }
+  return true;
+}
+
+function recordOutbox(db, { uuid, kind, channel=null, target=null, text }){
+  const ts = nowIso();
+  const textHash = crypto.createHash('sha256').update(String(text||''),'utf8').digest('hex');
+  db.prepare('INSERT INTO outbox_messages(outbox_id, ts, uuid, kind, channel, target, text, text_hash) VALUES (?,?,?,?,?,?,?,?)')
+    .run(crypto.randomUUID(), ts, uuid, kind, channel, target, String(text||''), textHash);
+  return { ts, textHash };
+}
+
+app.post('/api/test/wa/link', (req, res) => {
+  try {
+    if (!requireTestMode(res)) return;
+    const uuid = String(req.body?.uuid || '').trim();
+    const wa_e164 = String(req.body?.wa_e164 || '+10000000000').trim();
+    const wa_jid = String(req.body?.wa_jid || 'test@wa').trim();
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+
+    const { db } = openDb();
+    const d = db.prepare('SELECT * FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
+    if (!d) return send(res, 404, { ok:false, error:'unknown_uuid' });
+
+    const ts = nowIso();
+    db.prepare('UPDATE deliveries SET wa_e164=?, wa_jid=?, bound_at=?, updated_at=? WHERE delivery_id=?')
+      .run(wa_e164, wa_jid, ts, ts, d.delivery_id);
+
+    db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+      .run(crypto.randomUUID(), ts, 'delivery', d.delivery_id, 'WA_LINKED', JSON.stringify({ uuid, wa_e164, wa_jid }));
+
+    const welcome = `[bothook] Linked ✅\n\nNext step:\n1) Open: https://p.bothook.me/p/${uuid}?lang=en\n2) Follow the setup steps (payment + OpenAI key) shown on the page.`;
+    const out = recordOutbox(db, { uuid, kind:'welcome_linked', channel:'whatsapp', target: wa_e164, text: welcome });
+
+    return send(res, 200, { ok:true, uuid, delivery_id: d.delivery_id, event:'WA_LINKED', outbox: out });
+  } catch (e) {
+    return send(res, 500, { ok:false, error: e?.message || 'server_error' });
+  }
+});
+
+app.post('/api/test/pay/confirm', (req, res) => {
+  try {
+    if (!requireTestMode(res)) return;
+    const uuid = String(req.body?.uuid || '').trim();
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+
+    const { db } = openDb();
+    const d = db.prepare('SELECT * FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
+    if (!d) return send(res, 404, { ok:false, error:'unknown_uuid' });
+
+    const ts = nowIso();
+    db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+      .run(crypto.randomUUID(), ts, 'delivery', d.delivery_id, 'PAYMENT_CONFIRMED', JSON.stringify({ uuid }));
+
+    const guide = `[bothook] Payment received ✅\n\nNext step: paste your OpenAI API key on the setup page to finish delivery.`;
+    const out = recordOutbox(db, { uuid, kind:'guide_paid', channel:'whatsapp', target: d.wa_e164 || null, text: guide });
+
+    return send(res, 200, { ok:true, uuid, delivery_id: d.delivery_id, event:'PAYMENT_CONFIRMED', outbox: out });
+  } catch (e) {
+    return send(res, 500, { ok:false, error: e?.message || 'server_error' });
+  }
+});
+
+app.post('/api/test/openai/key_verified', (req, res) => {
+  try {
+    if (!requireTestMode(res)) return;
+    const uuid = String(req.body?.uuid || '').trim();
+    const ok = Boolean(req.body?.ok ?? true);
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+
+    const { db } = openDb();
+    const d = db.prepare('SELECT * FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
+    if (!d) return send(res, 404, { ok:false, error:'unknown_uuid' });
+
+    const ts = nowIso();
+    const ev = ok ? 'OPENAI_KEY_VERIFIED' : 'OPENAI_KEY_INVALID';
+    db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+      .run(crypto.randomUUID(), ts, 'delivery', d.delivery_id, ev, JSON.stringify({ uuid }));
+
+    if (ok) {
+      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+        .run(crypto.randomUUID(), ts, 'delivery', d.delivery_id, 'CUTOVER_DELIVERED', JSON.stringify({ uuid, mode:'test' }));
+      const success = `[bothook] OpenAI key verified ✅\n\nDelivery complete. You can now chat with your server.`;
+      const out = recordOutbox(db, { uuid, kind:'key_verified_success', channel:'whatsapp', target: d.wa_e164 || null, text: success });
+      return send(res, 200, { ok:true, uuid, delivery_id: d.delivery_id, events:[ev,'CUTOVER_DELIVERED'], outbox: out });
+    }
+
+    return send(res, 200, { ok:true, uuid, delivery_id: d.delivery_id, events:[ev] });
+  } catch (e) {
+    return send(res, 500, { ok:false, error: e?.message || 'server_error' });
+  }
+});
+
+app.get('/api/test/outbox', (req, res) => {
+  try {
+    if (!requireTestMode(res)) return;
+    const uuid = String(req.query?.uuid || '').trim();
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+
+    const { db } = openDb();
+    const rows = db.prepare('SELECT ts, kind, channel, target, text_hash, substr(text,1,200) as text_preview FROM outbox_messages WHERE uuid=? ORDER BY ts ASC LIMIT 50').all(uuid);
+    return send(res, 200, { ok:true, uuid, items: rows || [] });
+  } catch (e) {
+    return send(res, 500, { ok:false, error: e?.message || 'server_error' });
+  }
+});
+
 // Ops: clear OpenClaw auth on a pool instance (used to ensure smoke-test keys never linger on pool machines).
 // NOTE: This does not touch control-plane delivery_secrets; caller should delete secrets separately if desired.
 app.post('/api/ops/pool/apply-memorysearch', (req, res) => {
