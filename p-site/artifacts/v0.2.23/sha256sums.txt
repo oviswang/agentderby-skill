@@ -1,6 +1,6 @@
 da4c57550292bb6011d14555a715012dbde5634121fc89ce4be9d96f8abb2bf9  ./bootstrap.sh
 4aa542e2d863e91a34a3c1c24facb7b4052b364ed6724a8f520e715339a1bf4a  ./hooks/bothook-onboarding/handler.ts
-e0df177c4277ad4300440087f0d714b3ab489b53d0f8e4ae630c358818f74aff  ./manifest.json
+aca21402441ac25684c004c2b9b8b4a976ddb9578708dac435f3064813110f70  ./manifest.json
 0a2f0d95e8748db813b9264152682f69fe271eb507fc63e2f110c82410e1f65f  ./plugins/bothook-wa-autoreply/index.ts
 f043b26f88dbe23e3beec60696c832af9ee1072e4804aca7f13d1cc8ee533f13  ./plugins/bothook-wa-autoreply/openclaw.plugin.json
 cc993efa9a39378ae0e7f1aa91bec3425bc42b49d8ba492cf5175d42203bc13f  ./plugins/bothook-wa-autoreply/package.json

@@ -1,5 +1,5 @@
 {
-  "version": "0.2.18",
+  "version": "0.2.23",
   "files": [
     {
       "path": "bootstrap.sh",
@@ -10,11 +10,6 @@
       "path": "hooks/bothook-onboarding/handler.ts",
       "sha256": "4aa542e2d863e91a34a3c1c24facb7b4052b364ed6724a8f520e715339a1bf4a",
       "bytes": 8906
-    },
-    {
-      "path": "manifest.json",
-      "sha256": "e0df177c4277ad4300440087f0d714b3ab489b53d0f8e4ae630c358818f74aff",
-      "bytes": 8445
     },
     {
       "path": "plugins/bothook-wa-autoreply/index.ts",
