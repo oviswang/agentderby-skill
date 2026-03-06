@@ -1492,6 +1492,13 @@ async function runPoolInitJob(job){
       await issueReadyToken(db, inst);
     }
 
+    // Mark as pool machine (enables watchdog + other pool-only behavior)
+    // This file is used by systemd ConditionPathExists gates.
+    try {
+      pushJobLog(job, 'mark POOL_MACHINE');
+      poolSshInit(inst, 'sudo mkdir -p /opt/bothook && sudo touch /opt/bothook/POOL_MACHINE && echo ok', { timeoutMs: 20000, tty:false, retries: 0 });
+    } catch {}
+
     // Bootstrap
     // Bootstrap artifacts version.
     // HARD RULE: always use /artifacts/latest for pool (re)image/init to ensure the newest fixes (e.g. autoreply hard gate) are applied.

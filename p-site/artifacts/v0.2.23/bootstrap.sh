@@ -59,11 +59,25 @@ fetch_verified(){
 
 ensure_node(){
   # Pool-machine bootstrap must converge the runtime deterministically.
-  # Do NOT rely on any preinstalled Node.js version.
+  # We try to install/upgrade Node via NodeSource, but we also tolerate
+  # transient network issues if a sufficiently new Node is already present.
   log "Installing/Upgrading Node.js (major=$NODE_MAJOR) via NodeSource"
   apt-get update -y
   apt-get install -y --no-install-recommends ca-certificates curl gnupg
-  curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -
+
+  if ! curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -; then
+    local have=""
+    have="$(node -v 2>/dev/null || true)"
+    local major=""
+    major="$(echo "$have" | sed -E 's/^v([0-9]+).*/\1/')"
+    if [[ "$major" =~ ^[0-9]+$ ]] && (( major >= 20 )); then
+      log "WARN: NodeSource unreachable; keeping existing node=${have}"
+      return 0
+    fi
+    log "FATAL: NodeSource unreachable and node is missing/too old (have=${have})"
+    exit 20
+  fi
+
   apt-get install -y nodejs
   log "node installed: $(node -v)"
 }
