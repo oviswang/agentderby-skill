@@ -1,13 +1,15 @@
 import { parentPort } from 'node:worker_threads';
 import { PNG } from 'pngjs';
 
-function asciiQrToPngDataUrl(blockLines, { scale = 2, border = 1 } = {}) {
+function asciiQrToPngDataUrl(blockLines, { scale = 2, border = 2 } = {}) {
+  // Terminal QR uses half-block glyphs; each char encodes two vertical pixels.
+  // '█' => black/black, '▀' => black/white, '▄' => white/black, ' ' => white/white.
   const lines = blockLines.slice();
   const w = Math.max(...lines.map(l => l.length));
   const h = lines.length;
 
   const imgW = (w + border*2) * scale;
-  const imgH = (h + border*2) * scale;
+  const imgH = (h*2 + border*2) * scale;
   const png = new PNG({ width: imgW, height: imgH });
 
   function setPixel(x,y,r,g,b,a=255){
@@ -17,17 +19,26 @@ function asciiQrToPngDataUrl(blockLines, { scale = 2, border = 1 } = {}) {
 
   for (let y=0;y<imgH;y++) for (let x=0;x<imgW;x++) setPixel(x,y,255,255,255,255);
 
+  function cellBits(ch){
+    if (ch === '█') return [1,1];
+    if (ch === '▀') return [1,0];
+    if (ch === '▄') return [0,1];
+    return [0,0];
+  }
+
   for (let yy=0; yy<h; yy++) {
     const line = lines[yy].padEnd(w, ' ');
     for (let xx=0; xx<w; xx++) {
-      const ch = line[xx];
-      if (ch === ' ') continue;
+      const [top, bottom] = cellBits(line[xx]);
       const px0 = (xx + border) * scale;
-      const py0 = (yy + border) * scale;
-      for (let sy=0; sy<scale; sy++) {
-        for (let sx=0; sx<scale; sx++) {
-          setPixel(px0+sx, py0+sy, 0,0,0,255);
-        }
+      const pyTop = (yy*2 + border) * scale;
+      const pyBot = (yy*2 + 1 + border) * scale;
+
+      if (top) {
+        for (let sy=0; sy<scale; sy++) for (let sx=0; sx<scale; sx++) setPixel(px0+sx, pyTop+sy, 0,0,0,255);
+      }
+      if (bottom) {
+        for (let sy=0; sy<scale; sy++) for (let sx=0; sx<scale; sx++) setPixel(px0+sx, pyBot+sy, 0,0,0,255);
       }
     }
   }

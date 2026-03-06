@@ -153,8 +153,8 @@
     },
     {
       "path": "provision/qr_worker.mjs",
-      "sha256": "e2dc58c1f92e22ae7d4e357a49e92f52959c2fccdcd7404c5e4317deaefc4b63",
-      "bytes": 1668
+      "sha256": "cee916e2dbb7100dc61e910f49df6078efad1e8c4882186e6633e9fbc26fa434",
+      "bytes": 2166
     },
     {
       "path": "provision/server.mjs",
