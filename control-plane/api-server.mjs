@@ -1258,43 +1258,60 @@ async function waitSshEcho(instance, { timeoutMs=15*60*1000, phase='ssh', onProg
 }
 
 async function resolvePoolKeyIdForRegion(targetRegion) {
-  const region = String(targetRegion || process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore');
+  const region = String(targetRegion || process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore').trim();
   const cachePath = process.env.BOTHOOK_POOL_KEY_REGION_CACHE_PATH || '/tmp/bothook_pool_key_by_region.json';
-  const desiredKeyId = String(process.env.BOTHOOK_POOL_KEY_ID || 'lhkp-q1oc3vdz');
-  const sourceRegion = String(process.env.BOTHOOK_POOL_KEY_SOURCE_REGION || process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore');
+  const pubPath = process.env.BOTHOOK_POOL_SSH_PUB_PATH || '/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519.pub';
+  const pub = String(fs.readFileSync(pubPath, 'utf8') || '').trim();
+  if (!pub) throw new Error('pool_key_public_key_missing');
+  const fp8 = crypto.createHash('sha256').update(pub).digest('hex').slice(0, 8);
+  const keyName = String(process.env.BOTHOOK_POOL_KEY_NAME || `bothook_pool_key_${fp8}`).trim();
 
-  // Fast path: same region.
-  if (region === sourceRegion) return desiredKeyId;
-
-  // Cache lookup.
+  // Cache lookup (supports legacy { [region]: keyId } and new { byRegion: { [region]: { keyName, keyId }}})
   try {
     const j = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-    const hit = j?.[region];
-    if (hit) return String(hit);
+    const legacy = j?.[region];
+    if (typeof legacy === 'string' && legacy) return String(legacy);
+    const hit = j?.byRegion?.[region];
+    if (hit?.keyName === keyName && hit?.keyId) return String(hit.keyId);
   } catch {}
 
-  // Fetch public key from source region, then import into target region.
-  const d = await tccli(`tccli lighthouse DescribeKeyPairs --region ${sourceRegion} --KeyIds '["${desiredKeyId}"]' --output json`);
-  const dj = JSON.parse(String(d.stdout||'{}'));
-  const kp = (dj.KeyPairSet || [])[0];
-  const pub = String(kp?.PublicKey || '').trim();
-  const name = String(kp?.KeyName || 'bothook_pool_key').trim() || 'bothook_pool_key';
-  if (!pub) throw new Error('pool_key_public_key_missing');
+  // If key already exists in this region, reuse it.
+  const list1 = await tccli(`tccli lighthouse DescribeKeyPairs --region ${region} --version ${API_VERSION} --output json`);
+  const dj1 = JSON.parse(String(list1.stdout||'{}'));
+  const ks1 = dj1.KeyPairSet || [];
+  const hit1 = ks1.find(k => String(k?.KeyName || '') === keyName);
+  let keyId = hit1?.KeyId ? String(hit1.KeyId) : '';
 
-  const imp = await tccli(`tccli lighthouse ImportKeyPair --region ${region} --KeyName '${name}' --PublicKey '${pub.replace(/'/g, "'\\''")}' --output json`);
-  const ij = JSON.parse(String(imp.stdout||'{}'));
-  const newKeyId = String(ij?.KeyId || ij?.KeyPairId || '').trim();
-  if (!newKeyId) throw new Error('pool_key_import_failed');
+  if (!keyId) {
+    // Import (best-effort); if it fails due to exists/race, re-describe.
+    try {
+      const imp = await tccli(`tccli lighthouse ImportKeyPair --region ${region} --version ${API_VERSION} --KeyName '${keyName}' --PublicKey '${pub.replace(/'/g, "'\\''")}' --output json`);
+      const ij = JSON.parse(String(imp.stdout||'{}'));
+      keyId = String(ij?.KeyId || ij?.KeyPairId || '').trim();
+    } catch {}
+
+    if (!keyId) {
+      const list2 = await tccli(`tccli lighthouse DescribeKeyPairs --region ${region} --version ${API_VERSION} --output json`);
+      const dj2 = JSON.parse(String(list2.stdout||'{}'));
+      const ks2 = dj2.KeyPairSet || [];
+      const hit2 = ks2.find(k => String(k?.KeyName || '') === keyName);
+      keyId = hit2?.KeyId ? String(hit2.KeyId) : '';
+    }
+  }
+
+  if (!keyId) throw new Error('pool_key_import_failed');
 
   // Persist cache best-effort.
   try {
     let j = {};
     try { j = JSON.parse(fs.readFileSync(cachePath, 'utf8')); } catch { j = {}; }
-    j[region] = newKeyId;
+    j.ts = new Date().toISOString();
+    j.byRegion = j.byRegion || {};
+    j.byRegion[region] = { keyName, keyId };
     fs.writeFileSync(cachePath, JSON.stringify(j, null, 2));
   } catch {}
 
-  return newKeyId;
+  return keyId;
 }
 
 async function associatePoolKey(instance_id, { region } = {}){
