@@ -1235,19 +1235,23 @@ async function waitSshEcho(instance, { timeoutMs=15*60*1000, phase='ssh', onProg
   let lastCode = null;
   while (Date.now()-start < timeoutMs) {
     attempt++;
-    const r = poolSshInit(instance, 'echo ssh_ok', { timeoutMs: 60000, tty: false, retries: 3 });
+    // Fail-fast attempts: keep each attempt short so the ops worker stays responsive.
+    const r = poolSshInit(instance, 'echo ssh_ok', { timeoutMs: 15000, tty: false, retries: 0 });
     lastCode = (r.code ?? null);
     const detail = String((r.stdout || '') + (r.stderr || '')).trim();
     if (detail) lastDetail = detail.slice(-600);
     if ((r.code ?? 1) === 0 && String(r.stdout||'').includes('ssh_ok')) return { ok: true, attempt, lastDetail, lastCode, phase };
 
-    // Progress heartbeat every few attempts so jobs don't look "stuck".
-    if (typeof onProgress === 'function' && (attempt % 3 === 0)) {
-      try { onProgress(`ssh not ready yet (attempt=${attempt}, lastCode=${lastCode ?? 'null'})`); } catch {}
+    // Progress heartbeat every attempt so jobs don't look "stuck".
+    if (typeof onProgress === 'function') {
+      try {
+        const msg = `ssh not ready yet (attempt=${attempt}, lastCode=${lastCode ?? 'null'})`;
+        onProgress(lastDetail ? (msg + `, last=${lastDetail.replace(/\s+/g,' ').slice(0,120)}`) : msg);
+      } catch {}
     }
 
-    // Backoff (max 45s) to avoid thrashing the SSH daemon during boot.
-    const sleepMsX = Math.min(45000, 5000 + attempt * 2000);
+    // Backoff (max 20s) to avoid thrashing.
+    const sleepMsX = Math.min(20000, 2500 + attempt * 1200);
     await sleepMs(sleepMsX);
   }
   return { ok: false, attempt, lastDetail, lastCode, phase };
@@ -5449,6 +5453,23 @@ async function runOpsWorkerLoop(){
 
   try {
     const { db } = openDb();
+
+    // Mark stale RUNNING jobs as ERROR so ops can re-enqueue. Prevents "forever RUNNING" jobs.
+    try {
+      const STALE_MS = parseInt(process.env.BOTHOOK_POOL_INIT_STALE_MS || String(30 * 60 * 1000), 10);
+      const cutoffIso = new Date(Date.now() - STALE_MS).toISOString();
+      const stale = db.prepare(
+        "SELECT job_id, log_json FROM pool_init_jobs WHERE status='RUNNING' AND started_at IS NOT NULL AND datetime(started_at) < datetime(?)"
+      ).all(cutoffIso);
+      for (const r of stale) {
+        let log = [];
+        try { log = JSON.parse(r.log_json || '[]'); } catch { log = []; }
+        log.push({ ts: nowIso(), msg: `stale RUNNING job auto-marked ERROR (cutoff=${cutoffIso})` });
+        db.prepare('UPDATE pool_init_jobs SET status=?, ended_at=?, log_json=? WHERE job_id=?')
+          .run('ERROR', nowIso(), JSON.stringify(log), String(r.job_id));
+      }
+    } catch {}
+
     while (true) {
       const row = db.prepare("SELECT * FROM pool_init_jobs WHERE status='QUEUED' ORDER BY created_at ASC LIMIT 1").get();
       if (!row) break;
