@@ -36,7 +36,7 @@ const OPENCLAW_STATE_DIR = process.env.OPENCLAW_STATE_DIR || path.join(OPENCLAW_
 const OPENCLAW_CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH || path.join(OPENCLAW_STATE_DIR, 'openclaw.json');
 
 const LOGIN_DEDUP_MS = parseInt(process.env.PROVISION_LOGIN_DEDUP_MS || '15000', 10);
-const QR_PARSE_INTERVAL_MS = parseInt(process.env.PROVISION_QR_PARSE_INTERVAL_MS || '800', 10);
+const QR_PARSE_INTERVAL_MS = parseInt(process.env.PROVISION_QR_PARSE_INTERVAL_MS || '2000', 10);
 
 function nowIso(){ return new Date().toISOString(); }
 
@@ -138,7 +138,8 @@ function tmuxCaptureTail(uuid, lines=320){
   // Use capture-pane output directly.
   // NOTE: `tmux show-buffer` requires a prior `tmux save-buffer`; the previous implementation
   // could return empty output and prevent QR parsing.
-  const r = sh(`tmux capture-pane -pt ${JSON.stringify(session)} -S -${lines} 2>/dev/null`, { timeoutMs: 4000 });
+  // Keep this tight: spawnSync blocks the Node event loop and can stall HTTP handlers.
+  const r = sh(`tmux capture-pane -pt ${JSON.stringify(session)} -S -${lines} 2>/dev/null`, { timeoutMs: 800 });
   if (r.code !== 0) return '';
   return r.stdout || '';
 }
