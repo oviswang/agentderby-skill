@@ -128,6 +128,7 @@ place_assets(){
 
   install -m 755 "$base/postboot_verify.sh" /opt/bothook/bin/postboot_verify.sh
   install -m 755 "$base/openclaw-gateway-start.sh" /opt/bothook/bin/openclaw-gateway-start.sh
+  install -m 755 "$base/openclaw_watchdog.sh" /opt/bothook/bin/openclaw_watchdog.sh
 
   # Provision server (local-only 18999)
   if [[ -f "$base/provision/server.mjs" ]]; then
@@ -148,10 +149,13 @@ install_units(){
   install -m 644 "$base/openclaw-gateway.service" /etc/systemd/system/openclaw-gateway.service
   install -m 644 "$base/bothook-provision.service" /etc/systemd/system/bothook-provision.service
   install -m 644 "$base/bothook-postboot-verify.service" /etc/systemd/system/bothook-postboot-verify.service
+  install -m 644 "$base/bothook-openclaw-watchdog.service" /etc/systemd/system/bothook-openclaw-watchdog.service
+  install -m 644 "$base/bothook-openclaw-watchdog.timer" /etc/systemd/system/bothook-openclaw-watchdog.timer
 
   systemctl daemon-reload
   systemctl enable --now openclaw-gateway.service bothook-provision.service >/dev/null 2>&1 || true
   systemctl enable --now bothook-postboot-verify.service >/dev/null 2>&1 || true
+  systemctl enable --now bothook-openclaw-watchdog.timer >/dev/null 2>&1 || true
 }
 
 ensure_onboarding_plugins(){

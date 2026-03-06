@@ -18,6 +18,12 @@ Environment=PATH=/home/ubuntu/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/us
 ExecStart=/usr/bin/node /opt/bothook/provision/server.mjs
 Restart=always
 RestartSec=2
+TimeoutStartSec=20
+TimeoutStopSec=15
+
+# Guardrails: prevent pathological login loops from taking the whole machine down.
+CPUQuota=120%
+MemoryMax=1200M
 
 NoNewPrivileges=true
 PrivateTmp=false

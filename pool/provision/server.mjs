@@ -253,6 +253,9 @@ function ensureSession(uuid){
       _logPath: null,
       loginMode: null,
       lastStartAt: null,
+      _startInFlight: false,
+      _startCooldownUntil: 0,
+      _lastStartRequestedAt: 0,
     };
     sessions.set(uuid, s);
   }
@@ -276,6 +279,23 @@ function killLogin(uuid){
 function startLogin(uuid, { force=false } = {}){
   const s = ensureSession(uuid);
   const now = Date.now();
+
+  // Hard guardrails: prevent start storms from constantly killing/restarting login.
+  if (!force && now < (s._startCooldownUntil || 0)) {
+    return;
+  }
+  if (s._startInFlight) {
+    return;
+  }
+
+  // If a tmux login session already exists and this is not a force relink,
+  // do NOT restart it. Restarting clears QR and can amplify browser polling into a storm.
+  if (!force && tmuxHasSession(`wa-${uuid}`)) {
+    s.lastLoginAt = now;
+    s.loginMode = 'tmux';
+    return;
+  }
+
   if (!force && s.pty && (now - s.lastLoginAt) < LOGIN_DEDUP_MS) {
     return;
   }
@@ -289,6 +309,8 @@ function startLogin(uuid, { force=false } = {}){
     const authDir = path.join(OPENCLAW_STATE_DIR, 'channels', 'whatsapp');
     try { fs.rmSync(authDir, { recursive:true, force:true }); } catch {}
   }
+
+  s._startInFlight = true;
 
   killLogin(uuid);
   s.lastLoginAt = now;
@@ -323,6 +345,9 @@ function startLogin(uuid, { force=false } = {}){
   const tr = tmuxStartLoginSession(uuid, { force });
   if (!tr.ok) {
     s.lastError = JSON.stringify(tr, null, 2);
+    s._startInFlight = false;
+    // Cooldown to avoid tight error loops when tmux/openclaw is unhealthy.
+    s._startCooldownUntil = Date.now() + (force ? 15000 : 30000);
     return;
   }
 
@@ -331,6 +356,10 @@ function startLogin(uuid, { force=false } = {}){
   s._logPath = null;
   s.loginMode = 'tmux';
   s.lastStartAt = nowIso();
+
+  s._startInFlight = false;
+  // Even on success, avoid immediate restarts due to UI/network retries.
+  s._startCooldownUntil = Date.now() + (force ? 8000 : 15000);
 }
 
 function shellReadUuidLink(uuid){
@@ -467,13 +496,16 @@ app.post('/api/wa/start', async (req, res) => {
 
     console.log(`[bothook-provision] wa.start uuid=${uuid} force=${force}`);
 
+    const s0 = ensureSession(uuid);
+    s0._lastStartRequestedAt = Date.now();
+
     // Respond immediately; login work happens in background.
     res.json({ ok:true, uuid, status:'starting' });
     setTimeout(() => {
       try {
         startLogin(uuid, { force });
         const s = ensureSession(uuid);
-        console.log(`[bothook-provision] wa.start dispatched uuid=${uuid} loginMode=${s.loginMode} lastError=${s.lastError ? 'yes' : 'no'}`);
+        console.log(`[bothook-provision] wa.start dispatched uuid=${uuid} loginMode=${s.loginMode} inFlight=${s._startInFlight?'yes':'no'} lastError=${s.lastError ? 'yes' : 'no'}`);
       } catch (e) {
         console.log(`[bothook-provision] wa.start exception uuid=${uuid} err=${String(e?.message||e)}`);
       }

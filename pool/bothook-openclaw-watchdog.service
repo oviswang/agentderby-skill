@@ -1,0 +1,8 @@
+[Unit]
+Description=BOTHook Watchdog (openclaw high CPU mitigation)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash /opt/bothook/bin/openclaw_watchdog.sh
