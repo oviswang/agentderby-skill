@@ -59,8 +59,16 @@ fetch_verified(){
 
 ensure_node(){
   if command -v node >/dev/null 2>&1; then
-    log "node already installed: $(node -v)"
-    return 0
+    local have=""
+    have="$(node -v 2>/dev/null || true)"
+    log "node already installed: ${have}"
+    # OpenClaw + Baileys require Node 20+.
+    local major=""
+    major="$(echo "$have" | sed -E 's/^v([0-9]+).*/\1/')"
+    if [[ "$major" =~ ^[0-9]+$ ]] && (( major >= 20 )); then
+      return 0
+    fi
+    log "node version too old (have=${have}); upgrading to Node.js ${NODE_MAJOR}.x"
   fi
   log "Installing Node.js (major=$NODE_MAJOR) via NodeSource"
   apt-get update -y
