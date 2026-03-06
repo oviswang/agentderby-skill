@@ -153,8 +153,8 @@
     },
     {
       "path": "provision/server.mjs",
-      "sha256": "3f8d2b020775dca74a4b27523756d6d1340e10feb9986b5e3ca3adbd39226793",
-      "bytes": 18577
+      "sha256": "e2ba9a3029a9bc35e40b86cf33b3d3774ee88777a331bc86d4717058570b5b15",
+      "bytes": 19091
     },
     {
       "path": "scripts/apply_inboundguard_v1_patch.sh",

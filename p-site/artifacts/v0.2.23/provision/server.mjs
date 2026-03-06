@@ -104,12 +104,26 @@ function tmuxStartLoginSession(uuid, { force=false } = {}){
   try { startGateway(); } catch {}
 
   // Launch in tmux to ensure a real terminal.
-  const r = sh(`tmux new-session -d -s ${JSON.stringify(session)} -x 200 -y 60 ${JSON.stringify(cmd)}`, { timeoutMs: 4000 });
+  // NOTE: tmux startup can be slow on fresh boxes (apt triggers, fs contention, etc.).
+  // Use a generous timeout and then verify the session exists.
+  const r = sh(`tmux new-session -d -s ${JSON.stringify(session)} -x 200 -y 60 ${JSON.stringify(cmd)}`, { timeoutMs: 15000 });
   if (r.code !== 0) {
     return {
       ok:false,
       session,
       error: `tmux new-session failed (code=${r.code})`,
+      stdout: (r.stdout||'').slice(-2000),
+      stderr: (r.stderr||'').slice(-2000),
+      probe: tmuxProbe()
+    };
+  }
+
+  // Some failure modes return exit=0 but the session is not actually created.
+  if (!tmuxHasSession(session)) {
+    return {
+      ok:false,
+      session,
+      error: 'tmux session not found after new-session (possible timeout/kill)',
       stdout: (r.stdout||'').slice(-2000),
       stderr: (r.stderr||'').slice(-2000),
       probe: tmuxProbe()
