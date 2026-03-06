@@ -100,17 +100,24 @@ ensure_openclaw(){
   mkdir -p "$prefix"
   chown -R ubuntu:ubuntu "$prefix"
 
+  # Ensure npm exists and is visible in ubuntu's PATH.
+  if ! sudo -u ubuntu bash -lc 'command -v npm >/dev/null 2>&1'; then
+    log "npm not found for ubuntu; installing npm via apt"
+    apt-get update -y
+    apt-get install -y npm
+  fi
+
   # Ensure future `npm i -g` by ubuntu installs into ~/.npm-global.
-  sudo -u ubuntu npm config set prefix "$prefix" >/dev/null
+  sudo -u ubuntu bash -lc "npm config set prefix '$prefix'" >/dev/null
 
   # Harden npm behavior for flaky networks.
-  sudo -u ubuntu npm config set fetch-retries 5 >/dev/null || true
-  sudo -u ubuntu npm config set fetch-retry-mintimeout 20000 >/dev/null || true
-  sudo -u ubuntu npm config set fetch-retry-maxtimeout 120000 >/dev/null || true
+  sudo -u ubuntu bash -lc "npm config set fetch-retries 5" >/dev/null || true
+  sudo -u ubuntu bash -lc "npm config set fetch-retry-mintimeout 20000" >/dev/null || true
+  sudo -u ubuntu bash -lc "npm config set fetch-retry-maxtimeout 120000" >/dev/null || true
 
   log "Installing OpenClaw pinned from npm (as ubuntu): openclaw@$pinned_ver"
   # Use a hard timeout so pool init doesn't hang forever on npm.
-  if ! timeout 900 sudo -u ubuntu npm install -g "openclaw@${pinned_ver}"; then
+  if ! timeout 900 sudo -u ubuntu bash -lc "npm install -g 'openclaw@${pinned_ver}'"; then
     log "FATAL: npm install openclaw@$pinned_ver failed"
     exit 23
   fi
