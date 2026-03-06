@@ -486,7 +486,8 @@ setInterval(() => {
       if (s._lastQrHash === h) continue;
       s._lastQrHash = h;
 
-      s.lastQrDataUrl = asciiQrToPngDataUrl(last, { scale: 3, border: 2 });
+      // Smaller PNG to reduce sync CPU + event-loop stalls.
+      s.lastQrDataUrl = asciiQrToPngDataUrl(last, { scale: 2, border: 1 });
       s.lastQrAt = nowIso();
       s.qrSeq += 1;
     } catch (e) {
