@@ -375,9 +375,11 @@ function probeInstanceWhatsappClean(db, instance, { timeoutMs = 3500 } = {}) {
     selfJid = null;
   }
 
-  const clean = !linked; // strict
+  const ok = (r.code === 0) && parsed.ok;
+  // Strict: if we cannot positively determine status, treat instance as NOT clean.
+  const clean = ok ? !linked : false;
   const ts = nowIso();
-  const evidence = JSON.stringify({ linked, connected, selfJid, via: 'probeInstanceWhatsappClean' });
+  const evidence = JSON.stringify({ ok, linked, connected, selfJid, exit_code: r.code ?? null, via: 'probeInstanceWhatsappClean' });
   try {
     db.prepare('UPDATE instances SET last_probe_at=? WHERE instance_id=?').run(ts, instance.instance_id);
     if (clean) {
@@ -391,7 +393,7 @@ function probeInstanceWhatsappClean(db, instance, { timeoutMs = 3500 } = {}) {
     }
   } catch {}
 
-  return { ok: r.code === 0, clean, linked, connected, selfJid, detail: text.slice(0, 400) };
+  return { ok, clean, linked, connected, selfJid, detail: text.slice(0, 400) };
 }
 
 function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
