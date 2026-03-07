@@ -388,10 +388,25 @@ function probeInstanceWhatsappClean(db, instance, { timeoutMs = 3500 } = {}) {
   try {
     db.prepare('UPDATE instances SET last_probe_at=? WHERE instance_id=?').run(ts, instance.instance_id);
     if (!ok) {
-      // Fail-closed: unknown probe result must NOT be treated as DIRTY/linked.
-      db.prepare(
-        'UPDATE instances SET health_status=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
-      ).run('NEEDS_VERIFY', 'probe_failed', 'probe_pull', evidence, instance.instance_id);
+      // Fail-closed for allocation decisions, but avoid downgrading a freshly-verified READY instance
+      // due to transient OpenClaw startup/CLI noise.
+      let curHs = '';
+      try {
+        const cur = db.prepare('SELECT health_status FROM instances WHERE instance_id=?').get(instance.instance_id);
+        curHs = String(cur?.health_status || '');
+      } catch {}
+
+      if (curHs === 'READY') {
+        // Keep READY, but record evidence for debugging.
+        db.prepare(
+          'UPDATE instances SET health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
+        ).run('probe_failed_observed', 'probe_pull', evidence, instance.instance_id);
+      } else {
+        // Unknown probe result must NOT be treated as DIRTY/linked.
+        db.prepare(
+          'UPDATE instances SET health_status=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
+        ).run('NEEDS_VERIFY', 'probe_failed', 'probe_pull', evidence, instance.instance_id);
+      }
     } else if (clean) {
       db.prepare(
         'UPDATE instances SET health_status=?, last_ok_at=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
