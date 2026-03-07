@@ -1782,8 +1782,19 @@ function outboundReadinessProbe(inst){
     const wa = cj?.channels?.whatsapp || null;
     // Some versions may omit connected/running fields; be conservative.
     if (!wa) return { ok:false, reason:'wa_status_missing' };
-    if (wa.running === false) return { ok:false, reason:'wa_not_running' };
-    if (wa.connected === false) return { ok:false, reason:'wa_not_connected' };
+
+    // Some WhatsApp stacks can report running/connected=false transiently (e.g. session conflict auto-restart).
+    // If the account is still linked, allow outbound attempts (worker retries will handle transient send errors),
+    // and optionally let higher layers trigger a gateway restart.
+    if (wa.linked === true) {
+      // If linked but not currently connected, proceed with a warning.
+      if (wa.running === false || wa.connected === false) {
+        return { ok:true, warn:'linked_but_not_connected' };
+      }
+    } else {
+      if (wa.running === false) return { ok:false, reason:'wa_not_running' };
+      if (wa.connected === false) return { ok:false, reason:'wa_not_connected' };
+    }
 
     // (3) autoreply loaded
     // Prefer the cheap marker written by the plugin itself.
