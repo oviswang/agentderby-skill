@@ -224,7 +224,8 @@ main(){
   mkdir -p "$INSTALL_DIR/ops-scripts"
   fetch_verified "scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/artifacts/sha256sums.txt"
   fetch_verified "scripts/rollback_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/rollback_sendguard_v2_patch.sh" "$INSTALL_DIR/artifacts/sha256sums.txt"
-  chmod +x "$INSTALL_DIR/ops-scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/rollback_sendguard_v2_patch.sh"
+  fetch_verified "ops-scripts/fix_openclaw_credentials_perms.sh" "$INSTALL_DIR/ops-scripts/fix_openclaw_credentials_perms.sh" "$INSTALL_DIR/artifacts/sha256sums.txt"
+  chmod +x "$INSTALL_DIR/ops-scripts/apply_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/rollback_sendguard_v2_patch.sh" "$INSTALL_DIR/ops-scripts/fix_openclaw_credentials_perms.sh"
 
   chmod +x "$INSTALL_DIR/bin/openclaw-gateway-start.sh" "$INSTALL_DIR/bin/postboot_verify.sh" "$INSTALL_DIR/bin/cutover_delivered.sh"
 
@@ -445,6 +446,9 @@ PY
   # Suppress embedded-agent missing-key warnings (UX hardening).
   # NOTE: patches OpenClaw dist bundles; errors remain in logs.
   bash "$INSTALL_DIR/scripts/patch_openclaw_suppress_missing_key_warning.sh" || true
+
+  # Ops: credential permissions safety fixer (used by watchdog and support). Ensure it is executable.
+  chmod +x "$INSTALL_DIR/ops-scripts/fix_openclaw_credentials_perms.sh" 2>/dev/null || true
 
   # Ensure local login authority (pool stage). If control-plane takeover marker exists, remove it.
   rm -f /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true

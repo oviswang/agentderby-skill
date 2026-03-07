@@ -47,6 +47,16 @@ if ! curl -fsS --max-time 2 http://127.0.0.1:18999/healthz >/dev/null 2>&1; then
   systemctl restart bothook-provision.service 2>/dev/null || true
 fi
 
+# 3) Self-heal credential permissions (prevents WhatsApp send failures due to EACCES).
+CRED_ROOT="/home/ubuntu/.openclaw/credentials"
+if [[ -d "$CRED_ROOT" ]]; then
+  owner=$(stat -c %U:%G "$CRED_ROOT" 2>/dev/null || echo unknown)
+  if [[ "$owner" != "ubuntu:ubuntu" ]]; then
+    log "WARN creds_owner_not_ubuntu ($owner): running fix_openclaw_credentials_perms"
+    bash /opt/bothook/ops-scripts/fix_openclaw_credentials_perms.sh >/dev/null 2>&1 || true
+  fi
+fi
+
 # Return highest %cpu among openclaw processes (integer)
 max_cpu(){
   ps -eo comm,pcpu --sort=-pcpu \
