@@ -1814,7 +1814,8 @@ function outboundReadinessProbe(inst){
       } catch {}
     }
 
-    if (autoreplyOk === false) return { ok:false, reason:'autoreply_not_loaded' };
+    // Autoreply is a UX gate, not a transport gate: welcome/guide can still be sent even if the marker is missing.
+    if (autoreplyOk === false) return { ok:true, warn:'autoreply_not_loaded' };
 
     return { ok:true };
   } catch {
