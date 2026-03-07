@@ -1772,12 +1772,12 @@ function outboundReadinessProbe(inst){
   // 3) autoreply plugin loaded (from postboot evidence if present; fallback to plugin list text)
   try {
     // (1) gateway probe
-    const pr = poolSsh(inst, 'openclaw gateway probe --json 2>/dev/null || true', { timeoutMs: 6000, tty:false, retries:0 });
+    const pr = poolSsh(inst, 'openclaw gateway probe --json 2>/dev/null || true', { timeoutMs: 12000, tty:false, retries:1 });
     const pj = parseJsonFromFirstBrace(pr.stdout || pr.stderr || '');
     if (!pj || pj.ok !== true) return { ok:false, reason:'gateway_probe_failed' };
 
     // (2) whatsapp channel status
-    const cr = poolSsh(inst, 'openclaw channels status --probe --json 2>/dev/null || true', { timeoutMs: 7000, tty:false, retries:0 });
+    const cr = poolSsh(inst, 'openclaw channels status --probe --json 2>/dev/null || true', { timeoutMs: 15000, tty:false, retries:1 });
     const cj = parseJsonFromFirstBrace(cr.stdout || cr.stderr || '');
     const wa = cj?.channels?.whatsapp || null;
     // Some versions may omit connected/running fields; be conservative.
