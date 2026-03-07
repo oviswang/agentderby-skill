@@ -1643,7 +1643,7 @@ async function runPoolInitJob(job){
         // HARD gate (A): before declaring the instance truly READY-for-allocation, re-check SSH stability + key local services.
         // Rationale: some instances accept port 22 but randomly stall during SSH banner exchange. Those must NOT enter the pool.
         const postCheck = (() => {
-          const out = { ok: true, ssh: [], provisionHealthz: null, gatewayProbe: null };
+          const out = { ok: true, ssh: [], provisionHealthz: null, onboardingReady: null, gatewayProbe: null };
           try {
             for (let i = 0; i < 3; i++) {
               const r = poolSsh(inst, 'echo ok', { timeoutMs: 6000, tty: false, retries: 0, profile: 'fast' });
@@ -1665,12 +1665,20 @@ async function runPoolInitJob(job){
           }
 
           try {
+            const r = poolSsh(inst, 'test -s /opt/bothook/state/ONBOARDING_READY && echo ok || echo missing', { timeoutMs: 8000, tty: false, retries: 0, profile: 'fast' });
+            out.onboardingReady = { code: r.code ?? null, stdout: String(r.stdout || '').trim(), stderr: String(r.stderr || '').trim().slice(0, 120) };
+            if (!String(r.stdout || '').includes('ok')) out.ok = false;
+          } catch (e) {
+            out.ok = false;
+            out.onboardingReady = { error: String(e?.message || e) };
+          }
+
+          // Gateway probe is observational only (startup can be slow). Do NOT fail the init job based on this.
+          try {
             const r = poolSsh(inst, 'openclaw gateway probe --json 2>/dev/null || openclaw gateway probe', { timeoutMs: 15000, tty: false, retries: 0, profile: 'fast' });
             const txt = String(r.stdout || r.stderr || '').trim();
             out.gatewayProbe = { code: r.code ?? null, out: txt.slice(0, 400) };
-            if ((r.code ?? 1) !== 0) out.ok = false;
           } catch (e) {
-            out.ok = false;
             out.gatewayProbe = { error: String(e?.message || e) };
           }
 

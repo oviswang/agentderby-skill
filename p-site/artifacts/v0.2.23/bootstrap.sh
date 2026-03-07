@@ -516,6 +516,11 @@ SUDO
     }
   fi
 
+  # Marker: onboarding stack is installed + enabled (autoreply/watchdog/prompts). Used by control-plane init.
+  mkdir -p /opt/bothook/state
+  echo "installed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >/opt/bothook/state/ONBOARDING_READY
+  chmod 644 /opt/bothook/state/ONBOARDING_READY
+
   log "Bootstrap done. Gateway + Provision services enabled+started."
 }
 
