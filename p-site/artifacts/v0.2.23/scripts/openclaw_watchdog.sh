@@ -34,9 +34,31 @@ if command -v ss >/dev/null 2>&1; then
     if (( age < GATEWAY_COOLDOWN_SEC )); then
       log "WARN gateway_not_listening: cooldown active (${age}s < ${GATEWAY_COOLDOWN_SEC}s), skip restart"
     else
-      echo "$now_s" > "$GATEWAY_STATE_FILE" 2>/dev/null || true
-      log "WARN gateway_not_listening: restarting openclaw-gateway.service"
-      systemctl restart openclaw-gateway.service 2>/dev/null || true
+      # Startup grace: don't restart during the first moments of service boot.
+      # If we restart too early, we can create a self-inflicted restart loop where 18789 never comes up.
+      grace_sec=${WATCHDOG_GATEWAY_STARTUP_GRACE_SEC:-90}
+      svc_age_ok=1
+      try_age() {
+        local now_ms start_us age_ms
+        now_ms=$(awk '{print int($1*1000)}' /proc/uptime 2>/dev/null || echo 0)
+        start_us=$(systemctl show -p ExecMainStartTimestampMonotonic --value openclaw-gateway.service 2>/dev/null || echo 0)
+        if [[ -z "$now_ms" || -z "$start_us" ]]; then return 1; fi
+        if ! [[ "$now_ms" =~ ^[0-9]+$ && "$start_us" =~ ^[0-9]+$ ]]; then return 1; fi
+        age_ms=$(( now_ms - (start_us/1000) ))
+        if (( age_ms < grace_sec*1000 )); then
+          svc_age_ok=0
+        fi
+        return 0
+      }
+      try_age || true
+
+      if (( svc_age_ok == 0 )); then
+        log "WARN gateway_not_listening: within startup grace (${grace_sec}s), skip restart"
+      else
+        echo "$now_s" > "$GATEWAY_STATE_FILE" 2>/dev/null || true
+        log "WARN gateway_not_listening: restarting openclaw-gateway.service"
+        systemctl restart openclaw-gateway.service 2>/dev/null || true
+      fi
     fi
   fi
 fi
