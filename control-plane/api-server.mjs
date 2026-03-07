@@ -722,8 +722,9 @@ function writeUuidStateFilesOnInstance(instance, { uuid, lang } = {}) {
       + `sudo chmod 664 /opt/bothook/state.json || true; `
       + `echo ok`;
 
-    // Fail-fast: this is best-effort metadata, never block user flows on slow SSH.
-    poolSsh(instance, remote, { timeoutMs: 1800, tty: false, retries: 0, profile: 'fast' });
+    // This write is critical for instance-side autoreply (UUID.txt). Keep it bounded but not too aggressive;
+    // slow SSH handshakes are common on fresh boxes.
+    poolSsh(instance, remote, { timeoutMs: 8000, tty: false, retries: 1, profile: 'fast' });
   } catch {}
 }
 
