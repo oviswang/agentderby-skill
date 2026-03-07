@@ -41,6 +41,56 @@ function parseFetchVerifiedFromBootstrap(bootstrapPath) {
   return [...rels];
 }
 
+function extractTplVars(s) {
+  const out = new Set();
+  const re = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
+  let m;
+  while ((m = re.exec(String(s || '')))) out.add(m[1]);
+  return out;
+}
+
+function validateWhatsAppPrompts(dir) {
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return { ok: true, skipped: true };
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort();
+  if (!files.includes('en.json')) {
+    return { ok: false, error: 'missing_en_json', dir };
+  }
+  const load = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+  const en = load('en.json');
+  const enKeys = Object.keys(en).sort();
+
+  const enVarsByKey = {};
+  for (const k of enKeys) {
+    enVarsByKey[k] = [...extractTplVars(en[k])].sort();
+  }
+
+  const problems = [];
+  for (const f of files) {
+    const j = load(f);
+    const keys = Object.keys(j).sort();
+    const missing = enKeys.filter(k => !(k in j));
+    const extra = keys.filter(k => !(k in en));
+    if (missing.length || extra.length) {
+      problems.push({ file: f, missingKeys: missing, extraKeys: extra });
+      continue;
+    }
+    for (const k of enKeys) {
+      const vars = [...extractTplVars(j[k])].sort();
+      const exp = enVarsByKey[k];
+      const missV = exp.filter(v => !vars.includes(v));
+      const extraV = vars.filter(v => !exp.includes(v));
+      if (missV.length || extraV.length) {
+        problems.push({ file: f, key: k, missingVars: missV, extraVars: extraV });
+      }
+    }
+  }
+
+  if (problems.length) {
+    return { ok: false, error: 'whatsapp_prompts_mismatch', dir, problems };
+  }
+  return { ok: true, skipped: false, files: files.length, keys: enKeys.length };
+}
+
 const args = process.argv.slice(2);
 const checkOnly = args.includes('--check');
 const targetDir = args.find(a => !a.startsWith('-')) || '/var/www/p-site/artifacts/latest';
@@ -51,6 +101,14 @@ const sumsPath = path.join(realDir, 'sha256sums.txt');
 if (!fs.existsSync(realDir) || !fs.statSync(realDir).isDirectory()) {
   console.error(`Not a directory: ${realDir}`);
   process.exit(2);
+}
+
+// Hard gate: WhatsApp prompts must be key/variable-consistent across all languages.
+// This prevents partial/incorrect welcome messages in some locales.
+const promptsCheck = validateWhatsAppPrompts(path.join(realDir, 'prompts', 'whatsapp_prompts'));
+if (!promptsCheck.ok) {
+  console.error(JSON.stringify({ ok: false, ...promptsCheck }, null, 2));
+  process.exit(3);
 }
 
 const files = walk(realDir)
