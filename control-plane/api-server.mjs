@@ -334,8 +334,9 @@ function pickProvisionReady(instances) {
 function parseChannelsStatusJson(text) {
   try {
     const rawText = String(text || '');
-    const idx = rawText.indexOf('{');
-    const jsonText = idx >= 0 ? rawText.slice(idx) : rawText;
+    const a = rawText.indexOf('{');
+    const b = rawText.lastIndexOf('}');
+    const jsonText = (a >= 0 && b >= a) ? rawText.slice(a, b + 1) : rawText;
     const j = JSON.parse(jsonText);
     const w = j?.channels?.whatsapp || j?.whatsapp || null;
     const selfJid = w?.self?.jid ? String(w.self.jid) : null;
