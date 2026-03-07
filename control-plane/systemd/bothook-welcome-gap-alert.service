@@ -8,6 +8,7 @@ Type=oneshot
 User=ubuntu
 WorkingDirectory=/home/ubuntu/.openclaw/workspace
 Environment=BOTHOOK_DB_PATH=/home/ubuntu/.openclaw/workspace/control-plane/data/bothook.sqlite
+Environment=BOTHOOK_OPENCLAW_BIN=/home/ubuntu/.npm-global/bin/openclaw
 Environment=BOTHOOK_TELEGRAM_OWNER_CHAT_ID=7095719535
 Environment=BOTHOOK_WELCOME_GAP_ALERT_DEDUPE_MIN=30
 Environment=BOTHOOK_WELCOME_GAP_ALERT_LOOKBACK_MIN=20

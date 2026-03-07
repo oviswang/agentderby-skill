@@ -63,10 +63,14 @@ function summarize(diag){
   return lines.join('\n');
 }
 
+const OPENCLAW_BIN = process.env.BOTHOOK_OPENCLAW_BIN
+  || process.env.OPENCLAW_BIN
+  || '/home/ubuntu/.npm-global/bin/openclaw';
+
 function sendTelegram(text){
   // Use OpenClaw CLI on control-plane host.
   // Do not pass secrets; text is safe summary.
-  execFileSync('openclaw', ['message','send','--channel','telegram','--target', String(TARGET), '--message', String(text)], {
+  execFileSync(OPENCLAW_BIN, ['message','send','--channel','telegram','--target', String(TARGET), '--message', String(text)], {
     stdio: 'ignore',
     timeout: 15000,
   });
