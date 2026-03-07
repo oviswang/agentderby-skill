@@ -387,7 +387,12 @@ function probeInstanceWhatsappClean(db, instance, { timeoutMs = 3500 } = {}) {
   const evidence = JSON.stringify({ ok, linked, connected, selfJid, exit_code: r.code ?? null, via: 'probeInstanceWhatsappClean' });
   try {
     db.prepare('UPDATE instances SET last_probe_at=? WHERE instance_id=?').run(ts, instance.instance_id);
-    if (clean) {
+    if (!ok) {
+      // Fail-closed: unknown probe result must NOT be treated as DIRTY/linked.
+      db.prepare(
+        'UPDATE instances SET health_status=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
+      ).run('NEEDS_VERIFY', 'probe_failed', 'probe_pull', evidence, instance.instance_id);
+    } else if (clean) {
       db.prepare(
         'UPDATE instances SET health_status=?, last_ok_at=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
       ).run('READY', ts, 'whatsapp_unlinked', 'probe_pull', evidence, instance.instance_id);
