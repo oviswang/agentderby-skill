@@ -349,11 +349,10 @@ function parseChannelsStatusJson(text) {
 function probeInstanceWhatsappClean(db, instance, { timeoutMs = 3500 } = {}) {
   // A-mode strict gate: pool instances must be WhatsApp-unlinked before allocation.
   // Returns { ok, clean, linked, connected, selfJid, detail }
+  // IMPORTANT: keep this probe lightweight and non-interactive.
+  // Do NOT call sudo/systemctl here: it can hang or fail under non-tty SSH and will create false negatives.
   const cmd = `set -euo pipefail; `
-    + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
-    + `systemctl --user start openclaw-gateway.service 2>/dev/null || true; `
-    + `sleep 1; `
-    + `openclaw channels status --json 2>/dev/null || openclaw channels status`;
+    + `timeout 6 openclaw channels status --json 2>/dev/null || openclaw channels status`;
 
   // Fail-fast: do NOT let web handlers block on slow/overloaded instances.
   const r = poolSsh(instance, cmd, { timeoutMs, tty: false, retries: 0, profile: 'fast' });
