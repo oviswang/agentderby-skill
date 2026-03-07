@@ -1775,7 +1775,18 @@ function outboundReadinessProbe(inst){
     // (1) gateway probe
     const pr = poolSsh(inst, 'openclaw gateway probe --json 2>/dev/null || true', { timeoutMs: 12000, tty:false, retries:1 });
     const pj = parseJsonFromFirstBrace(pr.stdout || pr.stderr || '');
-    if (!pj || pj.ok !== true) return { ok:false, reason:'gateway_probe_failed' };
+    if (!pj || pj.ok !== true) {
+      return {
+        ok: false,
+        reason: 'gateway_probe_failed',
+        detail: {
+          ssh_code: pr.code ?? null,
+          stdout: String(pr.stdout || '').slice(0, 600),
+          stderr: String(pr.stderr || '').slice(0, 600),
+          parsed: pj || null,
+        }
+      };
+    }
 
     // (2) whatsapp channel status
     const cr = poolSsh(inst, 'openclaw channels status --probe --json 2>/dev/null || true', { timeoutMs: 15000, tty:false, retries:1 });
@@ -1871,11 +1882,12 @@ async function runOutboundWorkerLoop(){
         const tsN = nowIso();
         const next = new Date(Date.now() + outboundBackoffMs(attempt)).toISOString();
         try {
+          const detail = ready?.detail ? JSON.stringify(ready.detail).slice(0, 1800) : '';
           db.prepare('UPDATE outbound_tasks SET status=?, next_run_at=?, last_error_code=?, last_error_detail=?, updated_at=? WHERE task_id=?')
-            .run('QUEUED', next, ready.reason || 'not_ready', '', tsN, task_id);
+            .run('QUEUED', next, ready.reason || 'not_ready', detail, tsN, task_id);
           db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
             crypto.randomUUID(), tsN, 'delivery', delivery_id || uuid, 'OUTBOUND_TASK_DELAYED',
-            JSON.stringify({ uuid, delivery_id, instance_id, kind, reason: ready.reason || 'not_ready', attempt, next_run_at: next })
+            JSON.stringify({ uuid, delivery_id, instance_id, kind, reason: ready.reason || 'not_ready', attempt, next_run_at: next, detail: ready?.detail || null })
           );
         } catch {}
         continue;
