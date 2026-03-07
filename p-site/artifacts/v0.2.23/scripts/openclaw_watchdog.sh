@@ -17,6 +17,21 @@ CPU_THRESHOLD=${WATCHDOG_OPENCLAW_CPU_THRESHOLD:-90}
 BREACH_N=${WATCHDOG_OPENCLAW_CPU_BREACH_N:-6}
 STATE_FILE="/run/bothook_openclaw_watchdog.state"
 
+# --- Availability guardrails (run every tick; best-effort) ---
+# 1) Ensure gateway is listening on loopback (otherwise user messages can be silently dropped).
+if command -v ss >/dev/null 2>&1; then
+  if ! ss -lnt 2>/dev/null | grep -qE '127\.0\.0\.1:18789|\[::1\]:18789|:18789'; then
+    log "WARN gateway_not_listening: restarting openclaw-gateway.service"
+    systemctl restart openclaw-gateway.service 2>/dev/null || true
+  fi
+fi
+
+# 2) Ensure provisioning server is healthy (QR generation depends on it).
+if ! curl -fsS --max-time 2 http://127.0.0.1:18999/healthz >/dev/null 2>&1; then
+  log "WARN provision_healthz_fail: restarting bothook-provision.service"
+  systemctl restart bothook-provision.service 2>/dev/null || true
+fi
+
 # Return highest %cpu among openclaw processes (integer)
 max_cpu(){
   ps -eo comm,pcpu --sort=-pcpu \
