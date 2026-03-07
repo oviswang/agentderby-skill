@@ -356,7 +356,7 @@ function probeInstanceWhatsappClean(db, instance, { timeoutMs = 3500 } = {}) {
   // IMPORTANT: keep this probe lightweight and non-interactive.
   // Do NOT call sudo/systemctl here: it can hang or fail under non-tty SSH and will create false negatives.
   const cmd = `set -euo pipefail; `
-    + `timeout 8 openclaw channels status --json`;
+    + `openclaw channels status --json`;
 
   // Fail-fast: do NOT let web handlers block on slow/overloaded instances.
   const r = poolSsh(instance, cmd, { timeoutMs, tty: false, retries: 0, profile: 'fast' });
@@ -3116,7 +3116,7 @@ app.post('/api/wa/start', async (req, res) => {
           continue;
         }
 
-        const timeoutMs = parseInt(process.env.BOTHOOK_WA_START_INSTANCE_PROBE_TIMEOUT_MS || '7000', 10);
+        const timeoutMs = parseInt(process.env.BOTHOOK_WA_START_INSTANCE_PROBE_TIMEOUT_MS || '15000', 10);
         const probe = probeInstanceWhatsappClean(db, inst, { timeoutMs });
         probed++;
         if (probe.clean) { chosen = inst; break; }
