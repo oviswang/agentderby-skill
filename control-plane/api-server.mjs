@@ -5406,6 +5406,51 @@ function startOpsWorker(){
       const exp = meta.qr_expires_at ? Date.parse(meta.qr_expires_at) : NaN;
       if (!isNaN(exp) && exp <= now){
         const ts = nowIso();
+
+        // Late-link salvage: before recycling, probe the instance to see if WhatsApp actually linked.
+        // Rationale: pairing can complete after the QR expires (or after the UI stops polling).
+        // If creds.json indicates a fresh self JID for this QR window, bind + move to BOUND_UNPAID instead of recycling.
+        try {
+          if (r.instance_id) {
+            const inst = getInstanceById(db, r.instance_id);
+            const qrGenAt = meta.qr_generated_at ? Date.parse(meta.qr_generated_at) : NaN;
+            if (inst?.public_ip) {
+              const pr = poolSsh(
+                inst,
+                `set -euo pipefail; python3 -c "import os,json; p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'; mt=int(os.path.getmtime(p)) if os.path.exists(p) else 0; j=(json.load(open(p)) if os.path.exists(p) else {}; me=(j.get('me') or {}); jid=(me.get('id') or me.get('jid') or ''); print(str(mt)+' '+str(jid))"`,
+                { timeoutMs: 2500, tty: false, retries: 0 }
+              );
+              const out = String(pr.stdout || '').trim();
+              const parts = out.split(/\s+/, 2);
+              const mtimeSec = parseInt(parts[0] || '0', 10) || 0;
+              const jid = String(parts[1] || '').trim();
+              const looksFresh = (!isNaN(qrGenAt)) ? (mtimeSec >= Math.floor(qrGenAt/1000)) : (mtimeSec > 0);
+
+              if (jid && looksFresh) {
+                const boundUnpaidExpiresAt = new Date(Date.parse(ts) + 15*60*1000).toISOString();
+                const meta2 = mergeMeta(r.meta_json, { bound_unpaid_expires_at: boundUnpaidExpiresAt, qr_done_at: ts });
+                db.exec('BEGIN IMMEDIATE');
+                try {
+                  db.prepare('UPDATE deliveries SET status=?, wa_jid=?, bound_at=?, updated_at=?, meta_json=? WHERE delivery_id=?')
+                    .run('BOUND_UNPAID', jid, ts, ts, meta2, r.delivery_id);
+                  db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                    crypto.randomUUID(), ts, 'delivery', r.delivery_id, 'UUID_BOUND', JSON.stringify({ uuid: r.provision_uuid, wa_jid: jid, instance_id: r.instance_id, salvage: true })
+                  );
+                  try {
+                    db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                      crypto.randomUUID(), ts, 'delivery', r.delivery_id, 'WA_LINKED', JSON.stringify({ uuid: r.provision_uuid, wa_jid: jid, instance_id: r.instance_id, salvage: true })
+                    );
+                  } catch {}
+                  db.exec('COMMIT');
+                  continue; // do NOT recycle
+                } catch {
+                  try { db.exec('ROLLBACK'); } catch {}
+                }
+              }
+            }
+          }
+        } catch {}
+
         db.exec('BEGIN IMMEDIATE');
         try {
           // mark recycled
