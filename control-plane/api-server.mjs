@@ -3105,6 +3105,17 @@ app.post('/api/wa/start', async (req, res) => {
       for (const c of conflictFree) {
         if (probed >= PROBE_LIMIT) break;
         const inst = getInstanceById(db, c.instance_id);
+        // Lightweight B: ensure SSH is responsive before running any OpenClaw probe.
+        // This filters out instances that have port 22 open but stall during SSH banner exchange.
+        try {
+          const sshQuick = poolSsh(inst, 'echo ok', { timeoutMs: 5000, tty: false, retries: 0, profile: 'fast' });
+          if ((sshQuick.code ?? 1) !== 0 || !String(sshQuick.stdout || '').includes('ok')) {
+            continue;
+          }
+        } catch {
+          continue;
+        }
+
         const timeoutMs = parseInt(process.env.BOTHOOK_WA_START_INSTANCE_PROBE_TIMEOUT_MS || '7000', 10);
         const probe = probeInstanceWhatsappClean(db, inst, { timeoutMs });
         probed++;
