@@ -326,7 +326,8 @@ function jsonMeta(s) {
 function pickProvisionReady(instances) {
   for (const i of instances) {
     const meta = jsonMeta(i.meta_json) || {};
-    if (meta.provision_ready === true) return i;
+    const pr = meta.provision_ready;
+    if (pr === true || pr === 1 || pr === '1') return i;
   }
   return instances[0] || null;
 }
@@ -3110,8 +3111,9 @@ app.post('/api/wa/start', async (req, res) => {
 
       const provisionReady = candidates.filter((i) => {
         const meta = (jsonMeta(i.meta_json) || {});
+        const pr = meta.provision_ready;
         // Back-compat: older pool init sets init_state=INIT_DONE but not provision_ready.
-        return meta.provision_ready === true || String(meta.init_state || '') === 'INIT_DONE';
+        return pr === true || pr === 1 || pr === '1' || String(meta.init_state || '') === 'INIT_DONE';
       });
       if (!provisionReady.length) {
         return send(res, 503, { ok:false, error:'no_provision_ready_instances' });
