@@ -3013,6 +3013,12 @@ app.post('/api/wa/start', async (req, res) => {
 
       db.exec('BEGIN IMMEDIATE');
       try {
+        // Re-check conflicts under write lock to avoid race: two concurrent allocators can otherwise pick the same instance.
+        const conflictsNow = hasOtherActiveDeliveriesOnInstance(db, chosen.instance_id, uuid);
+        if (conflictsNow.length) {
+          throw Object.assign(new Error('instance_conflict_race'), { conflictsNow });
+        }
+
         const row = db.prepare('SELECT status, meta_json FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
         const meta2 = mergeMeta(row?.meta_json || delivery.meta_json, {
           reallocated_at: ts,
@@ -3037,6 +3043,17 @@ app.post('/api/wa/start', async (req, res) => {
         db.exec('COMMIT');
       } catch (e) {
         try { db.exec('ROLLBACK'); } catch {}
+        if (String(e?.message || '') === 'instance_conflict_race') {
+          const conflicts = e?.conflictsNow || [];
+          try {
+            const ts3 = nowIso();
+            db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+              crypto.randomUUID(), ts3, 'delivery', delivery.delivery_id, 'INSTANCE_CONFLICT_DETECTED',
+              JSON.stringify({ uuid, instance_id: chosen.instance_id, conflicts, mode: 'race_recheck' })
+            );
+          } catch {}
+          return send(res, 409, { ok:false, error:'instance_conflict', detail:'instance allocation race detected', instance_id: chosen.instance_id, conflicts });
+        }
         throw e;
       }
 
