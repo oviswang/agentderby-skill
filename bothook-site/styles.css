@@ -16,8 +16,7 @@ a{color:inherit}
 .main{max-width:980px;margin:0 auto;padding:12px 20px 60px}
 .content-wrap{transition:opacity 150ms ease-in-out;opacity:1}
 .content-wrap.is-transitioning{opacity:0}
-.hero{display:flex;justify-content:center;align-items:stretch;margin-top:22px}
-.hero > *{width:100%;max-width:720px}
+.hero{display:block;margin-top:22px}
 .card{background:rgba(255,255,255,.04);border-radius:18px;padding:22px 22px;box-shadow:var(--shadow)}
 .kicker{display:inline-block;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(169,182,214,.92);margin-bottom:10px}
 .h1{font-size:40px;line-height:1.08;margin:0 0 10px}
