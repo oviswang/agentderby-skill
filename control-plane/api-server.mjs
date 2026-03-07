@@ -356,7 +356,7 @@ function probeInstanceWhatsappClean(db, instance, { timeoutMs = 3500 } = {}) {
   // IMPORTANT: keep this probe lightweight and non-interactive.
   // Do NOT call sudo/systemctl here: it can hang or fail under non-tty SSH and will create false negatives.
   const cmd = `set -euo pipefail; `
-    + `timeout 6 openclaw channels status --json 2>/dev/null || openclaw channels status`;
+    + `timeout 8 openclaw channels status --json`;
 
   // Fail-fast: do NOT let web handlers block on slow/overloaded instances.
   const r = poolSsh(instance, cmd, { timeoutMs, tty: false, retries: 0, profile: 'fast' });
