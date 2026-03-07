@@ -431,9 +431,10 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
       const lang = String(preferredLang || '').trim().toLowerCase();
       if (lang) {
         const meta = mergeMeta(existing.meta_json, { preferred_lang: lang });
-        db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?')
-          .run(meta, nowIso(), existing.delivery_id);
-        updated = { ...existing, meta_json: meta };
+        // Persist user_lang only if not set yet (language must be stable for the whole flow).
+        db.prepare('UPDATE deliveries SET meta_json=?, user_lang=COALESCE(user_lang, ?), updated_at=? WHERE delivery_id=?')
+          .run(meta, lang, nowIso(), existing.delivery_id);
+        updated = { ...existing, meta_json: meta, user_lang: existing.user_lang || lang };
       }
     } catch {}
 
@@ -571,8 +572,8 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
     const delivery_id = crypto.randomUUID();
     const ts = nowIso();
     db.prepare(`
-      INSERT INTO deliveries(delivery_id, order_id, user_id, instance_id, status, provision_uuid, created_at, updated_at, meta_json)
-      VALUES (?,?,?,?,?,?,?,?,?)
+      INSERT INTO deliveries(delivery_id, order_id, user_id, instance_id, status, provision_uuid, created_at, updated_at, meta_json, user_lang)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
     `).run(
       delivery_id,
       null,
@@ -582,7 +583,8 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
       uuid,
       ts,
       ts,
-      JSON.stringify({ allocated_from: null, note: 'created_without_allocation; allocate on /api/wa/start' })
+      JSON.stringify({ allocated_from: null, note: 'created_without_allocation; allocate on /api/wa/start' }),
+      preferredLang || null
     );
     return db.prepare('SELECT * FROM deliveries WHERE delivery_id=?').get(delivery_id);
   }
