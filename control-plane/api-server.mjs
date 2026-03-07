@@ -3396,15 +3396,24 @@ app.post('/api/wa/start', async (req, res) => {
         return send(res, 502, { ok: false, error: 'provision_start_failed' });
       }
     }
-    // For first-link (force=false), do NOT block the web request on slow SSH/remote provision.
-    // Kick the start in background and let the frontend poll /api/wa/qr + /api/wa/status.
+    // For first-link (force=false): we still keep it bounded, but we MUST ensure the user-machine provision
+    // server actually receives the start request, otherwise the UI will spin forever on qr_not_ready.
     if (!force) {
-      Promise.resolve().then(() => poolFetch(instance, startPath, {
+      const kick = await poolFetch(instance, startPath, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body,
-        timeoutMs: 8000,
-      })).catch(() => {});
+        timeoutMs: 12000,
+      });
+      if (!kick.ok) {
+        return send(res, 502, {
+          ok: false,
+          error: 'provision_start_failed',
+          uuid,
+          instance_id: instance.instance_id,
+          detail: String(kick.text || '').slice(0, 300),
+        });
+      }
 
       try { startWelcomeWatch(uuid); } catch {}
 
@@ -3413,7 +3422,7 @@ app.post('/api/wa/start', async (req, res) => {
         uuid,
         instance_id: instance.instance_id,
         status: 'starting',
-        queued: true,
+        queued: false,
         mode: 'user_machine_provision',
       });
     }
@@ -3689,6 +3698,24 @@ app.get('/api/wa/qr', async (req, res) => {
     }
 
     if (rr.ok && rr.json) {
+      // Self-heal: if linking has started but QR is not ready, kick provision /api/wa/start and retry once.
+      // This prevents UI from getting stuck on "waiting for QR" when the start request was dropped.
+      if (String(rr.json.error || '') === 'qr_not_ready' || Number(rr.json.qrSeq || 0) === 0) {
+        try {
+          await poolFetch(instance, `/api/wa/start`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ uuid, force: false }),
+            timeoutMs: 12000,
+          });
+        } catch {}
+
+        const rrRetry = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, { method: 'GET', timeoutMs: 20000 });
+        if (rrRetry.ok && rrRetry.json) {
+          rr.json = rrRetry.json;
+        }
+      }
+
       const payload = {
         ok: true,
         uuid,
