@@ -31,6 +31,13 @@ Owner-defined roles (memorize):
   - `p.bothook.me` → static files at `/home/ubuntu/.openclaw/workspace/p-site`
   - `bothook.me` also proxies `handle_path /api/support/*` → `127.0.0.1:18888` (support-server)
 
+## Pool SSH access (control-plane → pool/user machines)
+
+- Shared pool SSH keypair (used by `poolSsh` in control-plane):
+  - Private key: `/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519`
+  - Public key: `/home/ubuntu/.openclaw/credentials/pool_ssh/id_ed25519.pub`
+- Note: This is a shared key for pool machines (not per-user). If we ever move to per-instance/per-user keys, we must persist the mapping (instance_id → key id/fingerprint) in DB and verify on every allocation.
+
 ## User machine standard services (pool instances)
 
 ### BOTHook provisioning / Baileys
