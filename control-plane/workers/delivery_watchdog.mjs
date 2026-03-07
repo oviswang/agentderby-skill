@@ -371,8 +371,18 @@ async function main() {
         .run(mergeMeta(chosen.delivery_meta, { prebind_soft_timeout_at: ts }), ts, delivery_id);
     } catch {}
     try {
+      const anchor2 = chosen.assigned_at || chosen.delivery_created_at;
+      const t02 = Date.parse(anchor2 || '');
+      const elapsedMs2 = Number.isFinite(t02) ? (Date.now() - t02) : null;
       db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-        .run(crypto.randomUUID(), ts, 'delivery', delivery_id, 'DELIVERY_PREBIND_SOFT_TIMEOUT', JSON.stringify({ instance_id }));
+        .run(
+          crypto.randomUUID(),
+          ts,
+          'delivery',
+          delivery_id,
+          'DELIVERY_PREBIND_SOFT_TIMEOUT',
+          JSON.stringify({ instance_id, stage, thresholds_ms: { stageA: STAGE_A_MS }, anchor: anchor2 || null, elapsed_ms: elapsedMs2, toggles: { selfheal: SELFHEAL_ENABLED } })
+        );
     } catch {}
 
     tgSend(`[bothook][watchdog] pre-bind soft timeout (5m): no release (instance=${instance_id} delivery=${delivery_id})`);
@@ -485,6 +495,11 @@ async function main() {
       instance_id
     );
 
+    // Include full decision context for auditability.
+    const anchor2 = chosen.assigned_at || chosen.delivery_created_at;
+    const t02 = Date.parse(anchor2 || '');
+    const elapsedMs2 = Number.isFinite(t02) ? (Date.now() - t02) : null;
+
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
       .run(
         crypto.randomUUID(),
@@ -492,7 +507,20 @@ async function main() {
         'delivery',
         delivery_id,
         'DELIVERY_HARD_UNPAID_RECLAIM',
-        JSON.stringify({ instance_id, timeoutStage, reclaimPlan, sanitize, initJob })
+        JSON.stringify({
+          instance_id,
+          timeoutStage,
+          reclaimPlan,
+          stage,
+          thresholds_ms: { stageA: STAGE_A_MS, stageB: STAGE_B_MS, stale_linking: STALE_LINKING_MS },
+          anchor: anchor2 || null,
+          elapsed_ms: elapsedMs2,
+          toggles: { selfheal: SELFHEAL_ENABLED, stale_clear_mode: STALE_CLEAR_MODE, wa_sanitize: WA_SANITIZE_ENABLED, paid_meta_fallback: String(process.env.BOTHOOK_WATCHDOG_PAID_META_FALLBACK||'0')==='1' },
+          statusProbe,
+          linkedNow,
+          sanitize,
+          initJob
+        })
       );
     db.exec('COMMIT');
   } catch (e) {
