@@ -686,7 +686,7 @@
       }
 
       async function fetchQr(uuid){
-        const r = await fetch(`/api/wa/qr?uuid=${encodeURIComponent(uuid)}`);
+        const r = await fetch(`/api/wa/qr?uuid=${encodeURIComponent(uuid)}&t=${Date.now()}`);
         const j = await r.json().catch(()=> ({}));
         if (!r.ok) throw new Error(j.error || `qr http ${r.status}`);
         if (!j.ok) throw new Error(j.error || 'qr failed');

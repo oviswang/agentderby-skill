@@ -3601,6 +3601,13 @@ app.get('/api/wa/qr', async (req, res) => {
     const uuid = String(req.query?.uuid || '').trim();
     if (!uuid) return send(res, 400, { ok: false, error: 'uuid_required' });
 
+    // QR must never be cached by browsers/CDNs.
+    try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    } catch {}
+
     const { db } = openDb();
     const delivery = db.prepare('SELECT * FROM deliveries WHERE provision_uuid = ? LIMIT 1').get(uuid);
     if (!delivery) return send(res, 404, { ok: false, error: 'unknown_uuid' });
