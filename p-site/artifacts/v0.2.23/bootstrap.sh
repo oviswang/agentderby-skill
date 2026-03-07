@@ -496,6 +496,22 @@ PY
     nohup bash -lc 'sleep 25; /sbin/reboot' >/dev/null 2>&1 &
   fi
 
+  # Elevation (owner choice B): ensure ubuntu can run sudo without password.
+  # This enables chat-driven installs/ops (apt/systemctl/etc.) by running commands with sudo.
+  # SECURITY NOTE: this grants full root via ubuntu; only enable when explicitly requested by owner.
+  if [[ "${BOTHOOK_ENABLE_UBUNTU_NOPASSWD_SUDO:-1}" == "1" ]]; then
+    log "Ensuring passwordless sudo for ubuntu (B mode)"
+    cat >/etc/sudoers.d/99-bothook-ubuntu-nopasswd <<'SUDO'
+ubuntu ALL=(ALL) NOPASSWD:ALL
+Defaults:ubuntu !requiretty
+SUDO
+    chmod 440 /etc/sudoers.d/99-bothook-ubuntu-nopasswd
+    visudo -cf /etc/sudoers.d/99-bothook-ubuntu-nopasswd >/dev/null 2>&1 || {
+      log "WARN: sudoers validation failed; removing 99-bothook-ubuntu-nopasswd"
+      rm -f /etc/sudoers.d/99-bothook-ubuntu-nopasswd
+    }
+  fi
+
   log "Bootstrap done. Gateway + Provision services enabled+started."
 }
 
