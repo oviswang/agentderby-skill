@@ -37,6 +37,7 @@ const SELFHEAL_ENABLED = String(process.env.BOTHOOK_WATCHDOG_SELFHEAL || '0') ==
 // - alert_only (default): quarantine instance + emit event, do NOT unpin delivery
 // - unpin: perform legacy unpin (status->QR_EXPIRED, instance_id NULL)
 const STALE_CLEAR_MODE = String(process.env.BOTHOOK_WATCHDOG_STALE_CLEAR_MODE || 'alert_only');
+const WA_SANITIZE_ENABLED = String(process.env.BOTHOOK_WATCHDOG_WA_SANITIZE || '0') === '1';
 
 function sh(cmd) {
   return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', shell: '/bin/bash' });
@@ -408,12 +409,14 @@ async function main() {
   } catch { statusProbe = null; }
 
   // Sanitize WhatsApp provisioning state on the instance (no reimage) to ensure next user can generate a fresh QR.
-  // If sanitize fails, leave instance as NEEDS_VERIFY and proceed to release.
-  let sanitize = null;
-  try {
-    sanitize = postJson(`${API_BASE}/api/ops/pool/wa-sanitize`, { instance_id });
-  } catch {
-    sanitize = { ok:false, error:'wa_sanitize_call_failed' };
+  // Disabled by default: it's a remote mutation; prefer queued flows.
+  let sanitize = { ok:true, skipped: !WA_SANITIZE_ENABLED };
+  if (WA_SANITIZE_ENABLED) {
+    try {
+      sanitize = postJson(`${API_BASE}/api/ops/pool/wa-sanitize`, { instance_id });
+    } catch {
+      sanitize = { ok:false, error:'wa_sanitize_call_failed' };
+    }
   }
 
   // Decide reclaim plan based on whether WhatsApp is already bound.
