@@ -1899,7 +1899,10 @@ async function runOutboundWorkerLoop(){
         const prompts = loadWaPrompts(lang || 'en') || loadWaPrompts('en') || {};
         const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
 
-        if (kind === 'welcome_unpaid') {
+        if (kind === 'welcome_short') {
+          // Minimal UX signal: must be fast and not depend on other systems.
+          msg = '[bothook] Linked ✅\n\nWe\'re preparing your setup instructions. Please wait ~1 minute.';
+        } else if (kind === 'welcome_unpaid') {
           const tpl = String(prompts.welcome_unpaid || '').trim();
           if (!tpl) throw new Error('welcome_unpaid_missing');
 
@@ -1970,24 +1973,27 @@ async function runOutboundWorkerLoop(){
 
       try {
         const detail = (String(rr.stderr || rr.stdout || '')).replace(/\s+/g,' ').slice(0,300);
+        const eventType = (() => {
+          if (ok) {
+            if (kind === 'welcome_short') return 'WELCOME_SHORT_SENT';
+            if (kind === 'welcome_unpaid') return 'WELCOME_UNPAID_SENT';
+            if (kind === 'guide_key_paid') return 'GUIDE_KEY_SENT';
+            if (kind === 'key_verified_success') return 'KEY_VERIFIED_SUCCESS_SENT';
+            if (kind === 'relink_success') return 'RELINK_SUCCESS_SENT';
+            return 'OUTBOUND_SENT';
+          }
+          if (kind === 'welcome_short') return 'WELCOME_SHORT_SEND_FAILED';
+          if (kind === 'welcome_unpaid') return 'WELCOME_UNPAID_SEND_FAILED';
+          if (kind === 'guide_key_paid') return 'GUIDE_KEY_SEND_FAILED';
+          if (kind === 'key_verified_success') return 'KEY_VERIFIED_SUCCESS_SEND_FAILED';
+          if (kind === 'relink_success') return 'RELINK_SUCCESS_SEND_FAILED';
+          return 'OUTBOUND_SEND_FAILED';
+        })();
+
         db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
           crypto.randomUUID(), ts1, 'delivery', delivery_id || uuid,
-          ok
-            ? (kind === 'welcome_unpaid'
-                ? 'WELCOME_UNPAID_SENT'
-                : (kind === 'guide_key_paid'
-                    ? 'GUIDE_KEY_SENT'
-                    : (kind === 'key_verified_success'
-                        ? 'KEY_VERIFIED_SUCCESS_SENT'
-                        : 'RELINK_SUCCESS_SENT')))
-            : (kind === 'welcome_unpaid'
-                ? 'WELCOME_UNPAID_SEND_FAILED'
-                : (kind === 'guide_key_paid'
-                    ? 'GUIDE_KEY_SEND_FAILED'
-                    : (kind === 'key_verified_success'
-                        ? 'KEY_VERIFIED_SUCCESS_SEND_FAILED'
-                        : 'RELINK_SUCCESS_SEND_FAILED'))),
-          JSON.stringify({ uuid, delivery_id, instance_id, exit_code: rr.code ?? null, detail, attempt })
+          eventType,
+          JSON.stringify({ uuid, delivery_id, instance_id, exit_code: rr.code ?? null, detail, attempt, kind })
         );
       } catch {}
 
@@ -1996,15 +2002,15 @@ async function runOutboundWorkerLoop(){
         // Persist delivery meta (idempotent)
         try {
           const d2 = db.prepare('SELECT meta_json FROM deliveries WHERE delivery_id=?').get(delivery_id);
-          const meta2 = mergeMeta(d2?.meta_json || null,
-            kind === 'welcome_unpaid'
-              ? { welcome_unpaid_sent_at: ts1, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: true }
-              : (kind === 'guide_key_paid'
-                  ? { guide_key_sent_at: ts1, guide_key_lang: lang, guide_key_send_ok: true }
-                  : (kind === 'key_verified_success'
-                      ? { key_verified_success_sent_at: ts1, key_verified_success_lang: lang, key_verified_success_send_ok: true }
-                      : { relink_success_sent_at: ts1, relink_success_lang: lang, relink_success_send_ok: true }))
-          );
+          const patch = (() => {
+            if (kind === 'welcome_short') return { welcome_short_sent_at: ts1, welcome_short_lang: lang, welcome_short_send_ok: true };
+            if (kind === 'welcome_unpaid') return { welcome_unpaid_sent_at: ts1, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: true };
+            if (kind === 'guide_key_paid') return { guide_key_sent_at: ts1, guide_key_lang: lang, guide_key_send_ok: true };
+            if (kind === 'key_verified_success') return { key_verified_success_sent_at: ts1, key_verified_success_lang: lang, key_verified_success_send_ok: true };
+            if (kind === 'relink_success') return { relink_success_sent_at: ts1, relink_success_lang: lang, relink_success_send_ok: true };
+            return { outbound_sent_at: ts1 };
+          })();
+          const meta2 = mergeMeta(d2?.meta_json || null, patch);
           db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts1, delivery_id);
         } catch {}
 
@@ -2025,15 +2031,15 @@ async function runOutboundWorkerLoop(){
         // Persist delivery meta attempt
         try {
           const d2 = db.prepare('SELECT meta_json FROM deliveries WHERE delivery_id=?').get(delivery_id);
-          const meta2 = mergeMeta(d2?.meta_json || null,
-            kind === 'welcome_unpaid'
-              ? { welcome_unpaid_last_attempt_at: ts1, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: false }
-              : (kind === 'guide_key_paid'
-                  ? { guide_key_last_attempt_at: ts1, guide_key_lang: lang, guide_key_send_ok: false }
-                  : (kind === 'key_verified_success'
-                      ? { key_verified_success_last_attempt_at: ts1, key_verified_success_lang: lang, key_verified_success_send_ok: false }
-                      : { relink_success_last_attempt_at: ts1, relink_success_lang: lang, relink_success_send_ok: false }))
-          );
+          const patch = (() => {
+            if (kind === 'welcome_short') return { welcome_short_last_attempt_at: ts1, welcome_short_lang: lang, welcome_short_send_ok: false };
+            if (kind === 'welcome_unpaid') return { welcome_unpaid_last_attempt_at: ts1, welcome_unpaid_lang: lang, welcome_unpaid_send_ok: false };
+            if (kind === 'guide_key_paid') return { guide_key_last_attempt_at: ts1, guide_key_lang: lang, guide_key_send_ok: false };
+            if (kind === 'key_verified_success') return { key_verified_success_last_attempt_at: ts1, key_verified_success_lang: lang, key_verified_success_send_ok: false };
+            if (kind === 'relink_success') return { relink_success_last_attempt_at: ts1, relink_success_lang: lang, relink_success_send_ok: false };
+            return { outbound_last_attempt_at: ts1 };
+          })();
+          const meta2 = mergeMeta(d2?.meta_json || null, patch);
           db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta2, ts1, delivery_id);
         } catch {}
       }
@@ -3710,6 +3716,16 @@ app.get('/api/wa/status', async (req, res) => {
                   crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'WA_LINKED', JSON.stringify({ uuid, wa_jid: jid, instance_id: instance.instance_id })
                 );
               } catch {}
+
+              // Enqueue a short English welcome as an early UX signal (independent of full welcome text).
+              // Dedupe is enforced by outbound_tasks unique index on (delivery_id, kind).
+              try {
+                const m = jsonMeta(meta2) || {};
+                if (!m?.relink_force) {
+                  enqueueOutboundTask(db, { delivery_id: delivery.delivery_id, uuid, instance_id: instance.instance_id, kind: 'welcome_short', lang: 'en', to_jid: jid });
+                }
+              } catch {}
+
               db.exec('COMMIT');
               waJid = jid;
               connected = true;
@@ -3748,6 +3764,14 @@ app.get('/api/wa/status', async (req, res) => {
             db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
               crypto.randomUUID(), ts, 'delivery', delivery.delivery_id, 'WA_LINKED', JSON.stringify({ uuid, wa_jid: waJid, instance_id: instance.instance_id })
             );
+          } catch {}
+
+          // Enqueue short English welcome for first-link UX (not for force relink).
+          try {
+            const m = jsonMeta(meta2) || {};
+            if (!m?.relink_force) {
+              enqueueOutboundTask(db, { delivery_id: delivery.delivery_id, uuid, instance_id: instance.instance_id, kind: 'welcome_short', lang: 'en', to_jid: waJid });
+            }
           } catch {}
         } else if (bound && waJid && bound !== waJid) {
           // allow device id change for same number (e.g. :46 -> :47)
