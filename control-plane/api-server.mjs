@@ -3751,12 +3751,19 @@ app.get('/api/wa/status', async (req, res) => {
           // Do NOT downgrade paid state: keep PAID/DELIVERED as the highest-precedence state.
           // IMPORTANT: Do not automatically mark ACTIVE on mere WhatsApp link.
           // Unpaid users must stay in BOUND_UNPAID so the welcome_unpaid / payment flow triggers.
-          const row = db.prepare('SELECT status FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
+          const row = db.prepare('SELECT status, meta_json FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
           const st = String(row?.status || '');
-          if (st === 'PAID' || st === 'DELIVERED') {
-            db.prepare('UPDATE deliveries SET updated_at=? WHERE delivery_id=?').run(ts, delivery.delivery_id);
+
+          // If a row ended up ACTIVE without payment (legacy behavior), self-heal back to BOUND_UNPAID.
+          // This ensures welcome_unpaid/payment UX triggers correctly.
+          const entitled = deliveryEntitled(db, { ...delivery, status: st, meta_json: row?.meta_json || delivery.meta_json });
+          if (!entitled && st === 'ACTIVE' && waJid) {
+            const boundUnpaidExpiresAt = new Date(Date.parse(ts) + 15*60*1000).toISOString();
+            const meta2 = mergeMeta(row?.meta_json || delivery.meta_json, { bound_unpaid_expires_at: boundUnpaidExpiresAt });
+            db.prepare('UPDATE deliveries SET status=?, bound_at=COALESCE(bound_at,?), updated_at=?, meta_json=? WHERE delivery_id=?')
+              .run('BOUND_UNPAID', ts, ts, meta2, delivery.delivery_id);
           } else {
-            // Preserve existing status (e.g. BOUND_UNPAID) and just bump updated_at.
+            // Otherwise: preserve status and just bump updated_at.
             db.prepare('UPDATE deliveries SET updated_at=? WHERE delivery_id=?').run(ts, delivery.delivery_id);
           }
         }
