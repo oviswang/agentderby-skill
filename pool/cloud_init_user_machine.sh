@@ -179,6 +179,12 @@ main(){
   mkdir -p /opt/bothook
   echo "pool" > /opt/bothook/POOL_MACHINE
 
+  # Integrity: install expected sha256 manifest (if shipped with assets).
+  local base; base=$(asset_base)
+  if [[ -f "$base/SHA256SUMS.expected" ]]; then
+    install -m 644 "$base/SHA256SUMS.expected" /opt/bothook/SHA256SUMS.expected
+  fi
+
   install_units
   ensure_onboarding_plugins
 

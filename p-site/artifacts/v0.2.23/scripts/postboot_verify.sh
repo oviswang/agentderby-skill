@@ -36,6 +36,32 @@ now(){ date -u +%Y-%m-%dT%H:%M:%SZ; }
 ok=true
 errs=()
 
+# Integrity gate: verify installed critical files against shipped sha256 manifest.
+# This prevents half-updated machines from entering READY.
+verify_sha_manifest(){
+  local mf="/opt/bothook/SHA256SUMS.expected"
+  [[ -f "$mf" ]] || { ok=false; errs+=("missing sha256 manifest: $mf"); return 0; }
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    [[ "$line" =~ ^# ]] && continue
+    local expected path
+    expected=$(echo "$line" | awk '{print $1}')
+    path=$(echo "$line" | awk '{print $2}')
+    [[ -n "$expected" && -n "$path" ]] || continue
+    if [[ ! -f "$path" ]]; then
+      ok=false; errs+=("sha256 target missing: $path");
+      continue
+    fi
+    local got
+    got=$(sha256sum "$path" | awk '{print $1}')
+    if [[ "$got" != "$expected" ]]; then
+      ok=false; errs+=("sha256 mismatch: $path expected=$expected got=$got");
+    fi
+  done < "$mf"
+}
+
+verify_sha_manifest
+
 svc_active(){ systemctl is-active --quiet "$1"; }
 port_listen(){ ss -ltn 2>/dev/null | grep -q ":$1"; }
 

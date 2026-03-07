@@ -1,0 +1,2 @@
+7551398abc8d2996f921ca544ffd8e82eeb6a4fb96342e137ffd5f2bf6135065  /opt/bothook/provision/server.mjs
+aaa08ca560738545381bcad139bdab35648ae5e004c4331afc2ce060fe987b4f  /etc/systemd/system/bothook-provision.service
