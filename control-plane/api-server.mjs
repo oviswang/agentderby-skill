@@ -59,8 +59,6 @@ function deliveryEntitled(db, delivery){
       const meta = jsonMeta(delivery?.meta_json) || {};
       if (meta.paid_at || meta.delivered_at || meta.stripe_subscription_id) return true;
     } catch {}
-    // ACTIVE is commonly used post-cutover; keep it as an allowed status even without subscriptions.
-    if (st0 === 'ACTIVE') return true;
 
     const uid = String(delivery?.user_id || '').trim();
     if (!uid) return false;
@@ -3750,12 +3748,15 @@ app.get('/api/wa/status', async (req, res) => {
           }
         } else {
           // Either already bound to same jid, or jid missing.
-          // Do NOT downgrade paid state: keep PAID as the highest-precedence state.
+          // Do NOT downgrade paid state: keep PAID/DELIVERED as the highest-precedence state.
+          // IMPORTANT: Do not automatically mark ACTIVE on mere WhatsApp link.
+          // Unpaid users must stay in BOUND_UNPAID so the welcome_unpaid / payment flow triggers.
           const row = db.prepare('SELECT status FROM deliveries WHERE delivery_id=?').get(delivery.delivery_id);
-          const st = row?.status || '';
-          if (st !== 'PAID') {
-            db.prepare('UPDATE deliveries SET status=?, updated_at=? WHERE delivery_id=?').run('ACTIVE', ts, delivery.delivery_id);
+          const st = String(row?.status || '');
+          if (st === 'PAID' || st === 'DELIVERED') {
+            db.prepare('UPDATE deliveries SET updated_at=? WHERE delivery_id=?').run(ts, delivery.delivery_id);
           } else {
+            // Preserve existing status (e.g. BOUND_UNPAID) and just bump updated_at.
             db.prepare('UPDATE deliveries SET updated_at=? WHERE delivery_id=?').run(ts, delivery.delivery_id);
           }
         }
