@@ -177,6 +177,16 @@ else
   ok=false; errs+=("provision /healthz not ready");
 fi
 
+# HARD gate: UUID.txt must exist and contain uuid=...
+UUID_FILE="/opt/bothook/UUID.txt"
+if [[ ! -f "$UUID_FILE" ]]; then
+  ok=false; errs+=("missing UUID.txt: $UUID_FILE")
+else
+  if ! grep -Eq '^uuid=[a-zA-Z0-9-]{8,80}$' "$UUID_FILE" 2>/dev/null; then
+    ok=false; errs+=("UUID.txt missing/invalid uuid= line")
+  fi
+fi
+
 # Export checks for JSON build (avoid bash heredoc-in-substitution issues)
 export CHK_GATEWAY=$(svc_active openclaw-gateway.service && echo 1 || echo 0)
 export CHK_PROVISION=$(svc_active bothook-provision.service && echo 1 || echo 0)
