@@ -1399,6 +1399,35 @@ async function runPoolInitJob(job){
     const ls = String(inst0.lifecycle_status||'');
     if (!(ls === 'IN_POOL' || ls === 'DELIVERING')) throw new Error('not_in_pool');
 
+    // Safety: never run init/reimage on an instance that is still referenced by any active delivery.
+    // Otherwise, we can wipe a real user machine (or break onboarding mid-flight) and cause missing welcomes/replies.
+    const activeDeliveries = (() => {
+      try {
+        return db.prepare(
+          `SELECT delivery_id, provision_uuid, status, updated_at
+             FROM deliveries
+            WHERE instance_id=?
+              AND status IN ('LINKING','BOUND_UNPAID','ACTIVE','PAID','DELIVERING','DELIVERED')
+            ORDER BY datetime(updated_at) DESC
+            LIMIT 5`
+        ).all(inst0.instance_id) || [];
+      } catch {
+        return [];
+      }
+    })();
+
+    if (activeDeliveries.length) {
+      pushJobLog(job, `BLOCKED: instance has active deliveries (count=${activeDeliveries.length})`);
+      pushJobLog(job, `BLOCKED deliveries: ${activeDeliveries.map(r => `${r.provision_uuid}:${r.status}`).join(', ')}`);
+      try {
+        db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+          crypto.randomUUID(), nowIso(), 'instance', inst0.instance_id, 'POOL_INIT_BLOCKED_ACTIVE_DELIVERY',
+          JSON.stringify({ instance_id: inst0.instance_id, mode: job.mode, active: activeDeliveries })
+        );
+      } catch {}
+      throw new Error('pool_init_blocked_active_delivery');
+    }
+
     // Describe + write IP/KeyIds to DB
     const it = await describeInstance(job.instance_id, { region: inst0.region });
     const pub = (it.PublicAddresses||[])[0] || null;
