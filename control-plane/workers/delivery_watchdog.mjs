@@ -424,13 +424,27 @@ async function main() {
   const reclaimPlan = timeoutStage === 'PRE_BIND' ? 'release_only' : 'reimage_and_init';
 
   // Enqueue pool reimage+init only when needed.
+  // Prefer DB enqueue over HTTP call so the worker remains self-contained.
+  function enqueuePoolInit(db, instance_id, mode) {
+    try {
+      const inflight = db.prepare(
+        "SELECT job_id, status, created_at, mode FROM pool_init_jobs WHERE instance_id=? AND status IN ('QUEUED','RUNNING') ORDER BY created_at DESC LIMIT 1"
+      ).get(instance_id);
+      if (inflight?.job_id) {
+        return { ok:true, deduped:true, job_id: inflight.job_id, status: inflight.status, inflight_mode: inflight.mode, inflight_created_at: inflight.created_at };
+      }
+      const job_id = crypto.randomUUID();
+      db.prepare('INSERT INTO pool_init_jobs(job_id, instance_id, mode, status, created_at, log_json) VALUES (?,?,?,?,?,?)')
+        .run(job_id, instance_id, mode, 'QUEUED', nowIso(), '[]');
+      return { ok:true, job_id, status:'QUEUED', queued:true };
+    } catch (e) {
+      return { ok:false, error:'pool_init_enqueue_failed', detail: String(e?.message||e).slice(0,200) };
+    }
+  }
+
   let initJob = null;
   if (reclaimPlan === 'reimage_and_init') {
-    try {
-      initJob = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'reimage_and_init' });
-    } catch {
-      initJob = { ok:false, error:'pool_init_call_failed' };
-    }
+    initJob = enqueuePoolInit(db, instance_id, 'reimage_and_init');
   }
 
   db.exec('BEGIN IMMEDIATE');
