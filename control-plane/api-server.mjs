@@ -1640,6 +1640,54 @@ async function runPoolInitJob(job){
     while (Date.now()-startWait < 10*60*1000) {
       const cur = getInstanceById(db, job.instance_id);
       if (String(cur.health_status||'') === 'READY') {
+        // HARD gate (A): before declaring the instance truly READY-for-allocation, re-check SSH stability + key local services.
+        // Rationale: some instances accept port 22 but randomly stall during SSH banner exchange. Those must NOT enter the pool.
+        const postCheck = (() => {
+          const out = { ok: true, ssh: [], provisionHealthz: null, gatewayProbe: null };
+          try {
+            for (let i = 0; i < 3; i++) {
+              const r = poolSsh(inst, 'echo ok', { timeoutMs: 6000, tty: false, retries: 0, profile: 'fast' });
+              out.ssh.push({ i: i + 1, code: r.code ?? null, stdout: String(r.stdout || '').trim().slice(0, 40), stderr: String(r.stderr || '').trim().slice(0, 120) });
+              if ((r.code ?? 1) !== 0 || !String(r.stdout || '').includes('ok')) out.ok = false;
+            }
+          } catch (e) {
+            out.ok = false;
+            out.ssh.push({ i: 'exception', error: String(e?.message || e) });
+          }
+
+          try {
+            const r = poolSsh(inst, 'curl -fsS -m 2 http://127.0.0.1:18999/healthz >/dev/null && echo ok || echo bad', { timeoutMs: 8000, tty: false, retries: 0, profile: 'fast' });
+            out.provisionHealthz = { code: r.code ?? null, stdout: String(r.stdout || '').trim(), stderr: String(r.stderr || '').trim().slice(0, 120) };
+            if (!String(r.stdout || '').includes('ok')) out.ok = false;
+          } catch (e) {
+            out.ok = false;
+            out.provisionHealthz = { error: String(e?.message || e) };
+          }
+
+          try {
+            const r = poolSsh(inst, 'openclaw gateway probe --json 2>/dev/null || openclaw gateway probe', { timeoutMs: 15000, tty: false, retries: 0, profile: 'fast' });
+            const txt = String(r.stdout || r.stderr || '').trim();
+            out.gatewayProbe = { code: r.code ?? null, out: txt.slice(0, 400) };
+            if ((r.code ?? 1) !== 0) out.ok = false;
+          } catch (e) {
+            out.ok = false;
+            out.gatewayProbe = { error: String(e?.message || e) };
+          }
+
+          return out;
+        })();
+
+        if (!postCheck.ok) {
+          const tsFail = nowIso();
+          try {
+            db.prepare(
+              'UPDATE instances SET health_status=?, last_probe_at=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
+            ).run('NEEDS_VERIFY', tsFail, 'ready_post_checks_failed', 'init_postcheck', JSON.stringify(postCheck).slice(0, 2000), job.instance_id);
+          } catch {}
+          pushJobLog(job, `postcheck FAILED: ${JSON.stringify(postCheck).slice(0, 400)}`);
+          throw new Error('ready_post_checks_failed');
+        }
+
         const ts = nowIso();
         job.status='DONE';
         job.endedAt=ts;
