@@ -2006,16 +2006,24 @@ async function runOutboundWorkerLoop(){
         continue;
       }
 
+      // welcome_short is deprecated: instance-side plugin sends the short linked ack.
+      // Keep tasks idempotent by marking DONE without sending to avoid duplicate messages.
+      if (kind === 'welcome_short') {
+        const tsD = nowIso();
+        try {
+          db.prepare('UPDATE outbound_tasks SET status=?, updated_at=?, done_at=? WHERE task_id=?')
+            .run('DONE', tsD, tsD, task_id);
+        } catch {}
+        continue;
+      }
+
       // Render message
       let msg = '';
       try {
         const prompts = loadWaPrompts(lang || 'en') || loadWaPrompts('en') || {};
         const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
 
-        if (kind === 'welcome_short') {
-          // Minimal UX signal: must be fast and not depend on other systems.
-          msg = '[bothook] Linked ✅\n\nWe\'re preparing your setup instructions. Please wait ~1 minute.';
-        } else if (kind === 'welcome_unpaid') {
+        if (kind === 'welcome_unpaid') {
           const tpl = String(prompts.welcome_unpaid || '').trim();
           if (!tpl) throw new Error('welcome_unpaid_missing');
 
@@ -3943,13 +3951,11 @@ app.get('/api/wa/status', async (req, res) => {
                 );
               } catch {}
 
-              // Enqueue a short English welcome as an early UX signal (independent of full welcome text).
-              // Dedupe is enforced by outbound_tasks unique index on (delivery_id, kind).
+              // NOTE: welcome_short is now sent instance-side by bothook-wa-autoreply (more reliable; no SSH/gateway dependency).
+              // Do not enqueue control-plane welcome_short to avoid duplicate messages.
               try {
                 const m = jsonMeta(meta2) || {};
-                if (!m?.relink_force) {
-                  enqueueOutboundTask(db, { delivery_id: delivery.delivery_id, uuid, instance_id: instance.instance_id, kind: 'welcome_short', lang: 'en', to_jid: jid });
-                }
+                void m;
               } catch {}
 
               db.exec('COMMIT');
@@ -3992,12 +3998,11 @@ app.get('/api/wa/status', async (req, res) => {
             );
           } catch {}
 
-          // Enqueue short English welcome for first-link UX (not for force relink).
+          // NOTE: welcome_short is now sent instance-side by bothook-wa-autoreply (more reliable; no SSH/gateway dependency).
+          // Do not enqueue control-plane welcome_short to avoid duplicate messages.
           try {
             const m = jsonMeta(meta2) || {};
-            if (!m?.relink_force) {
-              enqueueOutboundTask(db, { delivery_id: delivery.delivery_id, uuid, instance_id: instance.instance_id, kind: 'welcome_short', lang: 'en', to_jid: waJid });
-            }
+            void m;
           } catch {}
         } else if (bound && waJid && bound !== waJid) {
           // allow device id change for same number (e.g. :46 -> :47)
