@@ -3927,6 +3927,22 @@ app.get('/api/wa/status', async (req, res) => {
             // - New user (unpaid): send welcome + Stripe pay shortlink
             // - Paid/relink: self-heal + (only if key missing/invalid) send key guide
             if (!deliveryEntitled(db2, d2)) {
+              // Safety: if a previous bug/misclassification enqueued paid-only guides for an unpaid user,
+              // cancel them to avoid sending confusing/wrong instructions.
+              try {
+                const n = db2.prepare(
+                  "DELETE FROM outbound_tasks WHERE provision_uuid=? AND kind='guide_key_paid' AND status IN ('QUEUED','RETRYING')"
+                ).run(uuid).changes || 0;
+                if (n > 0) {
+                  try {
+                    db2.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+                      crypto.randomUUID(), nowIso(), 'delivery', d2.delivery_id, 'OUTBOUND_TASK_CANCELED',
+                      JSON.stringify({ uuid, kind: 'guide_key_paid', canceled: n, reason: 'not_entitled' })
+                    );
+                  } catch {}
+                }
+              } catch {}
+
               const welcome = prompts.welcome_unpaid;
               const lastSentAt = meta.welcome_unpaid_sent_at ? Date.parse(meta.welcome_unpaid_sent_at) : null;
               const lastAttemptAt = meta.welcome_unpaid_last_attempt_at ? Date.parse(meta.welcome_unpaid_last_attempt_at) : null;
