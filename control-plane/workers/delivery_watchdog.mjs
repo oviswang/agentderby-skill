@@ -112,20 +112,27 @@ function hasActiveSubscription(db, user_id) {
         LIMIT 1`
     ).get(uid);
     const st = String(row?.status || '').toLowerCase();
-    return st === 'active' || st === 'trialing' || st === 'paid';
+    // Authoritative paid signal: Stripe subscription state.
+    return st === 'active' || st === 'trialing';
   } catch {
     return false;
   }
 }
 
 function isPaid(db, delivery_status, delivery_meta_json, user_id) {
-  // Treat an ACTIVE subscription as paid, regardless of delivery.status drift.
+  // Primary: Stripe subscription state (authoritative).
   if (hasActiveSubscription(db, user_id)) return true;
 
+  // Secondary: internal terminal statuses (should only be set after payment/cutover).
   const st = String(delivery_status || '').toUpperCase();
-  if (['PAID','DELIVERED'].includes(st)) return true;
+  if (['PAID', 'DELIVERED'].includes(st)) return true;
+
+  // Optional backward-compat fallback: legacy meta markers.
+  // Keep disabled by default to avoid “paid drift” preventing reclaim.
+  const fallback = String(process.env.BOTHOOK_WATCHDOG_PAID_META_FALLBACK || '0') === '1';
+  if (!fallback) return false;
+
   const m = parseJson(delivery_meta_json);
-  // Backward/forward compatible paid markers
   return Boolean(m?.paid_at || m?.paid_confirmed_at || m?.payment_paid_at);
 }
 
