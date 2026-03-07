@@ -3617,6 +3617,26 @@ app.get('/api/wa/qr', async (req, res) => {
       return send(res, 409, { ok: false, error: 'no_instance_allocated', uuid, status: delivery.status });
     }
 
+    // Fast path: serve cached QR (avoid blocking the entire node process on SSH/poolFetch).
+    // IMPORTANT: poolFetch currently uses synchronous primitives; keep this handler cheap.
+    try {
+      const cached = qrCache.get(uuid);
+      const ageMs = cached?.cachedAtMs ? (Date.now() - cached.cachedAtMs) : 1e12;
+      if (cached?.qrDataUrl && ageMs < 8000) {
+        return send(res, 200, {
+          ok: true,
+          uuid,
+          instance_id: instance.instance_id,
+          status: 'qr',
+          qrDataUrl: cached.qrDataUrl,
+          qrSeq: cached.qrSeq || 0,
+          qrAt: cached.qrAt || null,
+          mode: 'cache',
+          cachedAgeMs: ageMs,
+        });
+      }
+    } catch {}
+
     // Default: delegate to user machine (18999). Returns qrDataUrl.
     let lastProvisionKick = null;
     const rr = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, {
@@ -3834,6 +3854,19 @@ app.get('/api/wa/status', async (req, res) => {
     if (!delivery) return send(res, 404, { ok: false, error: 'unknown_uuid' });
 
     const instance = getInstanceById(db, delivery.instance_id);
+
+    // FAST PATH: once bound, do not do any SSH probing. The UI should move on immediately.
+    if (String(delivery.status || '') === 'BOUND_UNPAID' && delivery.wa_jid) {
+      return send(res, 200, {
+        ok: true,
+        uuid,
+        status: 'BOUND_UNPAID',
+        instance_id: delivery.instance_id || null,
+        connected: true,
+        wa_jid: delivery.wa_jid,
+        bound_at: delivery.bound_at || null,
+      });
+    }
 
     // FAST PATH: do not block HTTP on SSH/tmux probes.
     // UI should poll /api/wa/qr for QR availability; /api/wa/status is used mainly to observe bind completion.
