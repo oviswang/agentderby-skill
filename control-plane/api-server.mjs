@@ -2090,6 +2090,22 @@ app.post('/api/ops/pool/init', (req, res) => {
 
     const { db } = openDb();
 
+    // Safety: never enqueue init/reimage on an instance that is referenced by any active delivery.
+    // This prevents accidental wipes of real user machines.
+    try {
+      const active = db.prepare(
+        `SELECT delivery_id, provision_uuid, status, updated_at
+           FROM deliveries
+          WHERE instance_id=?
+            AND status IN ('LINKING','BOUND_UNPAID','ACTIVE','PAID','DELIVERING','DELIVERED')
+          ORDER BY datetime(updated_at) DESC
+          LIMIT 5`
+      ).all(instance_id) || [];
+      if (active.length) {
+        return send(res, 409, { ok:false, error:'active_delivery_conflict', instance_id, active });
+      }
+    } catch {}
+
     // Dedupe / idempotency: at most ONE init job in-flight per instance.
     // Rationale: cross-region boot/SSH/npm can be slow; repeated enqueues create queue storms and can destabilize the box.
     const inflight = db.prepare(

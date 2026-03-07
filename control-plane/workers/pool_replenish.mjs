@@ -534,8 +534,14 @@ function main() {
     const job = postJson(`${API_BASE}/api/ops/pool/init`, { instance_id, mode: 'init_only' });
     db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
       .run(crypto.randomUUID(), ts, 'instance', instance_id, 'POOL_REPAIR_TRIGGERED', JSON.stringify({ job }));
-    console.log(JSON.stringify({ ok:true, ts, action:'repair', instance_id, job, manual }, null, 2));
-    return;
+
+    // If repair is blocked because the instance is still tied to active deliveries, skip repair and proceed to create.
+    if (job?.ok === false && String(job?.error || '') === 'active_delivery_conflict') {
+      console.log(JSON.stringify({ ok:true, ts, action:'skip_repair', reason:'active_delivery_conflict', instance_id, job, manual }, null, 2));
+    } else {
+      console.log(JSON.stringify({ ok:true, ts, action:'repair', instance_id, job, manual }, null, 2));
+      return;
+    }
   }
 
   // If manual-blocked, stop here. No creates while manual issues exist.
