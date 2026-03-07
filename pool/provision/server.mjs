@@ -39,7 +39,10 @@ const OPENCLAW_CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH || path.join(OPENC
 const LOGIN_DEDUP_MS = parseInt(process.env.PROVISION_LOGIN_DEDUP_MS || '15000', 10);
 const QR_PARSE_INTERVAL_MS = parseInt(process.env.PROVISION_QR_PARSE_INTERVAL_MS || '2000', 10);
 const STATUS_POLL_MS = parseInt(process.env.PROVISION_STATUS_POLL_MS || '12000', 10);
-const LOGIN_TTL_MS = parseInt(process.env.PROVISION_LOGIN_TTL_MS || String(3 * 60 * 1000), 10);
+const LOGIN_TTL_MS = parseInt(process.env.PROVISION_LOGIN_TTL_MS || String(10 * 60 * 1000), 10);
+// After a login attempt starts (QR shown), keep observing channel status for a while even if the login session TTL expires.
+// This prevents late-link (scan completes near/after expiry) from being missed.
+const OBSERVE_AFTER_START_MS = parseInt(process.env.PROVISION_OBSERVE_AFTER_START_MS || String(20 * 60 * 1000), 10);
 
 function nowIso(){ return new Date().toISOString(); }
 
@@ -472,6 +475,21 @@ function getSelfE164(){
   return null;
 }
 
+function readSelfJidAndCredsMtime(){
+  const p = '/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json';
+  try {
+    if (!fs.existsSync(p)) return { jid: null, mtimeSec: null };
+    const st = fs.statSync(p);
+    const mtimeSec = st?.mtimeMs ? Math.floor(st.mtimeMs / 1000) : null;
+    const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+    const me = j?.me || {};
+    const jid = (me.id || me.jid || '').trim() || null;
+    return { jid, mtimeSec };
+  } catch {
+    return { jid: null, mtimeSec: null };
+  }
+}
+
 function sendWelcomeIfNeeded(uuid){
   const s = ensureSession(uuid);
   if (s.welcomeSentAt) return;
@@ -534,10 +552,16 @@ function expireIfOverTtl(uuid){
 }
 
 setInterval(() => {
+  const now = Date.now();
   for (const [uuid, s] of sessions.entries()) {
     try { expireIfOverTtl(uuid); } catch {}
-    // poll status for active sessions only
-    if (s.pty || s.lastQrDataUrl) {
+
+    // Keep observing WhatsApp status after a login attempt starts, even if the login TTL expires.
+    // This ensures we still detect a successful link and can send the welcome + report status.
+    const recentlyStarted = Boolean(s.lastLoginAt) && (now - s.lastLoginAt) < OBSERVE_AFTER_START_MS;
+    const shouldObserve = Boolean(s.status) || Boolean(s.loginMode) || recentlyStarted;
+
+    if (shouldObserve) {
       try { pollStatus(uuid); } catch {}
     }
   }
@@ -640,12 +664,19 @@ app.get('/api/wa/status', async (req, res) => {
     if (!uuid) return res.status(400).json({ ok:false, error:'uuid_required' });
 
     const s = ensureSession(uuid);
+    const connected = Boolean(s.status);
+    const self_e164 = connected ? getSelfE164() : null;
+    const { jid: self_jid, mtimeSec: creds_mtime_sec } = connected ? readSelfJidAndCredsMtime() : { jid: null, mtimeSec: null };
+
     return res.json({
       ok:true,
       uuid,
-      status: s.status ? 'connected' : 'linking',
-      connected: Boolean(s.status),
-      wa_jid: null,
+      status: connected ? 'connected' : 'linking',
+      connected,
+      self_e164,
+      self_jid,
+      creds_mtime_sec,
+      wa_jid: self_jid,
       lastUpdateAt: s.lastStatusAt || s.lastQrAt || null,
       qrSeq: s.qrSeq,
       qrAt: s.lastQrAt || null,

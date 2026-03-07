@@ -39,7 +39,10 @@ const OPENCLAW_CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH || path.join(OPENC
 const LOGIN_DEDUP_MS = parseInt(process.env.PROVISION_LOGIN_DEDUP_MS || '15000', 10);
 const QR_PARSE_INTERVAL_MS = parseInt(process.env.PROVISION_QR_PARSE_INTERVAL_MS || '2000', 10);
 const STATUS_POLL_MS = parseInt(process.env.PROVISION_STATUS_POLL_MS || '12000', 10);
-const LOGIN_TTL_MS = parseInt(process.env.PROVISION_LOGIN_TTL_MS || String(3 * 60 * 1000), 10);
+const LOGIN_TTL_MS = parseInt(process.env.PROVISION_LOGIN_TTL_MS || String(10 * 60 * 1000), 10);
+// After a login attempt starts (QR shown), keep observing channel status for a while even if the login session TTL expires.
+// This prevents late-link (scan completes near/after expiry) from being missed.
+const OBSERVE_AFTER_START_MS = parseInt(process.env.PROVISION_OBSERVE_AFTER_START_MS || String(20 * 60 * 1000), 10);
 
 function nowIso(){ return new Date().toISOString(); }
 
@@ -167,6 +170,7 @@ function tmuxCaptureTailAsync(uuid, lines=320){
     child.on('close', (code) => {
       clearTimeout(t);
       if (code === 0) return resolve(out || '');
+      // best-effort: keep silent; this is a polling path.
       resolve('');
     });
   });
@@ -287,11 +291,14 @@ qrWorker.on('message', (msg) => {
       s.lastError = s.lastError || (`qr_worker_error: ${error || 'unknown'}`);
       return;
     }
+    // Only accept the latest QR hash we requested.
     if (hash && s._lastQrHash && hash !== s._lastQrHash) return;
     s.lastQrDataUrl = dataUrl;
     s.lastQrAt = nowIso();
     s.qrSeq += 1;
-  } catch {}
+  } catch (e) {
+    // ignore
+  }
 });
 qrWorker.on('error', (e) => {
   console.log(`[bothook-provision] qrWorker error: ${String(e?.message || e)}`);
@@ -468,6 +475,21 @@ function getSelfE164(){
   return null;
 }
 
+function readSelfJidAndCredsMtime(){
+  const p = '/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json';
+  try {
+    if (!fs.existsSync(p)) return { jid: null, mtimeSec: null };
+    const st = fs.statSync(p);
+    const mtimeSec = st?.mtimeMs ? Math.floor(st.mtimeMs / 1000) : null;
+    const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+    const me = j?.me || {};
+    const jid = (me.id || me.jid || '').trim() || null;
+    return { jid, mtimeSec };
+  } catch {
+    return { jid: null, mtimeSec: null };
+  }
+}
+
 function sendWelcomeIfNeeded(uuid){
   const s = ensureSession(uuid);
   if (s.welcomeSentAt) return;
@@ -496,6 +518,7 @@ function sendWelcomeIfNeeded(uuid){
 
 function pollStatus(uuid){
   const s = ensureSession(uuid);
+  // Use --probe to avoid expensive operations where possible.
   const r = sh('openclaw channels status --probe', { timeoutMs: 4000 });
   const out = (r.stdout || r.stderr || '').trim();
   const st = parseWhatsappStatus(out);
@@ -511,11 +534,13 @@ function pollStatus(uuid){
 function expireIfOverTtl(uuid){
   const s = ensureSession(uuid);
   const now = Date.now();
+  // Only expire linking/login sessions.
   if (s.status) return false;
   if (!s.loginMode) return false;
   if (!s.lastLoginAt) return false;
   if ((now - s.lastLoginAt) < LOGIN_TTL_MS) return false;
 
+  // Stop the login session to prevent runaway CPU usage.
   try { tmuxKillSession(`wa-${uuid}`); } catch {}
   s.lastExit = `ttl_expired_${LOGIN_TTL_MS}`;
   s.lastError = s.lastError || 'login_ttl_expired';
@@ -527,9 +552,16 @@ function expireIfOverTtl(uuid){
 }
 
 setInterval(() => {
+  const now = Date.now();
   for (const [uuid, s] of sessions.entries()) {
     try { expireIfOverTtl(uuid); } catch {}
-    if (s.pty || s.lastQrDataUrl) {
+
+    // Keep observing WhatsApp status after a login attempt starts, even if the login TTL expires.
+    // This ensures we still detect a successful link and can send the welcome + report status.
+    const recentlyStarted = Boolean(s.lastLoginAt) && (now - s.lastLoginAt) < OBSERVE_AFTER_START_MS;
+    const shouldObserve = Boolean(s.status) || Boolean(s.loginMode) || recentlyStarted;
+
+    if (shouldObserve) {
       try { pollStatus(uuid); } catch {}
     }
   }
@@ -556,6 +588,7 @@ setInterval(() => {
         if (s._lastQrHash === h) return;
         s._lastQrHash = h;
 
+        // Generate PNG in a worker (avoid blocking the HTTP server event loop).
         if (s._pendingQr) return;
         s._pendingQr = true;
         try {
@@ -631,12 +664,19 @@ app.get('/api/wa/status', async (req, res) => {
     if (!uuid) return res.status(400).json({ ok:false, error:'uuid_required' });
 
     const s = ensureSession(uuid);
+    const connected = Boolean(s.status);
+    const self_e164 = connected ? getSelfE164() : null;
+    const { jid: self_jid, mtimeSec: creds_mtime_sec } = connected ? readSelfJidAndCredsMtime() : { jid: null, mtimeSec: null };
+
     return res.json({
       ok:true,
       uuid,
-      status: s.status ? 'connected' : 'linking',
-      connected: Boolean(s.status),
-      wa_jid: null,
+      status: connected ? 'connected' : 'linking',
+      connected,
+      self_e164,
+      self_jid,
+      creds_mtime_sec,
+      wa_jid: self_jid,
       lastUpdateAt: s.lastStatusAt || s.lastQrAt || null,
       qrSeq: s.qrSeq,
       qrAt: s.lastQrAt || null,
