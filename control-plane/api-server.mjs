@@ -4207,6 +4207,11 @@ app.get('/api/wa/status', async (req, res) => {
             // - New user (unpaid): send welcome + Stripe pay shortlink
             // - Paid/relink: self-heal + (only if key missing/invalid) send key guide
             if (!deliveryEntitled(db2, d2)) {
+              // Instance-side autoreply already guarantees the full welcome on user inbound messages.
+              // Control-plane proactive welcome_unpaid is disabled by default to avoid duplicate/conflicting welcomes.
+              const CP_WELCOME_UNPAID = String(process.env.BOTHOOK_CONTROL_PLANE_WELCOME_UNPAID || '0') === '1';
+              if (!CP_WELCOME_UNPAID) return;
+
               // Safety: if a previous bug/misclassification enqueued paid-only guides for an unpaid user,
               // cancel them to avoid sending confusing/wrong instructions.
               try {
