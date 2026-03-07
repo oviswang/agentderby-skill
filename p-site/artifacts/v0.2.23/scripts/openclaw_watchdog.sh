@@ -19,10 +19,25 @@ STATE_FILE="/run/bothook_openclaw_watchdog.state"
 
 # --- Availability guardrails (run every tick; best-effort) ---
 # 1) Ensure gateway is listening on loopback (otherwise user messages can be silently dropped).
+# Use a restart cooldown to avoid restart storms during slow startups.
+GATEWAY_COOLDOWN_SEC=${WATCHDOG_GATEWAY_RESTART_COOLDOWN_SEC:-45}
+GATEWAY_STATE_FILE="/run/bothook_gateway_restart.ts"
+
 if command -v ss >/dev/null 2>&1; then
   if ! ss -lnt 2>/dev/null | grep -qE '127\.0\.0\.1:18789|\[::1\]:18789|:18789'; then
-    log "WARN gateway_not_listening: restarting openclaw-gateway.service"
-    systemctl restart openclaw-gateway.service 2>/dev/null || true
+    now_s=$(date +%s)
+    last_s=0
+    if [[ -f "$GATEWAY_STATE_FILE" ]]; then
+      last_s=$(cat "$GATEWAY_STATE_FILE" 2>/dev/null || echo 0)
+    fi
+    age=$(( now_s - last_s ))
+    if (( age < GATEWAY_COOLDOWN_SEC )); then
+      log "WARN gateway_not_listening: cooldown active (${age}s < ${GATEWAY_COOLDOWN_SEC}s), skip restart"
+    else
+      echo "$now_s" > "$GATEWAY_STATE_FILE" 2>/dev/null || true
+      log "WARN gateway_not_listening: restarting openclaw-gateway.service"
+      systemctl restart openclaw-gateway.service 2>/dev/null || true
+    fi
   fi
 fi
 
