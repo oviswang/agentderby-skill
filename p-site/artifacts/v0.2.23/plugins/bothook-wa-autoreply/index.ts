@@ -81,6 +81,31 @@ function renderTplVars(tpl: string, vars: Record<string, any>) {
   return out;
 }
 
+function minimalWelcomeUnpaid(lang: string, uuid: string) {
+  const lc = String(lang || '').toLowerCase();
+  const link = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lc || 'en')}`;
+  if (lc === 'zh' || lc === 'zh-cn' || lc === 'zh-hans') {
+    return [
+      '[bothook] 设备已关联 ✅',
+      '',
+      '下一步：',
+      `1) 打开控制页完成付款：${link}`,
+      '2) 付款后，把你的 OpenAI API Key（以 sk- 开头的一整行）直接发到这里',
+      '',
+      '如果你没看到其它欢迎词也没关系：只要按上面步骤走就能完成开通。'
+    ].join('\n');
+  }
+  return [
+    '[bothook] Device linked ✅',
+    '',
+    'Next steps:',
+    `1) Open your control page and complete payment: ${link}`,
+    '2) After payment, paste your OpenAI API key here (ONE line starting with sk-)',
+    '',
+    'If you didn’t receive the long welcome yet, that’s OK — following the steps above will still complete setup.'
+  ].join('\n');
+}
+
 function looksLikeOpenAiKey(line: string) {
   const t = String(line || '').trim();
   if (!t) return false;
@@ -320,7 +345,18 @@ export default {
             return;
           }
 
-          // Fallback 2: use local prompts shipped with artifacts.
+          // Fallback 2 (guaranteed Part A): minimal full welcome that does NOT depend on specs/payment shortlinks.
+          try {
+            const minimal = minimalWelcomeUnpaid(lang, uuid);
+            if (minimal) {
+              await sendWhatsApp(api, self!, minimal);
+              st.autoreply.lastWelcomeAt = nowIso();
+              saveState(st);
+              return;
+            }
+          } catch {}
+
+          // Fallback 3: use local prompts shipped with artifacts.
           const lp = loadLocalPrompts(lang);
           const tpl = String(lp?.welcome_unpaid || '').trim();
           if (tpl) {
