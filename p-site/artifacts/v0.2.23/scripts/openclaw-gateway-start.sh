@@ -64,8 +64,14 @@ main(){
       continue
     fi
     # Once config is valid, exec into the gateway. If it exits, systemd will restart us.
-    # Use --force to kill any stray gateway already bound to the port (e.g. a foreground/dev run).
-    exec "$bin" gateway run --port "$PORT" --force --allow-unconfigured
+    # IMPORTANT: only use --force when the port is already occupied.
+    # Some OpenClaw builds may exit non-zero on "--force" when no prior listener exists,
+    # which can create a restart storm with our watchdog.
+    if command -v ss >/dev/null 2>&1 && ss -lnt 2>/dev/null | grep -qE ":${PORT}\\b"; then
+      exec "$bin" gateway run --port "$PORT" --force --allow-unconfigured
+    else
+      exec "$bin" gateway run --port "$PORT" --allow-unconfigured
+    fi
   done
 }
 
