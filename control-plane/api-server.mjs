@@ -3046,7 +3046,8 @@ app.post('/api/wa/start', async (req, res) => {
       for (const c of conflictFree) {
         if (probed >= PROBE_LIMIT) break;
         const inst = getInstanceById(db, c.instance_id);
-        const probe = probeInstanceWhatsappClean(db, inst, { timeoutMs: 2500 });
+        const timeoutMs = parseInt(process.env.BOTHOOK_WA_START_INSTANCE_PROBE_TIMEOUT_MS || '7000', 10);
+        const probe = probeInstanceWhatsappClean(db, inst, { timeoutMs });
         probed++;
         if (probe.clean) { chosen = inst; break; }
       }
