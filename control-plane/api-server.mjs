@@ -377,7 +377,9 @@ function probeInstanceWhatsappClean(db, instance, { timeoutMs = 3500 } = {}) {
     selfJid = null;
   }
 
-  const ok = (r.code === 0) && parsed.ok;
+  // NOTE: some OpenClaw CLI versions may exit non-zero even when emitting valid JSON (e.g. due to doctor warnings).
+  // Treat "parsed JSON ok" as the source of truth for this probe.
+  const ok = parsed.ok;
   // Strict: if we cannot positively determine status, treat instance as NOT clean.
   const clean = ok ? !linked : false;
   const ts = nowIso();
