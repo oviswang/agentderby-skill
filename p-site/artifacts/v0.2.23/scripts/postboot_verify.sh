@@ -192,13 +192,31 @@ else
   ok=false; errs+=("provision /healthz not ready");
 fi
 
-# HARD gate: UUID.txt must exist and contain uuid=...
+# HARD gate (conditional): if WhatsApp is linked, UUID.txt must exist and contain uuid=...
+# Pool machines that are not linked yet cannot know their UUID; do not fail them.
+WA_LINKED=$(sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw channels status --probe --json 2>/dev/null | python3 - <<'PY'
+import sys,json
+raw=sys.stdin.read().strip()
+if not raw:
+  print('0'); raise SystemExit(0)
+i=raw.find('{')
+if i>=0: raw=raw[i:]
+try:
+  j=json.loads(raw)
+except Exception:
+  print('0'); raise SystemExit(0)
+wa=(j.get('channels') or {}).get('whatsapp') or {}
+print('1' if wa.get('linked') is True else '0')
+PY
+)
 UUID_FILE="/opt/bothook/UUID.txt"
-if [[ ! -f "$UUID_FILE" ]]; then
-  ok=false; errs+=("missing UUID.txt: $UUID_FILE")
-else
-  if ! grep -Eq '^uuid=[a-zA-Z0-9-]{8,80}$' "$UUID_FILE" 2>/dev/null; then
-    ok=false; errs+=("UUID.txt missing/invalid uuid= line")
+if [[ "$WA_LINKED" = "1" ]]; then
+  if [[ ! -f "$UUID_FILE" ]]; then
+    ok=false; errs+=("missing UUID.txt: $UUID_FILE")
+  else
+    if ! grep -Eq '^uuid=[a-zA-Z0-9-]{8,80}$' "$UUID_FILE" 2>/dev/null; then
+      ok=false; errs+=("UUID.txt missing/invalid uuid= line")
+    fi
   fi
 fi
 
