@@ -153,7 +153,9 @@ PY
   touch "$MARKER" 2>/dev/null || true
 
   # Do NOT restart the gateway here (can cause restart storms). Just ensure the config stays valid.
-  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set channels.whatsapp.dmPolicy pairing >/dev/null 2>&1 || true
+  # During onboarding, always allow direct messages so the user can get welcome/next-step guidance.
+  # We only tighten dmPolicy after DELIVERED cutover.
+  sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw config set channels.whatsapp.dmPolicy open >/dev/null 2>&1 || true
   # NOTE: we no longer restart gateway from postboot_verify (avoid CPU storms).
 }
 
