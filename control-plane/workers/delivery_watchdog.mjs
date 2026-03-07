@@ -33,6 +33,10 @@ const STAGE_B_MS = Number(process.env.BOTHOOK_WATCHDOG_STAGE_B_MS || '') || (20 
 const STALE_LINKING_MS = Number(process.env.BOTHOOK_WATCHDOG_STALE_LINKING_MS || '') || (30 * 60 * 1000);
 
 const SELFHEAL_ENABLED = String(process.env.BOTHOOK_WATCHDOG_SELFHEAL || '0') === '1';
+// stale pin handling:
+// - alert_only (default): quarantine instance + emit event, do NOT unpin delivery
+// - unpin: perform legacy unpin (status->QR_EXPIRED, instance_id NULL)
+const STALE_CLEAR_MODE = String(process.env.BOTHOOK_WATCHDOG_STALE_CLEAR_MODE || 'alert_only');
 
 function sh(cmd) {
   return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', shell: '/bin/bash' });
@@ -144,7 +148,8 @@ async function main() {
   try {
     const stale = db.prepare(
       `SELECT d.delivery_id, d.user_id, d.instance_id, d.status, d.updated_at, d.meta_json AS delivery_meta,
-              COALESCE(i.lifecycle_status,'') AS lifecycle_status
+              COALESCE(i.lifecycle_status,'') AS lifecycle_status,
+              i.public_ip AS public_ip
          FROM deliveries d
          LEFT JOIN instances i ON i.instance_id = d.instance_id
         WHERE d.instance_id IS NOT NULL AND d.instance_id != ''
@@ -157,6 +162,7 @@ async function main() {
     ).all();
 
     let cleared = 0;
+    let detected = 0;
     for (const r of stale) {
       const lc = String(r.lifecycle_status || '');
       // Never touch the workstation/master instance.
@@ -188,15 +194,26 @@ async function main() {
 
       if (!shouldClear) continue;
 
+      // Probe instance-side WA state for evidence (best-effort).
+      let waLinked = null;
+      let selfJid = null;
+      try {
+        const ip = String(r.public_ip || '').trim();
+        if (ip) {
+          const out = sshCmd(ip, "python3 - <<'PY'\nimport json\nfrom pathlib import Path\np=Path('/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json')\ntry:\n  j=json.loads(p.read_text())\nexcept Exception:\n  print('0')\n  raise SystemExit(0)\nme=j.get('me') or {}\njid=me.get('id') or me.get('jid')\nif jid:\n  print('1 '+str(jid))\nelse:\n  print('0')\nPY");
+          const t = String(out || '').trim();
+          if (t.startsWith('1 ')) {
+            waLinked = true;
+            selfJid = t.slice(2).trim();
+          } else if (t === '0') {
+            waLinked = false;
+          }
+        }
+      } catch {}
+
       db.exec('BEGIN IMMEDIATE');
       try {
-        db.prepare('UPDATE deliveries SET status=?, instance_id=NULL, updated_at=?, meta_json=? WHERE delivery_id=?')
-          .run('QR_EXPIRED', ts, mergeMeta(r.delivery_meta, { cleared_by: 'delivery_watchdog', cleared_at: ts, cleared_reason: reason, prev_status: st }), String(r.delivery_id));
-        db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-          .run(crypto.randomUUID(), ts, 'delivery', String(r.delivery_id), 'DELIVERY_STALE_PIN_CLEARED', JSON.stringify({ instance_id: String(r.instance_id || ''), prev_status: st, reason }));
-
-        // Best-effort: if instance is IN_POOL but was actually linked, force it back to NEEDS_VERIFY.
-        // (We avoid touching lifecycle_status here; pool ops decide if reimage is needed.)
+        // Always quarantine the instance (allocator only uses READY).
         try {
           if (r.instance_id) {
             db.prepare("UPDATE instances SET health_status='NEEDS_VERIFY' WHERE instance_id=? AND lifecycle_status='IN_POOL'")
@@ -204,17 +221,33 @@ async function main() {
           }
         } catch {}
 
+        // Emit evidence event (even if we later unpin).
+        db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+          .run(crypto.randomUUID(), ts, 'delivery', String(r.delivery_id), 'DELIVERY_STALE_PIN_DETECTED', JSON.stringify({ instance_id: String(r.instance_id || ''), prev_status: st, reason, mode: STALE_CLEAR_MODE, public_ip: String(r.public_ip || ''), wa_linked: waLinked, self_jid: selfJid }));
+
+        if (STALE_CLEAR_MODE === 'unpin') {
+          db.prepare('UPDATE deliveries SET status=?, instance_id=NULL, updated_at=?, meta_json=? WHERE delivery_id=?')
+            .run('QR_EXPIRED', ts, mergeMeta(r.delivery_meta, { cleared_by: 'delivery_watchdog', cleared_at: ts, cleared_reason: reason, prev_status: st, wa_linked: waLinked, self_jid: selfJid }), String(r.delivery_id));
+          db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+            .run(crypto.randomUUID(), ts, 'delivery', String(r.delivery_id), 'DELIVERY_STALE_PIN_CLEARED', JSON.stringify({ instance_id: String(r.instance_id || ''), prev_status: st, reason }));
+          cleared++;
+        } else {
+          // alert_only: keep DB evidence, do not unpin automatically.
+          db.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?')
+            .run(mergeMeta(r.delivery_meta, { stale_pin_detected_at: ts, stale_pin_reason: reason, prev_status: st, wa_linked: waLinked, self_jid: selfJid }), ts, String(r.delivery_id));
+          detected++;
+        }
+
         db.exec('COMMIT');
-        cleared++;
       } catch (e) {
         try { db.exec('ROLLBACK'); } catch {}
       }
 
-      if (cleared >= 5) break;
+      if ((cleared + detected) >= 5) break;
     }
 
-    if (cleared) {
-      tgSend(`[bothook][watchdog] cleared stale pinned deliveries: count=${cleared}`);
+    if (cleared || detected) {
+      tgSend(`[bothook][watchdog] stale pinned deliveries: detected=${detected} cleared=${cleared} mode=${STALE_CLEAR_MODE}`);
     }
   } catch {}
 
