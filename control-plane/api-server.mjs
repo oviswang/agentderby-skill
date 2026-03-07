@@ -3654,7 +3654,7 @@ app.get('/api/wa/status', async (req, res) => {
         const pr = poolSsh(
           instance,
           `set -euo pipefail; python3 -c "import os,json; p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'; j=(json.load(open(p)) if os.path.exists(p) else {}); me=(j.get('me') or {}); print(me.get('id') or me.get('jid') or '')"`,
-          { timeoutMs: 2500, tty: false, retries: 0 }
+          { timeoutMs: 6000, tty: false, retries: 0 }
         );
         const jid = String(pr.stdout || '').trim();
         if (jid) {
@@ -3785,7 +3785,7 @@ app.get('/api/wa/status', async (req, res) => {
           instance,
           `set -euo pipefail; p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'; `
           + `if [ -f "$p" ]; then stat -c %Y "$p" 2>/dev/null || python3 -c "import os;print(int(os.path.getmtime('"'"'$p'"'"')))"; else echo 0; fi`,
-          { timeoutMs: 2500, tty: false, retries: 0 }
+          { timeoutMs: 6000, tty: false, retries: 0 }
         );
         const mtimeSec = parseInt(String(pr.stdout||'').trim() || '0', 10);
         const qrGenSec = Math.floor(qrGenAt0 / 1000);
