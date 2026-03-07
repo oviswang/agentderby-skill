@@ -6,13 +6,13 @@
  *
  * Policy (owner-confirmed):
  * - Stage A (pre-bind): 5 minutes from instance.assigned_at (or delivery.created_at) until bound_at is set.
- *   Action: release instance back to IN_POOL (NEEDS_VERIFY) and mark delivery timeout.
- * - Stage B (post-bind, unpaid): 15 minutes from delivery.bound_at until paid.
- *   Action: reimage instance (ResetInstance) then return to pool via /api/ops/pool/init.
+ *   Action: SOFT only (record + alert); do NOT release allocation here.
+ * - Stage B (unpaid hard reclaim): 20 minutes from instance.assigned_at (or delivery.created_at), with a final payment re-check.
+ *   Action: reclaim instance back to IN_POOL (NEEDS_VERIFY); if POST_BIND, enqueue reimage+init.
  *
- * Notes:
- * - We treat deliveries.status in ('PAID','DELIVERED','ACTIVE') or meta_json.paid_at set as PAID.
- * - Heavy concurrency: 1 per run (systemd flock + LIMIT=1).
+ * Critical safety:
+ * - Before any hard reclaim of a PRE_BIND record, probe instance-side WA state (/api/wa/status) to salvage late links.
+ * - Do not rely on delivery.status='ACTIVE' as a paid marker; use Stripe subscription state or meta paid_at markers.
  */
 
 import crypto from 'node:crypto';
@@ -20,15 +20,19 @@ import { execSync } from 'node:child_process';
 import { openDb, nowIso } from '../lib/db.mjs';
 
 const API_BASE = process.env.BOTHOOK_API_BASE || 'http://127.0.0.1:18998';
-const REGION = process.env.BOTHOOK_CLOUD_REGION || 'ap-singapore';
-const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || 'lhbp-1l4ptuvm';
 
-const STAGE_A_MS = 5 * 60 * 1000;
+// Fail-closed for cloud parameters: do NOT default to an arbitrary region/blueprint.
+// (Even when this worker mostly uses API_BASE endpoints, keep this as a guardrail.)
+const REGION = process.env.BOTHOOK_CLOUD_REGION || '';
+const BLUEPRINT_ID = process.env.BOTHOOK_REIMAGE_BLUEPRINT_ID || '';
+
+const STAGE_A_MS = Number(process.env.BOTHOOK_WATCHDOG_STAGE_A_MS || '') || (5 * 60 * 1000);
 // Hard reclaim threshold: unpaid deliveries older than this (from assigned_at/created_at) are reclaimed.
-const STAGE_B_MS = 20 * 60 * 1000;
+const STAGE_B_MS = Number(process.env.BOTHOOK_WATCHDOG_STAGE_B_MS || '') || (20 * 60 * 1000);
 // Cleanup: stale LINKING records (no wa_jid, no bound) that linger on pool instances.
-// These are usually abandoned test UUIDs and should not pin instance_id forever.
-const STALE_LINKING_MS = 30 * 60 * 1000;
+const STALE_LINKING_MS = Number(process.env.BOTHOOK_WATCHDOG_STALE_LINKING_MS || '') || (30 * 60 * 1000);
+
+const SELFHEAL_ENABLED = String(process.env.BOTHOOK_WATCHDOG_SELFHEAL || '0') === '1';
 
 function sh(cmd) {
   return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', shell: '/bin/bash' });
@@ -125,6 +129,14 @@ async function main() {
   const { db } = openDb();
   const ts = nowIso();
 
+  // Fail-closed if critical env is missing (prevents wrong-region mistakes when re-enabled).
+  // Keep the timer disabled until this is correctly configured.
+  if (!REGION || !BLUEPRINT_ID) {
+    tgSend(`[bothook][watchdog][WARN] exit: missing BOTHOOK_CLOUD_REGION or BOTHOOK_REIMAGE_BLUEPRINT_ID (REGION=${REGION||'EMPTY'})`);
+    console.log(JSON.stringify({ ok:false, ts, action:'exit_missing_env', missing: { BOTHOOK_CLOUD_REGION: !REGION, BOTHOOK_REIMAGE_BLUEPRINT_ID: !BLUEPRINT_ID } }, null, 2));
+    return;
+  }
+
   // 0) Cleanup stale deliveries that still reference IN_POOL instances.
   // a) Stale LINKING: status='LINKING', not bound, older than STALE_LINKING_MS -> mark QR_EXPIRED + unpin instance_id.
   // b) Stale ACTIVE/PAID/DELIVERED bound-but-expired: if bound_unpaid_expires_at is past and still pinned to an IN_POOL instance -> mark QR_EXPIRED + unpin.
@@ -210,7 +222,7 @@ async function main() {
   const rows = db.prepare(
     `SELECT
         d.delivery_id, d.provision_uuid, d.user_id, d.instance_id, d.status as delivery_status, d.created_at as delivery_created_at,
-        d.bound_at, d.meta_json as delivery_meta,
+        d.bound_at, d.wa_jid, d.meta_json as delivery_meta,
         i.public_ip, i.lifecycle_status, i.health_status, i.assigned_at, i.meta_json as instance_meta
      FROM deliveries d
      JOIN instances i ON i.instance_id = d.instance_id
@@ -232,9 +244,9 @@ async function main() {
     const dm = parseJson(r.delivery_meta);
     if (dm?.do_not_reallocate === 1 || dm?.closed_out_at || dm?.closed_out_reason) continue;
 
-    // UX self-heal: only for bound-but-unpaid within the 15m window.
+    // UX self-heal (optional): only for bound-but-unpaid within the window.
     // Goal: avoid cases where user gets no welcome/guide due to autoreply disabled or gateway not running.
-    if (ensured < 1 && r.bound_at && !isPaid(db, r.delivery_status, r.delivery_meta, r.user_id)) {
+    if (SELFHEAL_ENABLED && ensured < 1 && r.bound_at && !isPaid(db, r.delivery_status, r.delivery_meta, r.user_id)) {
       try {
         const boundMs = Date.now() - Date.parse(String(r.bound_at));
         if (Number.isFinite(boundMs) && boundMs >= 0 && boundMs < STAGE_B_MS) {
@@ -344,6 +356,17 @@ async function main() {
     return;
   }
 
+  // Best-effort: probe/link salvage before deciding PRE_BIND vs POST_BIND.
+  // If the user linked late but DB did not record bound_at/wa_jid yet, /api/wa/status will backfill it.
+  // (This avoids mistakenly treating a linked instance as PRE_BIND and releasing without reimage.)
+  let statusProbe = null;
+  try {
+    const u = String(chosen.provision_uuid || chosen.user_id || '').trim();
+    if (u && (!chosen.bound_at || !String(chosen.wa_jid || '').trim())) {
+      statusProbe = await fetch(`${API_BASE}/api/wa/status?uuid=${encodeURIComponent(u)}`).then(r => r.json()).catch(() => null);
+    }
+  } catch { statusProbe = null; }
+
   // Sanitize WhatsApp provisioning state on the instance (no reimage) to ensure next user can generate a fresh QR.
   // If sanitize fails, leave instance as NEEDS_VERIFY and proceed to release.
   let sanitize = null;
@@ -356,7 +379,8 @@ async function main() {
   // Decide reclaim plan based on whether WhatsApp is already bound.
   // - PRE_BIND: user never linked → release_only (avoid expensive reimage)
   // - POST_BIND: already linked → reimage_and_init (return to clean pool)
-  const timeoutStage = chosen.bound_at ? 'POST_BIND' : 'PRE_BIND';
+  const linkedNow = Boolean(statusProbe?.linked === true || statusProbe?.wa_jid || chosen.bound_at || (String(chosen.wa_jid||'').trim()));
+  const timeoutStage = linkedNow ? 'POST_BIND' : 'PRE_BIND';
   const reclaimPlan = timeoutStage === 'PRE_BIND' ? 'release_only' : 'reimage_and_init';
 
   // Enqueue pool reimage+init only when needed.
