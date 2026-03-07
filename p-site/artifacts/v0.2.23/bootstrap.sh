@@ -453,7 +453,25 @@ PY
   # NOTE: install as ubuntu so node_modules is readable by ubuntu and does not require root to update.
   chown -R ubuntu:ubuntu "$INSTALL_DIR/provision"
   sudo -u ubuntu bash -lc "cd '$INSTALL_DIR/provision' && npm install --omit=dev" || true
+
+  # Guard: systemd units may have been updated by artifacts; reload before starting.
+  systemctl daemon-reload || true
+
   systemctl enable --now bothook-provision.service || true
+  systemctl restart bothook-provision.service || true
+
+  # Hard gate: provisioning server must be reachable locally, otherwise QR/welcome flows will be flaky.
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -fsS --max-time 2 http://127.0.0.1:18999/healthz >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+  if ! curl -fsS --max-time 2 http://127.0.0.1:18999/healthz >/dev/null 2>&1; then
+    log "FATAL: bothook-provision healthz not reachable after bootstrap"
+    systemctl status bothook-provision.service --no-pager -n 50 || true
+    exit 1
+  fi
 
   # Enable post-boot verification (runs automatically after reboot)
   systemctl enable bothook-postboot-verify.service || true
