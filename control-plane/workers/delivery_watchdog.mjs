@@ -144,8 +144,13 @@ async function main() {
   // Fail-closed if critical env is missing (prevents wrong-region mistakes when re-enabled).
   // Keep the timer disabled until this is correctly configured.
   if (!REGION || !BLUEPRINT_ID) {
+    const payload = { missing: { BOTHOOK_CLOUD_REGION: !REGION, BOTHOOK_REIMAGE_BLUEPRINT_ID: !BLUEPRINT_ID }, REGION: REGION || null };
+    try {
+      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+        .run(crypto.randomUUID(), ts, 'ops', 'delivery_watchdog', 'WATCHDOG_EXIT_MISSING_ENV', JSON.stringify(payload));
+    } catch {}
     tgSend(`[bothook][watchdog][WARN] exit: missing BOTHOOK_CLOUD_REGION or BOTHOOK_REIMAGE_BLUEPRINT_ID (REGION=${REGION||'EMPTY'})`);
-    console.log(JSON.stringify({ ok:false, ts, action:'exit_missing_env', missing: { BOTHOOK_CLOUD_REGION: !REGION, BOTHOOK_REIMAGE_BLUEPRINT_ID: !BLUEPRINT_ID } }, null, 2));
+    console.log(JSON.stringify({ ok:false, ts, action:'exit_missing_env', ...payload }, null, 2));
     return;
   }
 
@@ -394,16 +399,31 @@ async function main() {
   // Policy: if still unpaid, we reclaim the instance back to IN_POOL and enqueue reimage+init,
   // so it returns to READY (true pool return).
   let confirmPaid = false;
+  let payConfirmResp = null;
   try {
     const u = String(chosen.provision_uuid || chosen.user_id || '').trim();
     if (u) {
-      const j = await fetch(`${API_BASE}/api/pay/confirm?uuid=${encodeURIComponent(u)}`).then(r => r.json()).catch(() => null);
-      confirmPaid = Boolean(j?.paid === true);
+      payConfirmResp = await fetch(`${API_BASE}/api/pay/confirm?uuid=${encodeURIComponent(u)}`).then(r => r.json()).catch(() => null);
+      confirmPaid = Boolean(payConfirmResp?.paid === true);
     }
-  } catch { confirmPaid = false; }
+  } catch {
+    confirmPaid = false;
+    payConfirmResp = null;
+  }
 
   if (confirmPaid) {
-    console.log(JSON.stringify({ ok:true, ts, action:'skip_paid_confirmed', stage, instance_id, delivery_id }, null, 2));
+    try {
+      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+        .run(
+          crypto.randomUUID(),
+          ts,
+          'delivery',
+          delivery_id,
+          'DELIVERY_RECLAIM_SKIPPED_PAID_CONFIRMED',
+          JSON.stringify({ instance_id, stage, pay_confirm: payConfirmResp, thresholds_ms: { stageB: STAGE_B_MS } })
+        );
+    } catch {}
+    console.log(JSON.stringify({ ok:true, ts, action:'skip_paid_confirmed', stage, instance_id, delivery_id, pay_confirm: payConfirmResp }, null, 2));
     return;
   }
 
@@ -518,6 +538,7 @@ async function main() {
           toggles: { selfheal: SELFHEAL_ENABLED, stale_clear_mode: STALE_CLEAR_MODE, wa_sanitize: WA_SANITIZE_ENABLED, paid_meta_fallback: String(process.env.BOTHOOK_WATCHDOG_PAID_META_FALLBACK||'0')==='1' },
           statusProbe,
           linkedNow,
+          pay_confirm: payConfirmResp,
           sanitize,
           initJob
         })
