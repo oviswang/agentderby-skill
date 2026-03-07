@@ -18,7 +18,9 @@ Restart=always
 RestartSec=2
 
 # Hardening (minimal; keep compatible)
-NoNewPrivileges=true
+# Allow sudo/root escalation when owner enables full-control mode.
+# Note: sudo still requires /etc/sudoers.d rules; this only removes the Linux no_new_privs restriction.
+NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=false
