@@ -5417,7 +5417,7 @@ function startOpsWorker(){
             if (inst?.public_ip) {
               const pr = poolSsh(
                 inst,
-                `set -euo pipefail; python3 -c "import os,json; p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'; mt=int(os.path.getmtime(p)) if os.path.exists(p) else 0; j=(json.load(open(p)) if os.path.exists(p) else {}; me=(j.get('me') or {}); jid=(me.get('id') or me.get('jid') or ''); print(str(mt)+' '+str(jid))"`,
+                `set -euo pipefail; python3 -c "import os,json; p=\"/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json\"; mt=int(os.path.getmtime(p)) if os.path.exists(p) else 0; j=(json.load(open(p)) if os.path.exists(p) else {}); me=(j.get('me') or {}); jid=(me.get('id') or me.get('jid') or \"\"); print(str(mt)+' '+str(jid))"`,
                 { timeoutMs: 6000, tty: false, retries: 0 }
               );
               const out = String(pr.stdout || '').trim();
