@@ -70,6 +70,8 @@ ensure_openclaw(){
     log "installing openclaw (PINNED=$PINNED_OC_VERSION)"
     # npm global prefix
     sudo -u ubuntu bash -lc 'mkdir -p /home/ubuntu/.npm-global && npm config set prefix "/home/ubuntu/.npm-global"'
+    # Avoid regional npm mirrors missing packages (force npmjs registry).
+    sudo -u ubuntu bash -lc 'npm config set registry "https://registry.npmjs.org/"' >/dev/null 2>&1 || true
     sudo -u ubuntu bash -lc "export PATH=/home/ubuntu/.npm-global/bin:\$PATH; npm i -g openclaw@${PINNED_OC_VERSION}"
   fi
 

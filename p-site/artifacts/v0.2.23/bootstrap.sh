@@ -122,6 +122,9 @@ ensure_openclaw(){
   # Ensure future `npm i -g` by ubuntu installs into ~/.npm-global.
   sudo -u ubuntu bash -lc "npm config set prefix '$prefix'" >/dev/null
 
+  # Force npm registry to npmjs to avoid regional mirrors missing packages (observed: mirrors.tencentyun.com/npm can hang on openclaw).
+  sudo -u ubuntu bash -lc "npm config set registry 'https://registry.npmjs.org/'" >/dev/null || true
+
   # Harden npm behavior for flaky networks.
   sudo -u ubuntu bash -lc "npm config set fetch-retries 5" >/dev/null || true
   sudo -u ubuntu bash -lc "npm config set fetch-retry-mintimeout 20000" >/dev/null || true
