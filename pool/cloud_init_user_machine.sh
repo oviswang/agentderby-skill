@@ -55,17 +55,23 @@ ensure_node(){
 }
 
 ensure_openclaw(){
-  if command -v openclaw >/dev/null 2>&1; then
-    log "openclaw exists: $(openclaw --version 2>/dev/null || true)"
-    # If an unpinned version exists, replace with pinned to ensure deterministic pre-delivery flow.
-    # (Post-delivery can re-enable auto-update.)
-    return
+  # Deterministic install: pin to a known-good OpenClaw version.
+  # Keep it explicit (NOT latest) to avoid breaking pool init when upstream releases.
+  local PINNED_OC_VERSION
+  PINNED_OC_VERSION="${OPENCLAW_VERSION:-2026.3.2}"
+
+  local cur
+  cur=$(openclaw --version 2>/dev/null | tr -d '\r' | head -n 1 || true)
+  if [[ -n "$cur" ]]; then
+    log "openclaw exists: $cur"
   fi
-  log "installing openclaw (PINNED)"
-  # npm global prefix
-  sudo -u ubuntu bash -lc 'mkdir -p /home/ubuntu/.npm-global && npm config set prefix "/home/ubuntu/.npm-global"'
-  # Pinned version for pre-delivery deterministic onboarding flow
-  sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; npm i -g openclaw@2026.2.26'
+
+  if [[ "$cur" != "$PINNED_OC_VERSION" ]]; then
+    log "installing openclaw (PINNED=$PINNED_OC_VERSION)"
+    # npm global prefix
+    sudo -u ubuntu bash -lc 'mkdir -p /home/ubuntu/.npm-global && npm config set prefix "/home/ubuntu/.npm-global"'
+    sudo -u ubuntu bash -lc "export PATH=/home/ubuntu/.npm-global/bin:\$PATH; npm i -g openclaw@${PINNED_OC_VERSION}"
+  fi
 
   # Minimal gateway config to ensure the service can bind on first boot.
   # (OpenClaw 2026.2.26 blocks start if gateway.mode is unset.)
@@ -189,10 +195,11 @@ main(){
   ensure_onboarding_plugins
 
   # Verify pinned version
-  local v
-  v=$(sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw --version' 2>/dev/null || true)
-  if [[ "$v" != "2026.2.26" ]]; then
-    log "FATAL: openclaw version mismatch, expected 2026.2.26 got: $v"
+  local v expected
+  expected="${OPENCLAW_VERSION:-2026.3.2}"
+  v=$(sudo -u ubuntu bash -lc 'export PATH=/home/ubuntu/.npm-global/bin:$PATH; openclaw --version' 2>/dev/null | head -n 1 || true)
+  if [[ "$v" != "$expected" ]]; then
+    log "FATAL: openclaw version mismatch, expected $expected got: $v"
     exit 3
   fi
 
