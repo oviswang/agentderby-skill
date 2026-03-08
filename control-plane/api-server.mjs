@@ -3744,6 +3744,18 @@ app.get('/api/wa/qr', async (req, res) => {
       return send(res, 200, payload);
     }
 
+    // Consistency guard: NEVER serve cached QR when provision explicitly says qr_not_ready.
+    // Otherwise users can get a stale QR (scan fails/"expired") while the instance hasn't produced a fresh one.
+    if (rr?.json && (String(rr.json.error || '') === 'qr_not_ready' || Number(rr.json.qrSeq || 0) === 0)) {
+      try { qrCache.delete(uuid); } catch {}
+      return send(res, 409, {
+        ok: false,
+        error: 'qr_not_ready',
+        mode: 'user_machine_provision',
+        detail: JSON.stringify({ fetch: String(rr.text||'').slice(0,200), kick: lastProvisionKick }).slice(0,500)
+      });
+    }
+
     // If user-machine provision is temporarily not ready, serve cached QR for UI stability.
     // BUT: never serve cached QR indefinitely — WhatsApp QR expires and a static QR will confuse users.
     const cached = qrCache.get(uuid);
