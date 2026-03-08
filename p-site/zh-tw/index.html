@@ -65,7 +65,15 @@
   function send(ev, extra){
     try{
       var vid=getOrCreateVid();
-      var lang=(qs('lang')||'').trim().toLowerCase() || (location.pathname.startsWith('/zh-tw')?'zh-tw':(location.pathname.startsWith('/zh')?'zh':'en'));
+      var ql=(qs('lang')||'').trim().toLowerCase();
+      var p=(location.pathname||'');
+      var seg=(p.split('/')[1]||'').trim().toLowerCase();
+      var allowed={
+        'en':1,'zh':1,'zh-tw':1,
+        'ja':1,'ko':1,'fr':1,'de':1,'es':1,'pt-br':1,'ru':1,'tr':1,'id':1,'vi':1,'th':1,'hi':1,'ar':1
+      };
+      var pl=(allowed[seg]?seg:'');
+      var lang=ql || pl || 'en';
       var uuid=extra && extra.uuid ? extra.uuid : (qs('uuid')||guessUuid()||'');
       var body={
         event_type: ev,
