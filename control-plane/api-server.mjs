@@ -1566,7 +1566,7 @@ async function runPoolInitJob(job){
       inst,
       // IMPORTANT: enforce pipefail so curl failures do not get masked by a successful `bash` exit.
       `sudo bash -lc "set -euo pipefail; export DEBIAN_FRONTEND=noninteractive; curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors https://p.bothook.me/artifacts/${bootstrapVer}/bootstrap.sh | ARTIFACT_BASE_URL=https://p.bothook.me/artifacts/${bootstrapVer} bash"`,
-      { timeoutMs: 20*60*1000, tty:false, retries:0 }
+      { timeoutMs: parseInt(process.env.BOTHOOK_POOL_INIT_BOOTSTRAP_TIMEOUT_MS || String(45*60*1000), 10), tty:false, retries:0 }
     );
     if ((boot.code ?? 1) !== 0) {
       try {
