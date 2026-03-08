@@ -3660,7 +3660,7 @@ app.get('/api/wa/qr', async (req, res) => {
 
     // Default: delegate to user machine (18999). Returns qrDataUrl.
     let lastProvisionKick = null;
-    const rr = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, {
+    let rr = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, {
       method: 'GET',
       // SSH + curl can occasionally exceed a few seconds due to banner exchange / jitter.
       timeoutMs: 20000,
@@ -3705,27 +3705,29 @@ app.get('/api/wa/qr', async (req, res) => {
         }
         return send(res, 200, payload);
       }
+
+      // Replace rr with the retry result so downstream logic sees the freshest response.
+      rr = rr2;
+    }
+
+    // Self-heal: if linking has started but QR is not ready, kick provision /api/wa/start and retry once.
+    // IMPORTANT: do this even if rr.ok is false (SSH-mode poolFetch treats json.ok=false as ok=false).
+    if (rr?.json && (String(rr.json.error || '') === 'qr_not_ready' || Number(rr.json.qrSeq || 0) === 0)) {
+      try {
+        await poolFetch(instance, `/api/wa/start`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ uuid, force: false }),
+          timeoutMs: 12000,
+        });
+      } catch {}
+
+      const rrRetry = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, { method: 'GET', timeoutMs: 20000 });
+      // Replace rr so the normal return path can proceed.
+      rr = rrRetry;
     }
 
     if (rr.ok && rr.json) {
-      // Self-heal: if linking has started but QR is not ready, kick provision /api/wa/start and retry once.
-      // This prevents UI from getting stuck on "waiting for QR" when the start request was dropped.
-      if (String(rr.json.error || '') === 'qr_not_ready' || Number(rr.json.qrSeq || 0) === 0) {
-        try {
-          await poolFetch(instance, `/api/wa/start`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ uuid, force: false }),
-            timeoutMs: 12000,
-          });
-        } catch {}
-
-        const rrRetry = await poolFetch(instance, `/api/wa/qr?uuid=${encodeURIComponent(uuid)}`, { method: 'GET', timeoutMs: 20000 });
-        if (rrRetry.ok && rrRetry.json) {
-          rr.json = rrRetry.json;
-        }
-      }
-
       const payload = {
         ok: true,
         uuid,
@@ -3743,9 +3745,17 @@ app.get('/api/wa/qr', async (req, res) => {
     }
 
     // If user-machine provision is temporarily not ready, serve cached QR for UI stability.
+    // BUT: never serve cached QR indefinitely — WhatsApp QR expires and a static QR will confuse users.
     const cached = qrCache.get(uuid);
     if (cached?.qrDataUrl) {
-      if (!isPlausiblePngDataUrl(cached.qrDataUrl)) {
+      const cachedAtMs = Number(cached.cachedAtMs || 0) || 0;
+      const cachedAgeMs = cachedAtMs > 0 ? (Date.now() - cachedAtMs) : 1e12;
+      const CACHE_TTL_MS = 90_000;
+
+      // Hard-expire stale cached QR.
+      if (cachedAgeMs > CACHE_TTL_MS) {
+        try { qrCache.delete(uuid); } catch {}
+      } else if (!isPlausiblePngDataUrl(cached.qrDataUrl)) {
         try { qrCache.delete(uuid); } catch {}
       } else {
         // best-effort kick provision back on (do not block UI when cached QR exists)
@@ -3763,7 +3773,7 @@ app.get('/api/wa/qr', async (req, res) => {
           qrAt: cached.qrAt || null,
           mode: 'user_machine_provision_cached',
           cached: true,
-          // IMPORTANT: cached QR may still be valid; do not force UI to hide it.
+          cachedAgeMs,
           stale: false,
         });
       }
