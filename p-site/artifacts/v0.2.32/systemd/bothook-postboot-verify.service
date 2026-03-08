@@ -1,0 +1,24 @@
+[Unit]
+Description=BOTHook Post-boot Verification (P0.2 reboot acceptance)
+After=network-online.target openclaw-gateway.service bothook-provision.service
+Wants=network-online.target
+
+# Prevent restart storms (StartLimit* must be in [Unit], not [Service])
+StartLimitIntervalSec=1800
+StartLimitBurst=2
+
+[Service]
+Type=oneshot
+ExecStart=/opt/bothook/bin/postboot_verify.sh
+
+# Postboot verify can be expensive (openclaw CLI + gateway restart).
+# Retry transient failures with slower backoff.
+Restart=on-failure
+RestartSec=60
+
+# Keep the system responsive even under load
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target
