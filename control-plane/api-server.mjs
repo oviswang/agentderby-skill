@@ -758,18 +758,29 @@ function writeUuidStateFilesOnInstance(instance, { uuid, lang } = {}) {
   } catch {}
 }
 
-function scheduleAutoreplyFullWelcomeOnInstance(instance, { uuid } = {}) {
+// In-memory de-dupe for welcome scheduling retries (best-effort within a single process lifetime).
+const _welcomeScheduleInFlight = new Map();
+
+function recordDeliveryEventBestEffort(db, delivery_id, event_type, payload) {
+  try {
+    db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+      crypto.randomUUID(), nowIso(), 'delivery', String(delivery_id), String(event_type), JSON.stringify(payload || {})
+    );
+  } catch {}
+}
+
+function scheduleAutoreplyFullWelcomeOnInstance(instance, { uuid, delayMs = 15_000 } = {}) {
   try {
     const safeUuid = String(uuid || '').trim();
-    if (!safeUuid) return;
-    if (!instance?.public_ip) return;
+    if (!safeUuid) return { ok: false, code: 1, detail: 'uuid_empty' };
+    if (!instance?.public_ip) return { ok: false, code: 1, detail: 'instance_missing_ip' };
 
     // The bothook-wa-autoreply plugin can proactively send the full welcome when this is set.
-    // Key property: this retry loop lives instance-side and will naturally wait until WhatsApp is truly connected.
-    const scheduledAt = new Date(Date.now() + 2000).toISOString();
+    // Key property: the retry loop lives instance-side and will naturally wait until WhatsApp is truly connected.
+    const scheduledAt = new Date(Date.now() + Math.max(0, Number(delayMs) || 0)).toISOString();
 
     const py = [
-      "import json,os,sys",
+      "import json,os",
       "p='/opt/bothook/state.json'",
       "st={}",
       "\ntry:\n  st=json.load(open(p)) if os.path.exists(p) else {}\nexcept Exception:\n  st={}",
@@ -789,7 +800,53 @@ function scheduleAutoreplyFullWelcomeOnInstance(instance, { uuid } = {}) {
       + `sudo chmod 664 /opt/bothook/state.json || true; `
       + `echo ok`;
 
-    poolSshFast(instance, remote, { timeoutMs: 8000, tty: false, retries: 0 });
+    const rr = poolSshFast(instance, remote, { timeoutMs: 8000, tty: false, retries: 0 });
+    return { ok: (rr?.code ?? 1) === 0, code: rr?.code ?? 1, detail: String(rr?.stderr || rr?.stdout || '').replace(/\s+/g,' ').slice(0, 160) };
+  } catch {
+    return { ok: false, code: 1, detail: 'exception' };
+  }
+}
+
+function kickWelcomeScheduleRetries(uuid, { maxWindowMs = 120_000 } = {}) {
+  try {
+    const key = String(uuid || '').trim();
+    if (!key) return;
+    if (_welcomeScheduleInFlight.has(key)) return;
+    _welcomeScheduleInFlight.set(key, Date.now());
+
+    const delays = [15_000, 30_000, 60_000, 90_000, 120_000].filter((d) => d <= maxWindowMs);
+
+    delays.forEach((dly, idx) => {
+      setTimeout(() => {
+        try {
+          const { db } = openDb();
+          const d = getDeliveryByUuid(db, key);
+          if (!d?.instance_id) { _welcomeScheduleInFlight.delete(key); return; }
+
+          const st = String(d.status || '').toUpperCase();
+          if (st === 'DELIVERED' || st === 'DELIVERING') { _welcomeScheduleInFlight.delete(key); return; }
+
+          const inst = getInstanceById(db, d.instance_id);
+          if (!inst?.public_ip) { _welcomeScheduleInFlight.delete(key); return; }
+
+          const rr = scheduleAutoreplyFullWelcomeOnInstance(inst, { uuid: key, delayMs: 15_000 });
+          if (rr?.ok) {
+            recordDeliveryEventBestEffort(db, d.delivery_id, 'WELCOME_SCHEDULED', { uuid: key, instance_id: inst.instance_id, attempt: idx + 1, via: 'retry', delay_ms: dly });
+            _welcomeScheduleInFlight.delete(key);
+            return;
+          }
+
+          recordDeliveryEventBestEffort(db, d.delivery_id, 'WELCOME_SCHEDULE_FAILED', { uuid: key, instance_id: inst.instance_id, attempt: idx + 1, via: 'retry', delay_ms: dly, code: rr?.code ?? null, detail: rr?.detail ?? null });
+
+          if (idx === delays.length - 1) {
+            recordDeliveryEventBestEffort(db, d.delivery_id, 'WELCOME_SCHEDULE_GIVEUP', { uuid: key, instance_id: inst.instance_id, attempts: delays.length });
+            _welcomeScheduleInFlight.delete(key);
+          }
+        } catch {
+          _welcomeScheduleInFlight.delete(key);
+        }
+      }, dly);
+    });
   } catch {}
 }
 
@@ -4012,7 +4069,15 @@ app.get('/api/wa/status', async (req, res) => {
 
               // Proactively schedule full welcome on the instance (do NOT wait for user to send a ping).
               // The plugin will retry until WhatsApp is actually connected.
-              try { scheduleAutoreplyFullWelcomeOnInstance(instance, { uuid }); } catch {}
+              try {
+                const rr = scheduleAutoreplyFullWelcomeOnInstance(instance, { uuid, delayMs: 15_000 });
+                if (rr?.ok) {
+                  recordDeliveryEventBestEffort(db, delivery.delivery_id, 'WELCOME_SCHEDULED', { uuid, instance_id: instance.instance_id, via: 'wa_status', delay_ms: 15_000 });
+                } else {
+                  recordDeliveryEventBestEffort(db, delivery.delivery_id, 'WELCOME_SCHEDULE_FAILED', { uuid, instance_id: instance.instance_id, via: 'wa_status', delay_ms: 15_000, code: rr?.code ?? null, detail: rr?.detail ?? null });
+                  kickWelcomeScheduleRetries(uuid, { maxWindowMs: 120_000 });
+                }
+              } catch {}
 
               db.exec('COMMIT');
               waJid = jid;
@@ -4056,7 +4121,15 @@ app.get('/api/wa/status', async (req, res) => {
 
           // Proactively schedule full welcome on the instance (do NOT wait for user to send a ping).
           // The plugin will retry until WhatsApp is actually connected.
-          try { scheduleAutoreplyFullWelcomeOnInstance(instance, { uuid }); } catch {}
+          try {
+            const rr = scheduleAutoreplyFullWelcomeOnInstance(instance, { uuid, delayMs: 15_000 });
+            if (rr?.ok) {
+              recordDeliveryEventBestEffort(db, delivery.delivery_id, 'WELCOME_SCHEDULED', { uuid, instance_id: instance.instance_id, via: 'wa_status', delay_ms: 15_000 });
+            } else {
+              recordDeliveryEventBestEffort(db, delivery.delivery_id, 'WELCOME_SCHEDULE_FAILED', { uuid, instance_id: instance.instance_id, via: 'wa_status', delay_ms: 15_000, code: rr?.code ?? null, detail: rr?.detail ?? null });
+              kickWelcomeScheduleRetries(uuid, { maxWindowMs: 120_000 });
+            }
+          } catch {}
         } else if (bound && waJid && bound !== waJid) {
           // allow device id change for same number (e.g. :46 -> :47)
           const expectedBase = normalizeWaBase(bound);
