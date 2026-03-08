@@ -1,0 +1,11 @@
+[Unit]
+Description=BOTHook Watchdog (openclaw high CPU mitigation)
+After=network-online.target
+Wants=network-online.target
+
+# Only run on pool machines.
+ConditionPathExists=/opt/bothook/POOL_MACHINE
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash /opt/bothook/bin/openclaw_watchdog.sh
