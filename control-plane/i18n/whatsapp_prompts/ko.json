@@ -1,8 +1,8 @@
 {
   "langName": "한국어",
-  "welcome_unpaid": "[bothook] 기기 연결 완료 ✅ 전용 OpenClaw 어시스턴트 서버가 예약되었습니다\n\n서버 정보:\n- 리전: {{region}}\n- 공인 IP: {{public_ip}}\n- 사양: {{cpu}} vCPU / {{ram_gb}} GB RAM / {{disk_gb}} GB SSD\n- OpenClaw 버전: {{openclaw_version}}\n- 복구 링크(저장 권장): {{p_link}}\n- UUID: {{uuid}}\n\n다음 단계: 결제가 필요합니다.\n{{pay_countdown_minutes}}분 내 미결제 시 세션이 취소되고 서버가 회수됩니다.\n{{pay_short_link}}",
+  "welcome_unpaid": "[bothook] 기기 연결 완료 ✅ 전용 OpenClaw 어시스턴트 서버가 예약되었습니다\n\n서버 정보:\n- 리전: {{region}}\n- 공인 IP: {{public_ip}}\n- 사양: {{cpu}} vCPU / {{ram_gb}} GB RAM / {{disk_gb}} GB SSD\n- OpenClaw 버전: {{openclaw_version}}\n- UUID: {{uuid}}\n\n다음 단계: 결제가 필요합니다.\n{{pay_countdown_minutes}}분 내 미결제 시 세션이 취소되고 서버가 회수됩니다.\n{{pay_short_link}}",
   "promo_external": "[bothook] 소유자가 WhatsApp 개인 AI 비서(전용 서버)를 활성화 중입니다.\n\n스펙:\n- {{cpu}} vCPU / {{ram_gb}} GB RAM / {{disk_gb}} GB SSD\n- 리전: {{region}}\n\n자세히: https://bothook.me",
   "guide_key_paid": "[bothook] 다음: OpenAI API Key를 설정하세요(비서를 구동합니다).\n\n1) 키 생성: https://platform.openai.com/api-keys → Create new secret key\n2) OpenAI Billing에서 결제 활성화/잔액 확인\n3) 키를 여기 한 줄로 그대로 붙여넣기(따옴표/공백 금지, 분할 금지)\n\n예시(가짜):\nsk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\n보안: 반드시 자기 자신과의 채팅에만 보내세요. 유출 시 OpenAI에서 폐기 후 새로 생성하세요.",
   "guide_key_paid_chat": "[bothook] 다음: OpenAI API Key를 설정하세요(비서를 구동합니다).\n\n1) 키 생성: https://platform.openai.com/api-keys → Create new secret key\n2) OpenAI Billing에서 결제 활성화/잔액 확인\n3) 키를 여기 한 줄로 그대로 붙여넣기(따옴표/공백 금지, 분할 금지)\n\n예시(가짜):\nsk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\n보안: 반드시 자기 자신과의 채팅에만 보내세요. 유출 시 OpenAI에서 폐기 후 새로 생성하세요.",
-  "key_verified_success": "[bothook] OpenAI API 키 검증 성공 ✅\n\n현재 전달 전환을 마무리하는 중입니다(약 1~2분 소요, 서비스 재시작 포함).\n\n1분 후에 \"hi\" 라고 한 번 보내주세요.\n\n그 다음부터는 원하는 일을 그대로 말하면 됩니다."
+  "key_verified_success": "[bothook] OpenAI API 키 검증 성공 ✅\n\n현재 전달 전환을 마무리하는 중입니다(약 1~2분 소요, 서비스 재시작 포함).\n\n1분 후에 \"hi\" 라고 한 번 보내주세요.\n\n그 다음부터는 원하는 일을 그대로 말하면 됩니다.\n\n- 복구 링크(저장 권장): {{p_link}}"
 }
