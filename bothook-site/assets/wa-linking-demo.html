@@ -13,6 +13,7 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI"
 .wa-dot{ width:10px;height:10px;border-radius:999px;background:var(--wa-green); box-shadow:0 0 0 4px rgba(37,211,102,.18); }
 .wa-title{ font-weight:700; letter-spacing:.2px; font-size:15px; }
 .wa-sub{ margin-left:auto; font-size:13px; color:var(--muted); white-space:nowrap; }
+.wa-sub:empty{display:none}
 .wa-stage{ padding:14px 16px 16px; }
 .caption{ display:flex; gap:10px; align-items:flex-start; margin-top:10px; color:var(--muted); font-size:13px; line-height:1.5; }
 .badge{ flex:0 0 auto; width:26px;height:26px;border-radius:8px; background:rgba(37,211,102,.12); display:flex;align-items:center;justify-content:center; color:var(--wa-green); font-weight:800; font-size:13px; }
@@ -21,10 +22,10 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI"
 .step .badge{ width:22px; height:22px; border-radius:7px; font-size:12px; }
 @media (max-width:520px){
   /* Mobile: reduce vertical padding so the 3 caption lines fit without making the iframe overly tall. */
-  .wa-header{padding:10px 12px}
-  .wa-stage{padding:10px 10px 10px}
+  .wa-header{padding:8px 12px}
+  .wa-stage{padding:10px 10px 8px}
   .wa-sub{font-size:12px}
-  .caption{margin-top:6px;font-size:11px}
+  .caption{margin-top:4px;font-size:11px}
   .steps{gap:4px}
   .step{gap:8px}
 }
