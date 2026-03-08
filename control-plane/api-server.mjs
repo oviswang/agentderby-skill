@@ -431,10 +431,10 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
       const lang = String(preferredLang || '').trim().toLowerCase();
       if (lang) {
         const meta = mergeMeta(existing.meta_json, { preferred_lang: lang });
-        // Persist user_lang only if not set yet (language must be stable for the whole flow).
-        db.prepare('UPDATE deliveries SET meta_json=?, user_lang=COALESCE(user_lang, ?), updated_at=? WHERE delivery_id=?')
+        // Strategy #2 (owner confirmed): allow overwrite so the latest P-site language always wins.
+        db.prepare('UPDATE deliveries SET meta_json=?, user_lang=?, updated_at=? WHERE delivery_id=?')
           .run(meta, lang, nowIso(), existing.delivery_id);
-        updated = { ...existing, meta_json: meta, user_lang: existing.user_lang || lang };
+        updated = { ...existing, meta_json: meta, user_lang: lang };
       }
     } catch {}
 

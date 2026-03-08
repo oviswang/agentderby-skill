@@ -668,13 +668,29 @@
 
       async function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
+      const PAGE_LANG = (() => {
+        try {
+          const ql = (new URLSearchParams(location.search).get('lang') || '').trim().toLowerCase();
+          const seg = (String(location.pathname||'').split('/')[1]||'').trim().toLowerCase();
+          const allowed = {
+            'en':1,'zh':1,'zh-tw':1,
+            'ja':1,'ko':1,'fr':1,'de':1,'es':1,'pt-br':1,'ru':1,'tr':1,'id':1,'vi':1,'th':1,'hi':1,'ar':1
+          };
+          const pl = allowed[seg] ? seg : '';
+          return ql || pl || 'en';
+        } catch {
+          return 'en';
+        }
+      })();
+
+
       // Notify control-plane ONLY after QR is actually rendered (prevents expiry before user sees it).
       let qrGeneratedNotified = false;
       async function notifyQrGenerated(uuid){
         if (qrGeneratedNotified) return;
         qrGeneratedNotified = true;
         try {
-          const lang = (new URLSearchParams(location.search).get('lang') || '').trim() || (location.pathname.startsWith('/zh-tw') ? 'zh-tw' : (location.pathname.startsWith('/zh') ? 'zh' : 'en'));
+          const lang = PAGE_LANG;
           await fetch('/api/ops/qr-generated', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -688,7 +704,7 @@
         const r = await fetch('/api/wa/start', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ uuid, turnstileToken, force })
+          body: JSON.stringify({ uuid, lang: PAGE_LANG, turnstileToken, force })
         });
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || 'start failed');
@@ -696,7 +712,7 @@
       }
 
       async function fetchQr(uuid){
-        const r = await fetch(`/api/wa/qr?uuid=${encodeURIComponent(uuid)}&t=${Date.now()}`);
+        const r = await fetch(`/api/wa/qr?uuid=${encodeURIComponent(uuid)}&lang=${encodeURIComponent(PAGE_LANG)}&t=${Date.now()}`);
         const j = await r.json().catch(()=> ({}));
         if (!r.ok) throw new Error(j.error || `qr http ${r.status}`);
         if (!j.ok) throw new Error(j.error || 'qr failed');
@@ -712,7 +728,7 @@
           }
         } catch {}
 
-        const r = await fetch(`/api/delivery/status?uuid=${encodeURIComponent(uuid)}`);
+        const r = await fetch(`/api/delivery/status?uuid=${encodeURIComponent(uuid)}&lang=${encodeURIComponent(PAGE_LANG)}`);
         const j = await r.json().catch(()=> ({}));
         if (!r.ok) throw new Error(j.error || `delivery http ${r.status}`);
         return j;
