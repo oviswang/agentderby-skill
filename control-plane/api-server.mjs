@@ -324,12 +324,19 @@ function jsonMeta(s) {
 }
 
 function pickProvisionReady(instances) {
+  const requiredArtifacts = getRequiredArtifactsVersion();
   for (const i of instances) {
     const meta = jsonMeta(i.meta_json) || {};
     const pr = meta.provision_ready;
-    if (pr === true || pr === 1 || pr === '1') return i;
+    if (!(pr === true || pr === 1 || pr === '1')) continue;
+
+    // Versioned READY gate (prevents allocating old images after artifacts/latest bumps).
+    if (requiredArtifacts && String(meta.provision_artifacts_version || '') !== String(requiredArtifacts)) continue;
+    if (MIN_OPENCLAW_VERSION && cmpVersion(meta.provision_openclaw_version, MIN_OPENCLAW_VERSION) < 0) continue;
+
+    return i;
   }
-  return instances[0] || null;
+  return null;
 }
 
 function parseChannelsStatusJson(text) {
@@ -512,7 +519,14 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
         LIMIT 50
       `).all();
 
-      const provisionReady = candidates.filter((i) => (jsonMeta(i.meta_json) || {}).provision_ready === true);
+      const requiredArtifacts = getRequiredArtifactsVersion();
+      const provisionReady = candidates.filter((i) => {
+        const meta = (jsonMeta(i.meta_json) || {});
+        if (meta.provision_ready !== true) return false;
+        if (requiredArtifacts && String(meta.provision_artifacts_version || '') !== String(requiredArtifacts)) return false;
+        if (MIN_OPENCLAW_VERSION && cmpVersion(meta.provision_openclaw_version, MIN_OPENCLAW_VERSION) < 0) return false;
+        return true;
+      });
       if (!provisionReady.length) {
         throw Object.assign(new Error('No provision-ready instances available'), { statusCode: 503 });
       }
@@ -608,7 +622,14 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
     LIMIT 50
   `).all();
 
-  const provisionReady = candidates.filter((i) => (jsonMeta(i.meta_json) || {}).provision_ready === true);
+  const requiredArtifacts = getRequiredArtifactsVersion();
+      const provisionReady = candidates.filter((i) => {
+        const meta = (jsonMeta(i.meta_json) || {});
+        if (meta.provision_ready !== true) return false;
+        if (requiredArtifacts && String(meta.provision_artifacts_version || '') !== String(requiredArtifacts)) return false;
+        if (MIN_OPENCLAW_VERSION && cmpVersion(meta.provision_openclaw_version, MIN_OPENCLAW_VERSION) < 0) return false;
+        return true;
+      });
   if (!provisionReady.length) {
     throw Object.assign(new Error('No provision-ready instances available'), { statusCode: 503 });
   }
@@ -720,6 +741,38 @@ function mergeMeta(oldJson, patch){
   try { obj = oldJson ? JSON.parse(oldJson) : {}; } catch { obj = {}; }
   return JSON.stringify({ ...obj, ...patch });
 }
+
+function parseVerParts(v){
+  return String(v || '').trim().split('.').map((x) => {
+    const n = Number(String(x).replace(/[^0-9]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  });
+}
+
+function cmpVersion(a, b){
+  const aa = parseVerParts(a);
+  const bb = parseVerParts(b);
+  const n = Math.max(aa.length, bb.length);
+  for (let i = 0; i < n; i++) {
+    const x = aa[i] ?? 0;
+    const y = bb[i] ?? 0;
+    if (x < y) return -1;
+    if (x > y) return 1;
+  }
+  return 0;
+}
+
+function getRequiredArtifactsVersion(){
+  try {
+    const p = '/home/ubuntu/.openclaw/workspace/p-site/artifacts/latest/manifest.json';
+    const j = JSON.parse(fs.readFileSync(p, 'utf8') || '{}');
+    return String(j?.version || '').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+const MIN_OPENCLAW_VERSION = String(process.env.BOTHOOK_MIN_OPENCLAW_VERSION || '2026.3.7').trim();
 
 function makeReadyReportToken(){
   // short-lived capability token (instance-scoped)
@@ -2917,9 +2970,34 @@ app.post('/api/pool/ready', (req, res) => {
       return send(res, 200, { ok:false, error:'reverse_probe_error', instance_id });
     }
 
+    // Read instance versions (authoritative) and enforce versioned READY gate.
+    let instArtifactsVer = null;
+    let instOpenclawVer = null;
+    try {
+      const instForProbe = getInstanceById(db, instance_id);
+      const rr = poolSsh(instForProbe, "set -euo pipefail; v1=$(jq -r '.version' /opt/bothook/artifacts/manifest.json 2>/dev/null || true); v2=$(openclaw --version 2>/dev/null || true); echo \"$v1|$v2\"", { timeoutMs: 12000, tty: false, retries: 0 });
+      const t = String(rr?.stdout || '').trim();
+      if (t.includes('|')) {
+        instArtifactsVer = t.split('|')[0].trim() || null;
+        instOpenclawVer = t.split('|')[1].trim() || null;
+      }
+    } catch {}
+
+    const requiredArtifacts = getRequiredArtifactsVersion();
+    const okArtifacts = !requiredArtifacts || (String(instArtifactsVer || '') === String(requiredArtifacts));
+    const okOpenclaw = !MIN_OPENCLAW_VERSION || (cmpVersion(instOpenclawVer, MIN_OPENCLAW_VERSION) >= 0);
+    if (!okArtifacts || !okOpenclaw) {
+      db.prepare(
+        'UPDATE instances SET health_status=?, last_probe_at=?, health_reason=?, health_source=?, last_verify_evidence=? WHERE instance_id=?'
+      ).run('NEEDS_VERIFY', ts, 'version_gate_failed', 'ready_push', JSON.stringify({ requiredArtifacts, instArtifactsVer, MIN_OPENCLAW_VERSION, instOpenclawVer }), instance_id);
+      return send(res, 200, { ok:false, error:'version_gate_failed', instance_id, requiredArtifacts, instArtifactsVer, minOpenclaw: MIN_OPENCLAW_VERSION, instOpenclawVer });
+    }
+
     // Update instance status
     const patch = {
       provision_ready: true,
+      provision_artifacts_version: instArtifactsVer,
+      provision_openclaw_version: instOpenclawVer,
       ready_reported_at: ts,
       ready_report_checks: checks || null,
       ready_report_public_ip: public_ip,
@@ -5710,7 +5788,14 @@ app.post('/api/ops/qr-generated', (req, res) => {
         LIMIT 50
       `).all();
 
-      const provisionReady = candidates.filter((i) => (jsonMeta(i.meta_json) || {}).provision_ready === true);
+      const requiredArtifacts = getRequiredArtifactsVersion();
+      const provisionReady = candidates.filter((i) => {
+        const meta = (jsonMeta(i.meta_json) || {});
+        if (meta.provision_ready !== true) return false;
+        if (requiredArtifacts && String(meta.provision_artifacts_version || '') !== String(requiredArtifacts)) return false;
+        if (MIN_OPENCLAW_VERSION && cmpVersion(meta.provision_openclaw_version, MIN_OPENCLAW_VERSION) < 0) return false;
+        return true;
+      });
       if (!provisionReady.length) return send(res, 503, { ok:false, error:'no_provision_ready_instances' });
 
       let chosen = null;
