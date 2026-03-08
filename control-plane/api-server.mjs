@@ -758,6 +758,41 @@ function writeUuidStateFilesOnInstance(instance, { uuid, lang } = {}) {
   } catch {}
 }
 
+function scheduleAutoreplyFullWelcomeOnInstance(instance, { uuid } = {}) {
+  try {
+    const safeUuid = String(uuid || '').trim();
+    if (!safeUuid) return;
+    if (!instance?.public_ip) return;
+
+    // The bothook-wa-autoreply plugin can proactively send the full welcome when this is set.
+    // Key property: this retry loop lives instance-side and will naturally wait until WhatsApp is truly connected.
+    const scheduledAt = new Date(Date.now() + 2000).toISOString();
+
+    const py = [
+      "import json,os,sys",
+      "p='/opt/bothook/state.json'",
+      "st={}",
+      "\ntry:\n  st=json.load(open(p)) if os.path.exists(p) else {}\nexcept Exception:\n  st={}",
+      "ar=st.get('autoreply') or {}",
+      // Always refresh uuid context + schedule welcome if not already sent.
+      "if not ar.get('uuid'): ar['uuid']=" + JSON.stringify(safeUuid),
+      "if not ar.get('welcome_full_sent_at'): ar['welcome_full_scheduled_at']=" + JSON.stringify(scheduledAt),
+      "st['autoreply']=ar",
+      "os.makedirs('/opt/bothook', exist_ok=True)",
+      "open(p,'w').write(json.dumps(st,indent=2)+'\\n')",
+      "print('ok')",
+    ].join(';');
+
+    const remote = `set -euo pipefail; sudo mkdir -p /opt/bothook; `
+      + `python3 -c '${py.replace(/'/g, "'\\''")}' >/dev/null 2>&1 || true; `
+      + `sudo chown ubuntu:ubuntu /opt/bothook/state.json || true; `
+      + `sudo chmod 664 /opt/bothook/state.json || true; `
+      + `echo ok`;
+
+    poolSshFast(instance, remote, { timeoutMs: 8000, tty: false, retries: 0 });
+  } catch {}
+}
+
 function getInstanceById(db, instance_id) {
   return db.prepare(
     `SELECT instance_id, provider, region, zone, public_ip, private_ip, bundle_id, blueprint_id,
@@ -3975,12 +4010,9 @@ app.get('/api/wa/status', async (req, res) => {
                 );
               } catch {}
 
-              // NOTE: welcome_short is now sent instance-side by bothook-wa-autoreply (more reliable; no SSH/gateway dependency).
-              // Do not enqueue control-plane welcome_short to avoid duplicate messages.
-              try {
-                const m = jsonMeta(meta2) || {};
-                void m;
-              } catch {}
+              // Proactively schedule full welcome on the instance (do NOT wait for user to send a ping).
+              // The plugin will retry until WhatsApp is actually connected.
+              try { scheduleAutoreplyFullWelcomeOnInstance(instance, { uuid }); } catch {}
 
               db.exec('COMMIT');
               waJid = jid;
@@ -4022,12 +4054,9 @@ app.get('/api/wa/status', async (req, res) => {
             );
           } catch {}
 
-          // NOTE: welcome_short is now sent instance-side by bothook-wa-autoreply (more reliable; no SSH/gateway dependency).
-          // Do not enqueue control-plane welcome_short to avoid duplicate messages.
-          try {
-            const m = jsonMeta(meta2) || {};
-            void m;
-          } catch {}
+          // Proactively schedule full welcome on the instance (do NOT wait for user to send a ping).
+          // The plugin will retry until WhatsApp is actually connected.
+          try { scheduleAutoreplyFullWelcomeOnInstance(instance, { uuid }); } catch {}
         } else if (bound && waJid && bound !== waJid) {
           // allow device id change for same number (e.g. :46 -> :47)
           const expectedBase = normalizeWaBase(bound);
