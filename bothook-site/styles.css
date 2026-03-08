@@ -93,6 +93,7 @@ a{color:inherit}
 
 /* Mobile: the demo has captions below the SVG; make the iframe taller so text is not clipped. */
 @media (max-width:520px){
-  .demoIframe{aspect-ratio:4/5;}
+  /* Force a taller iframe on narrow screens so the caption is not clipped. */
+  .demoIframe{aspect-ratio:auto; height:560px;}
 }
 
