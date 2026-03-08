@@ -1,0 +1,8 @@
+{
+  "langName": "简体中文",
+  "welcome_unpaid": "[bothook] 设备关联成功 ✅ 你的专属 OpenClaw 助手服务器已为你预留\n\n服务器信息：\n- 地区：{{region}}\n- 公网 IP：{{public_ip}}\n- 配置：{{cpu}} vCPU / {{ram_gb}} GB 内存 / {{disk_gb}} GB SSD\n- OpenClaw 版本：{{openclaw_version}}\n- UUID：{{uuid}}\n\n下一步需要先完成付款。\n请在 {{pay_countdown_minutes}} 分钟内完成付款，否则本次会话会自动取消并回收机器。\n{{pay_short_link}}",
+  "promo_external": "[bothook] 机主正在激活一个“WhatsApp 里的私人 AI 助理”（专属服务器，不是群机器人）。\n\n配置亮点：\n- {{cpu}} vCPU / {{ram_gb}} GB 内存 / {{disk_gb}} GB SSD\n- 地区：{{region}}\n\n了解更多：https://bothook.me",
+  "guide_key_paid": "[bothook] 下一步：配置你的 OpenAI API Key（驱动你的专属助理）\n\n1) 创建 Key：打开 https://platform.openai.com/api-keys → Create new secret key\n2) 确保 OpenAI 账号已启用计费/有可用余额（否则验证可能失败）\n3) 把 Key 在这里一次性完整粘贴（不要加引号/空格，不要分多条消息）。\n\n示例（假的）：\nsk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\n安全提醒：只发在自聊里；若怀疑泄露，请在 OpenAI 后台撤销并重新生成。",
+  "guide_key_paid_chat": "[bothook] 下一步：配置你的 OpenAI API Key（驱动你的专属助理）\n\n1) 创建 Key：打开 https://platform.openai.com/api-keys → Create new secret key\n2) 确保 OpenAI 账号已启用计费/有可用余额（否则验证可能失败）\n3) 把 Key 在这里一次性完整粘贴（不要加引号/空格，不要分多条消息）。\n\n示例（假的）：\nsk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\n安全提醒：只发在自聊里；若怀疑泄露，请在 OpenAI 后台撤销并重新生成。",
+  "key_verified_success": "[bothook] OpenAI Key 验证成功 ✅\n\n我们正在完成交付切换（需要约 1–2 分钟，期间会重启服务）。\n\n请等待 1 分钟后再发一句：\n你好\n\n然后你就可以直接说：‘帮我做什么’。\n\n- 找回入口（建议收藏）：{{p_link}}"
+}
