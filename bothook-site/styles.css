@@ -91,9 +91,8 @@ a{color:inherit}
   .split{grid-template-columns:1fr}
 }
 
-/* Mobile: the demo has captions below the SVG; make the iframe taller so text is not clipped. */
+/* Mobile: slightly taller iframe so the 3 caption lines fit, without creating large whitespace. */
 @media (max-width:520px){
-  /* Mobile: make iframe just tall enough to show the 3 caption lines, but avoid huge whitespace. */
-  .demoIframe{aspect-ratio:auto; height:clamp(360px, 52vh, 460px);}
+  .demoIframe{aspect-ratio:16/11;}
 }
 
