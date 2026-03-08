@@ -540,7 +540,16 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
         db.prepare('UPDATE instances SET lifecycle_status=?, assigned_user_id=?, assigned_at=? WHERE instance_id=?')
           .run('ALLOCATED', uuid, ts, chosen.instance_id);
 
-        writeUuidStateFilesOnInstance(chosen, { uuid, lang: preferredLang || 'en' });
+        {
+          const wr = writeUuidStateFilesOnInstance(chosen, { uuid, lang: preferredLang || 'en' });
+          recordDeliveryEventBestEffort(db, uuid, wr?.ok ? 'UUID_FILE_WRITTEN' : 'UUID_FILE_WRITE_FAILED', {
+            uuid,
+            instance_id: chosen.instance_id,
+            public_ip: chosen.public_ip,
+            lang: preferredLang || 'en',
+            ...wr
+          });
+        }
 
         db.prepare(`
           INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json)
@@ -652,7 +661,16 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
 
     // Persist UUID recovery link + basic inbound state on the user machine for later relink/support.
     // This must be present even before WhatsApp linking succeeds.
-    writeUuidStateFilesOnInstance(chosen, { uuid, lang: preferredLang || 'en' });
+    {
+      const wr = writeUuidStateFilesOnInstance(chosen, { uuid, lang: preferredLang || 'en' });
+      recordDeliveryEventBestEffort(db, uuid, wr?.ok ? 'UUID_FILE_WRITTEN' : 'UUID_FILE_WRITE_FAILED', {
+        uuid,
+        instance_id: chosen.instance_id,
+        public_ip: chosen.public_ip,
+        lang: preferredLang || 'en',
+        ...wr
+      });
+    }
 
     db.prepare(`
       INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json)
@@ -729,12 +747,27 @@ function writeReadyReportFilesOnInstance(instance, { token, expIso } = {}) {
 function writeUuidStateFilesOnInstance(instance, { uuid, lang } = {}) {
   try {
     const safeUuid = String(uuid || '').trim();
-    if (!safeUuid) return;
+    if (!safeUuid) return { ok: false, code: 1, detail: 'uuid_empty' };
     const safeLang = String(lang || 'en').trim().toLowerCase() || 'en';
     const pLink = `https://p.bothook.me/p/${encodeURIComponent(safeUuid)}?lang=${encodeURIComponent(safeLang)}`;
 
     const uuidB64 = Buffer.from(`uuid=${safeUuid}\np_link=${pLink}\n`, 'utf8').toString('base64');
-    const stateB64 = Buffer.from(JSON.stringify({ autoreply: { externalReplied: {} } }, null, 2) + "\n", 'utf8').toString('base64');
+
+    // IMPORTANT: reset instance-side autoreply state on UUID assignment.
+    // Reason: state.json contains cached welcome text; without reset it can leak across UUIDs/languages.
+    const stateB64 = Buffer.from(JSON.stringify({
+      autoreply: {
+        uuid: safeUuid,
+        externalReplied: {},
+        welcome_full_sent_at: null,
+        welcome_short_sent_at: null,
+        welcome_full_scheduled_at: null,
+        cachedWelcomeUnpaidText: null,
+        cachedWelcomeUnpaidAt: null,
+        cachedWelcomeUnpaidUuid: null,
+        welcome_full_echo_after_user_msg_at: null
+      }
+    }, null, 2) + "\n", 'utf8').toString('base64');
 
     const instB64 = Buffer.from(JSON.stringify({
       region: String(instance?.region || ''),
@@ -747,15 +780,18 @@ function writeUuidStateFilesOnInstance(instance, { uuid, lang } = {}) {
       + `sudo chmod 644 /opt/bothook/UUID.txt; `
       + `echo '${instB64}' | base64 -d | sudo tee /opt/bothook/INSTANCE.json >/dev/null; `
       + `sudo chmod 644 /opt/bothook/INSTANCE.json; `
-      + `if [ ! -f /opt/bothook/state.json ]; then echo '${stateB64}' | base64 -d | sudo tee /opt/bothook/state.json >/dev/null; fi; `
+      + `echo '${stateB64}' | base64 -d | sudo tee /opt/bothook/state.json >/dev/null; `
       + `sudo chown ubuntu:ubuntu /opt/bothook/state.json || true; `
       + `sudo chmod 664 /opt/bothook/state.json || true; `
       + `echo ok`;
 
-    // This write is critical for instance-side autoreply (UUID.txt). Keep it bounded but not too aggressive;
+    // This write is critical for instance-side autoreply (UUID.txt).
     // slow SSH handshakes are common on fresh boxes.
-    poolSsh(instance, remote, { timeoutMs: 8000, tty: false, retries: 1, profile: 'fast' });
-  } catch {}
+    const rr = poolSsh(instance, remote, { timeoutMs: 20000, tty: false, retries: 2, profile: 'fast' });
+    return { ok: (rr?.code ?? 1) === 0, code: rr?.code ?? 1, detail: String(rr?.stderr || rr?.stdout || '').replace(/\s+/g,' ').slice(0, 160) };
+  } catch (e) {
+    return { ok: false, code: 1, detail: 'exception' };
+  }
 }
 
 // In-memory de-dupe for welcome scheduling retries (best-effort within a single process lifetime).
