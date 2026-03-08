@@ -1,0 +1,10 @@
+{
+  "id": "bothook-wa-loopback",
+  "name": "BOTHook WA Loopback",
+  "description": "Loopback-only WhatsApp send endpoint for onboarding (no rescan)",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

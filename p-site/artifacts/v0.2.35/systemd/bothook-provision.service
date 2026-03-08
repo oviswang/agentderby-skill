@@ -1,0 +1,41 @@
+[Unit]
+Description=BOTHook Provisioning Server (Baileys)
+After=network-online.target
+Wants=network-online.target
+
+# If control-plane has taken over the WhatsApp login flow, do not run local provision server.
+ConditionPathExists=!/opt/bothook/LOGIN_AUTHORITY.control-plane
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/bothook/provision
+Environment=PROVISION_DATA_DIR=/opt/bothook/provision/data
+Environment=PROVISION_PORT=18999
+Environment=OPENCLAW_HOME=/home/ubuntu
+Environment=OPENCLAW_STATE_DIR=/home/ubuntu/.openclaw
+Environment=PROVISION_LOGIN_TTL_MS=600000
+Environment=PATH=/home/ubuntu/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Hard guard: do not start if deps are not installed. Prevents crash loops like "Cannot find package 'express'".
+ExecStartPre=/usr/bin/test -s /opt/bothook/provision/server.mjs
+ExecStartPre=/usr/bin/test -d /opt/bothook/provision/node_modules
+ExecStartPre=/usr/bin/test -f /opt/bothook/provision/node_modules/express/package.json
+
+ExecStart=/usr/bin/node /opt/bothook/provision/server.mjs
+Restart=always
+RestartSec=2
+TimeoutStartSec=20
+TimeoutStopSec=15
+
+# Guardrails: prevent pathological login loops from taking the whole machine down.
+CPUQuota=120%
+MemoryMax=1200M
+
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=full
+ProtectHome=false
+
+[Install]
+WantedBy=multi-user.target
