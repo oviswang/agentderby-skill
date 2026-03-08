@@ -90,3 +90,9 @@ a{color:inherit}
   .grid2{grid-template-columns:1fr}
   .split{grid-template-columns:1fr}
 }
+
+/* Mobile: the demo has captions below the SVG; make the iframe taller so text is not clipped. */
+@media (max-width:520px){
+  .demoIframe{aspect-ratio:4/5;}
+}
+
