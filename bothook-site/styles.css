@@ -93,6 +93,6 @@ a{color:inherit}
 
 /* Mobile: slightly taller iframe so the 3 caption lines fit, without creating large whitespace. */
 @media (max-width:520px){
-  .demoIframe{aspect-ratio:16/11;}
+  .demoIframe{aspect-ratio:16/12;}
 }
 
