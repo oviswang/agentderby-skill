@@ -1,0 +1,9 @@
+{
+  "id": "bothook-wa-autoreply",
+  "name": "BOTHook WhatsApp Autoreply",
+  "version": "0.2.11",
+  "main": "index.ts",
+  "engine": { "openclaw": "*" },
+  "description": "Onboarding repeat welcome_unpaid until paid + suppress agent warnings",
+  "configSchema": { "type": "object", "additionalProperties": true }
+}
