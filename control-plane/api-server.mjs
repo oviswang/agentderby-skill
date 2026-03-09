@@ -3065,7 +3065,8 @@ app.get('/api/p/state', (req, res) => {
         }
       }
 
-      if (String(status || '') === 'PAID') {
+      const stU = String(status || '').toUpperCase();
+      if (stU === 'PAID' || stU === 'DELIVERING' || stU === 'DELIVERED') {
         state = 'PAID_ACTIVE';
       } else if (subscription && String(subscription.status || '').toLowerCase() === 'active') {
         state = 'PAID_ACTIVE';
