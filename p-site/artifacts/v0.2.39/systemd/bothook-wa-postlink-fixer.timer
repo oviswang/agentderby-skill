@@ -1,0 +1,11 @@
+[Unit]
+Description=BOTHook post-link fixer timer (fallback polling)
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=15s
+AccuracySec=1s
+Unit=bothook-wa-postlink-fixer.service
+
+[Install]
+WantedBy=timers.target
