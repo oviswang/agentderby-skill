@@ -39,7 +39,8 @@ async function probeFunded(key, { timeoutMs = 10000, model = 'gpt-5.2' } = {}){
     body: {
       model,
       input: 'ping',
-      max_output_tokens: 1,
+      // NOTE: OpenAI enforces a minimum max_output_tokens; keep >=16 to avoid false negatives.
+      max_output_tokens: 16,
     }
   });
 
