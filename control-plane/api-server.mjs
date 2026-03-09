@@ -5596,6 +5596,52 @@ app.post('/api/delivery/mark_delivered', (req, res) => {
   }
 });
 
+// Instance callback: report outbound messaging outcomes (welcome/guide/success).
+// Auth: require caller IP to match the currently bound instance public_ip.
+app.post('/api/instance/event', (req, res) => {
+  try {
+    const uuid = String(req.body?.uuid || '').trim();
+    const eventType = String(req.body?.event_type || '').trim().toUpperCase();
+    const payload = req.body?.payload || {};
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+    if (!eventType) return send(res, 400, { ok:false, error:'event_type_required' });
+
+    const allow = new Set([
+      'WELCOME_UNPAID_SENT',
+      'WELCOME_UNPAID_SEND_FAILED',
+      'GUIDE_KEY_PAID_SENT',
+      'GUIDE_KEY_PAID_SEND_FAILED',
+      'KEY_VERIFIED_SUCCESS_SENT',
+      'KEY_VERIFIED_SUCCESS_SEND_FAILED'
+    ]);
+    if (!allow.has(eventType)) return send(res, 400, { ok:false, error:'event_type_not_allowed' });
+
+    const { db } = openDb();
+    const d = db.prepare('SELECT * FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
+    if (!d) return send(res, 404, { ok:false, error:'unknown_uuid' });
+
+    const instId = String(d.instance_id || '').trim();
+    if (!instId) return send(res, 409, { ok:false, error:'no_instance_bound' });
+    const inst = db.prepare('SELECT * FROM instances WHERE instance_id=? LIMIT 1').get(instId);
+
+    const ip = getClientIp(req);
+    const expectedIp = String(inst?.public_ip || '').trim();
+    if (expectedIp && ip && ip !== expectedIp) {
+      return send(res, 403, { ok:false, error:'ip_mismatch' });
+    }
+
+    const ts = nowIso();
+    db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)').run(
+      crypto.randomUUID(), ts, 'delivery', d.delivery_id, eventType,
+      JSON.stringify({ uuid, instance_id: instId, ...payload })
+    );
+
+    return send(res, 200, { ok:true, uuid, delivery_id: d.delivery_id, event_type: eventType });
+  } catch (e) {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 
 
 // Ops: mark QR generated (A-stage start)
