@@ -5505,7 +5505,8 @@ app.post('/api/key/verify', async (req, res) => {
       const lang = d2 ? getDeliveryLang(d2) : 'en';
       const prompts = loadWaPrompts(lang) || loadWaPrompts('en') || {};
       const tpl = String(prompts.key_verified_success || '').trim();
-      if (tpl) msg = renderTpl(tpl, { uuid });
+      const pLink = `https://p.bothook.me/p/${encodeURIComponent(uuid)}?lang=${encodeURIComponent(lang || 'en')}`;
+      if (tpl) msg = renderTpl(tpl, { uuid, p_link: pLink });
     } catch {}
 
     if (!msg) {
