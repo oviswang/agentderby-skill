@@ -6108,7 +6108,7 @@ function startOpsWorker(){
         db.exec('BEGIN IMMEDIATE');
         try {
           // mark recycled
-          db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE delivery_id=?')
+          db.prepare('UPDATE deliveries SET status=?, instance_id=NULL, updated_at=?, meta_json=? WHERE delivery_id=?')
             .run('QR_EXPIRED', ts, mergeMeta(r.meta_json, { recycled_at: ts, recycle_reason: 'QR_EXPIRED' }), r.delivery_id);
           db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
             crypto.randomUUID(), ts, 'delivery', r.delivery_id, 'RECYCLE_UNBOUND', JSON.stringify({ uuid: r.provision_uuid, instance_id: r.instance_id })
@@ -6176,8 +6176,8 @@ function startOpsWorker(){
 
         db.exec('BEGIN IMMEDIATE');
         try {
-          db.prepare('UPDATE deliveries SET status=?, wa_jid=NULL, bound_at=NULL, updated_at=?, meta_json=? WHERE delivery_id=?')
-            .run('RECYCLED_UNPAID', ts, ts, mergeMeta(r.meta_json, { recycled_at: ts, recycle_reason: 'UNPAID' }), r.delivery_id);
+          db.prepare('UPDATE deliveries SET status=?, instance_id=NULL, wa_jid=NULL, bound_at=NULL, updated_at=?, meta_json=? WHERE delivery_id=?')
+            .run('RECYCLED_UNPAID', ts, mergeMeta(r.meta_json, { recycled_at: ts, recycle_reason: 'UNPAID' }), r.delivery_id);
           db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
             crypto.randomUUID(), ts, 'delivery', r.delivery_id, 'RECYCLE_UNPAID', JSON.stringify({ uuid: r.provision_uuid, instance_id: r.instance_id })
           );
