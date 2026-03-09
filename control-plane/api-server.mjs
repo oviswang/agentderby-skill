@@ -5546,6 +5546,56 @@ app.get('/api/delivery/status', (req, res) => {
   }
 });
 
+function getClientIp(req){
+  // Prefer Cloudflare header when present.
+  const cf = req.headers['cf-connecting-ip'];
+  if (cf) return String(Array.isArray(cf) ? cf[0] : cf).trim();
+  const xff = req.headers['x-forwarded-for'];
+  if (xff) return String(Array.isArray(xff) ? xff[0] : xff).split(',')[0].trim();
+  return String(req.ip || '').trim();
+}
+
+// Instance callback: mark delivered after local cutover is complete.
+// Auth: require caller IP to match the currently bound instance public_ip.
+app.post('/api/delivery/mark_delivered', (req, res) => {
+  try {
+    const uuid = String(req.body?.uuid || '').trim();
+    if (!uuid) return send(res, 400, { ok:false, error:'uuid_required' });
+
+    const { db } = openDb();
+    const d = db.prepare('SELECT * FROM deliveries WHERE provision_uuid=? LIMIT 1').get(uuid);
+    if (!d) return send(res, 404, { ok:false, error:'unknown_uuid' });
+
+    const instId = String(d.instance_id || '').trim();
+    if (!instId) return send(res, 409, { ok:false, error:'no_instance_bound' });
+
+    const inst = db.prepare('SELECT * FROM instances WHERE instance_id=? LIMIT 1').get(instId);
+    const ip = getClientIp(req);
+    const expectedIp = String(inst?.public_ip || '').trim();
+    if (expectedIp && ip && ip !== expectedIp) {
+      return send(res, 403, { ok:false, error:'ip_mismatch' });
+    }
+
+    const ts = nowIso();
+
+    // Mark delivery delivered (idempotent).
+    try {
+      const meta2 = mergeMeta(d?.meta_json || null, { delivered_at: ts, delivered_via: 'instance_mark_delivered', delivered_instance_id: instId });
+      db.prepare('UPDATE deliveries SET status=?, updated_at=?, meta_json=? WHERE provision_uuid=?').run('DELIVERED', ts, meta2, uuid);
+    } catch {}
+
+    try {
+      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)').run(
+        crypto.randomUUID(), ts, 'delivery', d.delivery_id, 'CUTOVER_DELIVERED', JSON.stringify({ uuid, instance_id: instId, via: 'instance_mark_delivered' })
+      );
+    } catch {}
+
+    return send(res, 200, { ok:true, uuid, delivery_id: d.delivery_id, status: 'DELIVERED' });
+  } catch (e) {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 
 
 // Ops: mark QR generated (A-stage start)

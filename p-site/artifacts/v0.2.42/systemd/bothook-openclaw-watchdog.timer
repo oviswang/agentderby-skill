@@ -1,0 +1,11 @@
+[Unit]
+Description=BOTHook Watchdog timer (openclaw high CPU mitigation)
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=10s
+AccuracySec=1s
+Unit=bothook-openclaw-watchdog.service
+
+[Install]
+WantedBy=timers.target
