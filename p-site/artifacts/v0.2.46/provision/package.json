@@ -1,0 +1,12 @@
+{
+  "name": "bothook-provision",
+  "version": "0.2.3",
+  "private": true,
+  "type": "module",
+  "main": "server.mjs",
+  "dependencies": {
+    "express": "^4.19.2",
+    "node-pty": "^1.1.0",
+    "pngjs": "^7.0.0"
+  }
+}
