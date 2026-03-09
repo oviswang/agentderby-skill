@@ -14,6 +14,7 @@
 - SocialData API key is stored at `/home/ubuntu/.openclaw/credentials/socialdata.env`.
 - Telegram bot token + owner chat id are stored at `/home/ubuntu/.openclaw/credentials/telegram.env`.
 - Google Ads API credentials (developer token + OAuth client + refresh token) are stored at `/home/ubuntu/.openclaw/credentials/google_ads.env`.
+  - Working call structure (verified): Python `google-ads==29.2.0` SearchStream or REST v23 `googleAds:searchStream` with `login-customer-id` header set to MCC when accessing client customer.
 
 ## Stability/Safety SOP (high-risk changes)
 - Treat any operation that can break WhatsApp connectivity as HIGH RISK.
