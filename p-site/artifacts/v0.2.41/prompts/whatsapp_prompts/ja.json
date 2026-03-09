@@ -1,0 +1,8 @@
+{
+  "langName": "日本語",
+  "welcome_unpaid": "[bothook] デバイス連携完了 ✅ あなた専用の OpenClaw アシスタントサーバーを確保しました\n\nサーバー情報：\n- リージョン：{{region}}\n- 公開IP：{{public_ip}}\n- 構成：{{cpu}} vCPU / {{ram_gb}} GB RAM / {{disk_gb}} GB SSD\n- OpenClaw バージョン：{{openclaw_version}}\n- UUID：{{uuid}}\n\n次のステップ：支払いが必要です。\n{{pay_countdown_minutes}}分以内に支払わない場合、このセッションはキャンセルされサーバーは回収されます。\n{{pay_short_link}}",
+  "promo_external": "[bothook] オーナーは WhatsApp のプライベートAIアシスタント（専用サーバー）を有効化中です。\n\nスペック：\n- {{cpu}} vCPU / {{ram_gb}} GB RAM / {{disk_gb}} GB SSD\n- リージョン：{{region}}\n\n詳細：https://bothook.me",
+  "guide_key_paid": "[bothook] 次：OpenAI API Key を設定してください（アシスタントの動力です）\n\n1) Key 作成：https://platform.openai.com/api-keys → Create new secret key\n2) OpenAI の Billing で課金が有効/残高があることを確認\n3) ここに Key を1行で完全に貼り付け（引用符/空白なし、分割しない）\n\n例（ダミー）：\nsk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\n安全：自分とのチャットにのみ送信してください。漏洩したら OpenAI で無効化して再発行してください。",
+  "guide_key_paid_chat": "[bothook] 次：OpenAI API Key を設定してください（アシスタントの動力です）\n\n1) Key 作成：https://platform.openai.com/api-keys → Create new secret key\n2) OpenAI の Billing で課金が有効/残高があることを確認\n3) ここに Key を1行で完全に貼り付け（引用符/空白なし、分割しない）\n\n例（ダミー）：\nsk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\n安全：自分とのチャットにのみ送信してください。漏洩したら OpenAI で無効化して再発行してください。",
+  "key_verified_success": "[bothook] OpenAI APIキーの検証に成功しました ✅\n\n現在、納品切り替えを実行中です（約1〜2分。途中でサービス再起動があります）。\n\n1分ほど待ってから、\"hi\" と送ってください。\n\nその後は、やってほしいことをそのまま送ればOKです。\n\n- 復旧リンク（保存推奨）：{{p_link}}"
+}
