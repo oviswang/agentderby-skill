@@ -36,11 +36,13 @@
 - Treat SSH reachability as a preflight gate for READY.
 - On every scheduler tick, cheaply audit Lighthouse instances for keypair drift (`LoginSettings.KeyIds`). If missing, auto-run `AssociateInstancesKeyPairs` to re-bind `bothook_pool_key` and re-probe SSH.
 
-- Pool cap=**max 5 machines** counts *all unpaid/temporary instances*, including creating + provision-ready + allocated/in-progress + bound-but-unpaid; never exceed without explicit owner confirmation.
+- Pool cap (current config) = **max 10 machines** (`BOTHOOK_POOL_CAP_TOTAL=10`) counts *all unpaid/temporary instances*, including creating + provision-ready + allocated/in-progress + bound-but-unpaid.
+  - Warn threshold: `BOTHOOK_POOL_WARN_TOTAL=8`
+  - Target READY: `BOTHOOK_POOL_TARGET_READY=2`
 - Replenisher schedule: every 5 minutes; at most 1 new machine per run; write events for audit.
 - Pool cloud provider is **Tencent Cloud only** right now (this is the only API credentials available).
 - Future: may add other providers, but do not assume; implement provider layer with Tencent first.
-- Unpaid/provision-ready server pool cap: **max 5 machines** by default; any change requires explicit owner confirmation.
+- Unpaid/provision-ready server pool cap: governed by `BOTHOOK_POOL_CAP_TOTAL` (currently **10**); adjust only with explicit owner confirmation.
 
 ### Pool auto-renew policy (owner)
 - New pool instances default to **auto-renew ON** (monthly) to avoid cloud-expiry vs subscription-period mismatch.
