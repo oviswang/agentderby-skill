@@ -137,6 +137,7 @@ place_assets(){
   install -m 755 "$base/postboot_verify.sh" /opt/bothook/bin/postboot_verify.sh
   install -m 755 "$base/openclaw-gateway-start.sh" /opt/bothook/bin/openclaw-gateway-start.sh
   install -m 755 "$base/openclaw_watchdog.sh" /opt/bothook/bin/openclaw_watchdog.sh
+  install -m 755 "$base/wa_postlink_fixer.sh" /opt/bothook/bin/wa_postlink_fixer.sh
 
   # Provision server (local-only 18999)
   if [[ -f "$base/provision/server.mjs" ]]; then
@@ -159,11 +160,16 @@ install_units(){
   install -m 644 "$base/bothook-postboot-verify.service" /etc/systemd/system/bothook-postboot-verify.service
   install -m 644 "$base/bothook-openclaw-watchdog.service" /etc/systemd/system/bothook-openclaw-watchdog.service
   install -m 644 "$base/bothook-openclaw-watchdog.timer" /etc/systemd/system/bothook-openclaw-watchdog.timer
+  install -m 644 "$base/bothook-wa-postlink-fixer.service" /etc/systemd/system/bothook-wa-postlink-fixer.service
+  install -m 644 "$base/bothook-wa-postlink-fixer.timer" /etc/systemd/system/bothook-wa-postlink-fixer.timer
+  install -m 644 "$base/bothook-wa-postlink-fixer.path" /etc/systemd/system/bothook-wa-postlink-fixer.path
 
   systemctl daemon-reload
   systemctl enable --now openclaw-gateway.service bothook-provision.service >/dev/null 2>&1 || true
   systemctl enable --now bothook-postboot-verify.service >/dev/null 2>&1 || true
   systemctl enable --now bothook-openclaw-watchdog.timer >/dev/null 2>&1 || true
+  # Post-link fixer: path trigger for immediate reaction + timer as fallback poller.
+  systemctl enable --now bothook-wa-postlink-fixer.path bothook-wa-postlink-fixer.timer >/dev/null 2>&1 || true
 }
 
 ensure_onboarding_plugins(){
