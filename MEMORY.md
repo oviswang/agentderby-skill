@@ -13,6 +13,7 @@
 - Stripe webhook secret + live key + standard price id are stored at `/home/ubuntu/.openclaw/credentials/stripe.env`.
 - SocialData API key is stored at `/home/ubuntu/.openclaw/credentials/socialdata.env`.
 - Telegram bot token + owner chat id are stored at `/home/ubuntu/.openclaw/credentials/telegram.env`.
+- Google Ads API credentials (developer token + OAuth client + refresh token) are stored at `/home/ubuntu/.openclaw/credentials/google_ads.env`.
 
 ## Stability/Safety SOP (high-risk changes)
 - Treat any operation that can break WhatsApp connectivity as HIGH RISK.
