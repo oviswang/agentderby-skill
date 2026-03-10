@@ -2802,6 +2802,16 @@ app.post('/api/ops/pool/wa-sanitize', (req, res) => {
 `+
 `echo 'step:cleared_provision_data:ok';
 `+
+`# Clear OpenClaw WhatsApp state (best-effort)
+`+
+`openclaw channels logout --channel whatsapp 2>/dev/null || true;
+`+
+`sudo rm -rf /home/ubuntu/.openclaw/channels/whatsapp 2>/dev/null || true;
+`+
+`sudo rm -rf /home/ubuntu/.openclaw/credentials/whatsapp 2>/dev/null || true;
+`+
+`echo 'step:cleared_openclaw_wa:ok';
+`+
 `# Clear OpenClaw auth + delivered markers
 `+
 `AGENT_DIR=/home/ubuntu/.openclaw/agents/main/agent;
