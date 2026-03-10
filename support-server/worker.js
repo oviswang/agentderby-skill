@@ -92,7 +92,7 @@ function renderReply(ticket, lang){
 
   if (lang === 'zh') {
     const subject = `[#${id}] BOTHook 支持 — 已收到`;
-    const text = `[bothook] 我们已收到你的消息（工单号：${id}）。\n\n我们会尽快处理并回复。\n\n你提交的信息：\n邮箱：${ticket.email}${wa}${uuid}\n内容：\n${ticket.message}\n\n如需我们执行“操作型请求”（如取消订阅、配置 DNS 等），请确保你在表单里同时提供：\n- WhatsApp 手机号码\n- UUID/交付链接\n\n如果你是关于 WhatsApp 关联交付：\n- 请确认你使用另一台设备（电脑/另一部手机）来显示二维码\n- 并在 WhatsApp → 已关联的设备 → 关联新设备 扫码\n\n（直接回复本邮件即可继续沟通。）`;
+    const text = `[bothook] 我们已收到你的消息（工单号：${id}）。\n\n我们会尽快处理并回复。\n\n你提交的信息：\n邮箱：${ticket.email}${wa}${uuid}\n内容：\n${ticket.message}\n\n如需我们执行“操作型请求”（如取消订阅、配置 DNS 等），请确保你在表单里同时提供：\n- WhatsApp 手机号码\n- UUID/交付链接\n\n如需我们协助“开通端口 / 配置云安全组”（当前仅支持云侧安全组，不改机器内防火墙），请按下列模板一次性提供信息：\n- 需要开放的端口：TCP/UDP + 端口号（或小范围）\n- 允许来源：IP 白名单（CIDR），不建议 0.0.0.0/0\n- 用途/服务：你要跑什么服务、为什么需要公网入口\n- 生效时长：临时/长期（如临时请给截止时间）\n\n如果你是关于 WhatsApp 关联交付：\n- 请确认你使用另一台设备（电脑/另一部手机）来显示二维码\n- 并在 WhatsApp → 已关联的设备 → 关联新设备 扫码\n\n（直接回复本邮件即可继续沟通。）`;
 
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;line-height:1.6;color:#111">
@@ -102,6 +102,7 @@ function renderReply(ticket, lang){
         <p><strong>你提交的信息</strong></p>
         <pre style="white-space:pre-wrap;background:#f7f7f8;padding:12px;border-radius:10px;">Email: ${escapeHtml(ticket.email)}${ticket.wa ? `\nWhatsApp: ${escapeHtml(ticket.wa)}` : ''}${ticket.uuid ? `\nUUID: ${escapeHtml(ticket.uuid)}` : ''}\n\nMessage:\n${escapeHtml(ticket.message)}</pre>
         <p style="color:#6b7280;font-size:12px">如需我们执行取消订阅、配置 DNS 等操作型请求，请确保你提供 WhatsApp 手机号码 + UUID/交付链接，用于校验。</p>
+        <p style="color:#6b7280;font-size:12px">如需我们协助开通端口/配置云安全组（当前仅支持云侧安全组，不改机器内防火墙），请提供：端口（TCP/UDP + 端口号/小范围）、来源 IP 白名单（CIDR）、用途/服务、以及生效时长（临时请给截止时间）。</p>
         <p><strong>常见排查（WhatsApp 关联）</strong></p>
         <ul>
           <li>请使用另一台设备（电脑/另一部手机）来显示二维码</li>
@@ -114,7 +115,7 @@ function renderReply(ticket, lang){
   }
 
   const subject = `[#${id}] BOTHook Support — Received`;
-  const text = `[bothook] We received your message (Ticket: ${id}).\n\nWe’ll get back to you as soon as possible.\n\nWhat you submitted:\nEmail: ${ticket.email}${wa}${uuid}\nMessage:\n${ticket.message}\n\nFor account actions (cancellation, DNS changes, etc.), please include both:\n- Your WhatsApp phone number\n- Your UUID/delivery link\n\nIf this is about WhatsApp linking:\n- Please open the QR page on another device (computer/another phone)\n- WhatsApp → Linked devices → Link a device, then scan\n\n(Reply to this email to continue.)`;
+  const text = `[bothook] We received your message (Ticket: ${id}).\n\nWe’ll get back to you as soon as possible.\n\nWhat you submitted:\nEmail: ${ticket.email}${wa}${uuid}\nMessage:\n${ticket.message}\n\nFor account actions (cancellation, DNS changes, etc.), please include both:\n- Your WhatsApp phone number\n- Your UUID/delivery link\n\nIf you need help opening ports / configuring the cloud security group (we currently support cloud-side security group only; we do not modify in-VM firewalls), please provide:\n- Port(s): TCP/UDP + port number (or a small range)\n- Source: IP allowlist (CIDR). Avoid 0.0.0.0/0 if possible\n- Purpose/service: what you’re running and why it needs public access\n- Duration: temporary/long-term (if temporary, include an end time)\n\nIf this is about WhatsApp linking:\n- Please open the QR page on another device (computer/another phone)\n- WhatsApp → Linked devices → Link a device, then scan\n\n(Reply to this email to continue.)`;
   const html = `
     <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;line-height:1.6;color:#111">
       <p><strong>[bothook]</strong> We received your message (Ticket: <strong>${id}</strong>).</p>
@@ -123,6 +124,7 @@ function renderReply(ticket, lang){
       <p><strong>What you submitted</strong></p>
       <pre style="white-space:pre-wrap;background:#f7f7f8;padding:12px;border-radius:10px;">Email: ${escapeHtml(ticket.email)}${ticket.wa ? `\nWhatsApp: ${escapeHtml(ticket.wa)}` : ''}${ticket.uuid ? `\nUUID: ${escapeHtml(ticket.uuid)}` : ''}\n\nMessage:\n${escapeHtml(ticket.message)}</pre>
       <p style="color:#6b7280;font-size:12px">For account actions (cancellation, DNS changes, etc.), please include both your WhatsApp phone + UUID/delivery link for verification.</p>
+      <p style="color:#6b7280;font-size:12px">For opening ports / configuring the cloud security group (cloud-side only; we do not modify in-VM firewalls), please include: port(s) (TCP/UDP), source IP allowlist (CIDR), purpose/service, and duration (end time if temporary).</p>
       <p><strong>Quick checks (WhatsApp linking)</strong></p>
       <ul>
         <li>Open the QR page on another device (computer/another phone)</li>
