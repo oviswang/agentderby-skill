@@ -253,21 +253,21 @@
         <span id="langLabel">Português (Brasil)</span>
       </a>
       <div class="langPanel" id="langPanel" role="menu" aria-label="Idioma">
-        <a class="langItem" href="/" data-locale="en" role="menuitem"><span class="native">English</span></a>
-        <a class="langItem" href="/zh/" data-locale="zh" role="menuitem"><span class="native">中文</span></a>
-        <a class="langItem" href="/zh-tw/" data-locale="zh-tw" role="menuitem"><span class="native">繁體中文</span></a>
-        <a class="langItem" href="/ja/" data-locale="ja" role="menuitem"><span class="native">日本語</span></a>
-        <a class="langItem" href="/ko/" data-locale="ko" role="menuitem"><span class="native">한국어</span></a>
-        <a class="langItem" href="/fr/" data-locale="fr" role="menuitem"><span class="native">Français</span></a>
-        <a class="langItem" href="/de/" data-locale="de" role="menuitem"><span class="native">Deutsch</span></a>
-        <a class="langItem" href="/es/" data-locale="es" role="menuitem"><span class="native">Español</span></a>
+        <a class="langItem" href="/" data-locale="en" role="menuitem"><span class="native">Inglês</span></a>
+        <a class="langItem" href="/zh/" data-locale="zh" role="menuitem"><span class="native">Chinês (Simplificado)</span></a>
+        <a class="langItem" href="/zh-tw/" data-locale="zh-tw" role="menuitem"><span class="native">Chinês (Tradicional)</span></a>
+        <a class="langItem" href="/ja/" data-locale="ja" role="menuitem"><span class="native">Japonês</span></a>
+        <a class="langItem" href="/ko/" data-locale="ko" role="menuitem"><span class="native">Coreano</span></a>
+        <a class="langItem" href="/fr/" data-locale="fr" role="menuitem"><span class="native">Francês</span></a>
+        <a class="langItem" href="/de/" data-locale="de" role="menuitem"><span class="native">Alemão</span></a>
+        <a class="langItem" href="/es/" data-locale="es" role="menuitem"><span class="native">Espanhol</span></a>
         <a class="langItem" href="/pt-br/" data-locale="pt-br" role="menuitem"><span class="native">Português (Brasil)</span></a>
-        <a class="langItem" href="/ru/" data-locale="ru" role="menuitem"><span class="native">Русский</span></a>
-        <a class="langItem" href="/ar/" data-locale="ar" role="menuitem"><span class="native">العربية</span></a>
-        <a class="langItem" href="/hi/" data-locale="hi" role="menuitem"><span class="native">हिन्दी</span></a>
-        <a class="langItem" href="/id/" data-locale="id" role="menuitem"><span class="native">Bahasa Indonesia</span></a>
-        <a class="langItem" href="/th/" data-locale="th" role="menuitem"><span class="native">ไทย</span></a>
-        <a class="langItem" href="/vi/" data-locale="vi" role="menuitem"><span class="native">Tiếng Việt</span></a>
+        <a class="langItem" href="/ru/" data-locale="ru" role="menuitem"><span class="native">Russo</span></a>
+        <a class="langItem" href="/ar/" data-locale="ar" role="menuitem"><span class="native">Árabe</span></a>
+        <a class="langItem" href="/hi/" data-locale="hi" role="menuitem"><span class="native">Hindi</span></a>
+        <a class="langItem" href="/id/" data-locale="id" role="menuitem"><span class="native">Indonésio</span></a>
+        <a class="langItem" href="/th/" data-locale="th" role="menuitem"><span class="native">Tailandês</span></a>
+        <a class="langItem" href="/vi/" data-locale="vi" role="menuitem"><span class="native">Vietnamita</span></a>
       </div>
     </div>
   </header>
@@ -549,7 +549,7 @@
       const text = document.getElementById('langBannerText');
       const sw = document.getElementById('langBannerTrocar');
       const dis = document.getElementById('langBannerFechar');
-      text.textContent = (best === 'zh') ? '查看中文版本？' : 'Ver esta página em inglês?';
+      text.textContent = (best === 'zh') ? 'Ver esta página em chinês?' : 'Ver esta página em inglês?';
       banner.style.display = 'block';
       sw.onclick = () => {
         localStorage.setItem('bothook_lang_banner_dismissed','1');
