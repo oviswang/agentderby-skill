@@ -510,7 +510,9 @@ async function main() {
         released_at: ts,
         timeout_stage: timeoutStage,
         timeout_stage_detail: stage,
-        reclaim_plan: reclaimPlan
+        reclaim_plan: reclaimPlan,
+        // IMPORTANT: reclaimed instances are NOT allocatable until a cleaner marks them READY again.
+        provision_ready: false
       }),
       instance_id
     );

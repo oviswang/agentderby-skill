@@ -1,0 +1,21 @@
+[Unit]
+Description=BOTHook pool cleaner (sanitize DIRTY/NEEDS_VERIFY pool instances to READY)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/.openclaw/workspace
+Environment=BOTHOOK_DB_PATH=/home/ubuntu/.openclaw/workspace/control-plane/data/bothook.sqlite
+Environment=BOTHOOK_POOL_CLEANER=1
+Environment=BOTHOOK_POOL_CLEANER_LIMIT=2
+# Calls back into the always-on API for wa-sanitize
+Environment=BOTHOOK_API_BASE=http://127.0.0.1:18998
+ExecStart=/usr/bin/node /home/ubuntu/.openclaw/workspace/control-plane/api-server.mjs
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -515,6 +515,7 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
         FROM instances
         WHERE public_ip IS NOT NULL AND public_ip != ''
           AND lifecycle_status='IN_POOL'
+          AND health_status='READY'
         ORDER BY created_at ASC
         LIMIT 50
       `).all();
@@ -613,11 +614,13 @@ function getOrCreateDeliveryForUuid(db, uuid, { preferredLang } = {}) {
   }
 
   // A-mode strict allocation: choose only pool instances and reserve exclusively.
+  // IMPORTANT: allocator must only use READY pool instances (prevents assigning DIRTY/NEEDS_VERIFY machines).
   const candidates = db.prepare(`
     SELECT instance_id, public_ip, lifecycle_status, health_status, meta_json, created_at
     FROM instances
     WHERE public_ip IS NOT NULL AND public_ip != ''
       AND lifecycle_status='IN_POOL'
+      AND health_status='READY'
     ORDER BY created_at ASC
     LIMIT 50
   `).all();
@@ -5892,6 +5895,7 @@ app.post('/api/ops/qr-generated', (req, res) => {
         FROM instances
         WHERE public_ip IS NOT NULL AND public_ip != ''
           AND lifecycle_status='IN_POOL'
+          AND health_status='READY'
         ORDER BY created_at ASC
         LIMIT 50
       `).all();
@@ -6406,12 +6410,99 @@ async function runCutoverReconcilerOnce(){
   }
 }
 
+async function runPoolCleanerOnce(){
+  // One-shot cleaner: sanitize DIRTY/NEEDS_VERIFY pool instances so they become allocatable again.
+  // Strategy: call the existing /api/ops/pool/wa-sanitize endpoint (on the always-on bothook-api.service),
+  // then mark the instance READY on success.
+  const lockPath = '/tmp/bothook_pool_cleaner.lock';
+  let fd = null;
+  try {
+    fd = fs.openSync(lockPath, 'wx');
+    fs.writeFileSync(lockPath, String(process.pid));
+  } catch {
+    return;
+  }
+
+  try {
+    const LIMIT = Math.max(1, Math.min(5, Number(process.env.BOTHOOK_POOL_CLEANER_LIMIT || 2)));
+    const API_BASE = process.env.BOTHOOK_API_BASE || 'http://127.0.0.1:18998';
+    const { db } = openDb();
+    const ts0 = nowIso();
+
+    const rows = db.prepare(
+      `SELECT instance_id, public_ip, health_status, meta_json
+         FROM instances
+        WHERE lifecycle_status='IN_POOL'
+          AND health_status IN ('DIRTY','NEEDS_VERIFY')
+          AND public_ip IS NOT NULL AND public_ip != ''
+        ORDER BY datetime(last_probe_at) ASC, datetime(created_at) ASC
+        LIMIT 80`
+    ).all() || [];
+
+    let attempted = 0;
+    let cleaned = 0;
+
+    for (const r of rows) {
+      if (attempted >= LIMIT) break;
+      const instance_id = String(r.instance_id || '').trim();
+      if (!instance_id) continue;
+      if (instance_id === 'lhins-npsqfxvn') continue;
+
+      attempted += 1;
+
+      // Call sanitize (best-effort)
+      let resp = null;
+      try {
+        const payload = JSON.stringify({ instance_id });
+        const out = sh(`curl -s -X POST ${JSON.stringify(API_BASE + '/api/ops/pool/wa-sanitize')} -H 'content-type: application/json' --data-binary ${JSON.stringify(payload)}`, { timeoutMs: 60000 });
+        resp = JSON.parse(String(out.stdout || '{}'));
+      } catch (e) {
+        resp = { ok:false, sanitized:false, error: String(e?.message || 'wa_sanitize_failed').slice(0,120) };
+      }
+
+      const ok = Boolean(resp?.sanitized === true);
+      const ts1 = nowIso();
+
+      try {
+        db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+          .run(crypto.randomUUID(), ts1, 'instance', instance_id, ok ? 'POOL_CLEANER_OK' : 'POOL_CLEANER_FAILED', JSON.stringify({ instance_id, resp }));
+      } catch {}
+
+      if (ok) {
+        cleaned += 1;
+        try {
+          const meta2 = mergeMeta(r.meta_json || null, { provision_ready: true, cleaned_by: 'pool_cleaner', cleaned_at: ts1, wa_sanitized_at: ts1 });
+          db.prepare('UPDATE instances SET health_status=?, health_reason=?, health_source=?, last_probe_at=?, last_ok_at=?, meta_json=? WHERE instance_id=?')
+            .run('READY', 'pool_cleaned', 'pool_cleaner', ts1, ts1, meta2, instance_id);
+        } catch {}
+      } else {
+        try {
+          db.prepare('UPDATE instances SET health_status=?, health_reason=?, health_source=?, last_probe_at=? WHERE instance_id=?')
+            .run('NEEDS_VERIFY', 'pool_clean_failed', 'pool_cleaner', ts1, instance_id);
+        } catch {}
+      }
+    }
+
+    try {
+      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+        .run(crypto.randomUUID(), nowIso(), 'ops', 'pool_cleaner', 'POOL_CLEANER_RUN', JSON.stringify({ attempted, cleaned, limit: LIMIT }));
+    } catch {}
+
+    console.log(JSON.stringify({ ok:true, attempted, cleaned, limit: LIMIT }, null, 2));
+  } finally {
+    try { if (fd) fs.closeSync(fd); } catch {}
+    try { fs.unlinkSync(lockPath); } catch {}
+  }
+}
+
 if (String(process.env.BOTHOOK_OUTBOUND_WORKER || '') === '1') {
   runOutboundWorkerLoop().then(()=>process.exit(0)).catch(()=>process.exit(0));
 } else if (String(process.env.BOTHOOK_OPS_WORKER || '') === '1') {
   runOpsWorkerLoop().then(()=>process.exit(0)).catch(()=>process.exit(0));
 } else if (String(process.env.BOTHOOK_CUTOVER_RECONCILER || '') === '1') {
   runCutoverReconcilerOnce().then(()=>process.exit(0)).catch(()=>process.exit(0));
+} else if (String(process.env.BOTHOOK_POOL_CLEANER || '') === '1') {
+  runPoolCleanerOnce().then(()=>process.exit(0)).catch(()=>process.exit(0));
 } else {
   app.listen(PORT, '127.0.0.1', () => {
     console.log(`[bothook-api] listening on 127.0.0.1:${PORT}`);
