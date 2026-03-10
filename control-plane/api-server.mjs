@@ -6441,6 +6441,7 @@ async function runPoolCleanerOnce(){
 
     let attempted = 0;
     let cleaned = 0;
+    let failed = 0;
 
     for (const r of rows) {
       if (attempted >= LIMIT) break;
@@ -6476,6 +6477,7 @@ async function runPoolCleanerOnce(){
             .run('READY', 'pool_cleaned', 'pool_cleaner', ts1, ts1, meta2, instance_id);
         } catch {}
       } else {
+        failed += 1;
         try {
           db.prepare('UPDATE instances SET health_status=?, health_reason=?, health_source=?, last_probe_at=? WHERE instance_id=?')
             .run('NEEDS_VERIFY', 'pool_clean_failed', 'pool_cleaner', ts1, instance_id);
@@ -6483,9 +6485,57 @@ async function runPoolCleanerOnce(){
       }
     }
 
+    // Alerting (Telegram): only after N consecutive runs with failures, to avoid noise.
+    try {
+      const ALERT_AFTER = Math.max(1, Math.min(10, Number(process.env.BOTHOOK_POOL_CLEANER_ALERT_AFTER || 3)));
+      const COOLDOWN_MS = Math.max(5*60*1000, Math.min(6*60*60*1000, Number(process.env.BOTHOOK_POOL_CLEANER_ALERT_COOLDOWN_MS || (30*60*1000))));
+      const statePath = '/home/ubuntu/.openclaw/workspace/control-plane/data/pool_cleaner_alert_state.json';
+      let st = { consecutiveFailRuns: 0, lastAlertAt: null };
+      try { st = JSON.parse(fs.readFileSync(statePath, 'utf8') || '{}'); } catch {}
+      if (!st || typeof st !== 'object') st = { consecutiveFailRuns: 0, lastAlertAt: null };
+
+      if (failed > 0) st.consecutiveFailRuns = Number(st.consecutiveFailRuns || 0) + 1;
+      else st.consecutiveFailRuns = 0;
+
+      const nowMs = Date.now();
+      const lastAlertMs = st.lastAlertAt ? Date.parse(String(st.lastAlertAt)) : 0;
+      const canAlert = (!lastAlertMs) || (Number.isFinite(lastAlertMs) && (nowMs - lastAlertMs >= COOLDOWN_MS));
+
+      if (failed > 0 && st.consecutiveFailRuns >= ALERT_AFTER && canAlert) {
+        // Load Telegram credentials from env file (no secrets logged)
+        const envFile = process.env.TELEGRAM_ENV || '/home/ubuntu/.openclaw/credentials/telegram.env';
+        let token = '';
+        let chatId = '';
+        try {
+          const raw = fs.readFileSync(envFile, 'utf8');
+          for (const line of raw.split(/\r?\n/)) {
+            const t = line.trim();
+            if (!t || t.startsWith('#') || !t.includes('=')) continue;
+            const [k, ...rest] = t.split('=');
+            const v = rest.join('=').trim();
+            if (k === 'TELEGRAM_BOT_TOKEN' || k === 'TELEGRAM_TOKEN') token = token || v;
+            if (k === 'TELEGRAM_CHAT_ID' || k === 'OWNER_CHAT_ID') chatId = chatId || v;
+          }
+        } catch {}
+
+        if (token && chatId) {
+          const text = `[bothook][pool-cleaner][WARN] sanitize failures detected\n` +
+            `runs_with_failures=${st.consecutiveFailRuns} (alert_after=${ALERT_AFTER})\n` +
+            `attempted=${attempted} cleaned=${cleaned} failed=${failed} limit=${LIMIT}\n` +
+            `action: investigate instances with health_status=NEEDS_VERIFY (recent POOL_CLEANER_FAILED events)`;
+          try {
+            sh(`curl -s -X POST https://api.telegram.org/bot${token}/sendMessage -d chat_id=${chatId} -d text=${JSON.stringify(text)} >/dev/null`, { timeoutMs: 15000 });
+            st.lastAlertAt = new Date().toISOString();
+          } catch {}
+        }
+      }
+
+      try { fs.writeFileSync(statePath, JSON.stringify(st, null, 2) + '\n'); } catch {}
+    } catch {}
+
     try {
       db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
-        .run(crypto.randomUUID(), nowIso(), 'ops', 'pool_cleaner', 'POOL_CLEANER_RUN', JSON.stringify({ attempted, cleaned, limit: LIMIT }));
+        .run(crypto.randomUUID(), nowIso(), 'ops', 'pool_cleaner', 'POOL_CLEANER_RUN', JSON.stringify({ attempted, cleaned, failed, limit: LIMIT }));
     } catch {}
 
     console.log(JSON.stringify({ ok:true, attempted, cleaned, limit: LIMIT }, null, 2));
