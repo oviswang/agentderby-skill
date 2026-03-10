@@ -2885,7 +2885,8 @@ app.post('/api/ops/pool/wa-sanitize', (req, res) => {
 `+
 `echo done`;
 
-    const r = poolSsh(inst, remote, { timeoutMs: 45000, tty: false, retries: 0 });
+    // Use init SSH profile here: some pool instances accept TCP but are slow to present SSH banner; fast profile times out.
+    const r = poolSsh(inst, remote, { timeoutMs: 45000, tty: false, retries: 1, profile: 'init' });
     const stdout = String(r.stdout || '');
     const ok = (r.code ?? 1) === 0;
 
