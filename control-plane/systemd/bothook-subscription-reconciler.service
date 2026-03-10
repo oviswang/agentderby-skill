@@ -1,0 +1,20 @@
+[Unit]
+Description=BOTHook subscription reconciler (backfill missing subscriptions rows from Stripe events)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/.openclaw/workspace
+Environment=BOTHOOK_DB_PATH=/home/ubuntu/.openclaw/workspace/control-plane/data/bothook.sqlite
+Environment=BOTHOOK_SUB_RECONCILER=1
+Environment=BOTHOOK_SUB_RECONCILER_LIMIT=3
+EnvironmentFile=/home/ubuntu/.openclaw/credentials/stripe.env
+ExecStart=/usr/bin/node /home/ubuntu/.openclaw/workspace/control-plane/api-server.mjs
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

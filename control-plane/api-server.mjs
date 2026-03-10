@@ -6552,6 +6552,108 @@ async function runPoolCleanerOnce(){
   }
 }
 
+async function runSubscriptionReconcilerOnce(){
+  // One-shot subscription reconciler: backfill subscriptions rows for paid/delivered users when webhook upsert was missed.
+  // Scope: only fix anomalies (paid_at exists + stripe_event_id exists + no subscriptions row).
+  const lockPath = '/tmp/bothook_subscription_reconciler.lock';
+  let fd = null;
+  try {
+    fd = fs.openSync(lockPath, 'wx');
+    fs.writeFileSync(lockPath, String(process.pid));
+  } catch {
+    return;
+  }
+
+  try {
+    const LIMIT = Math.max(1, Math.min(5, Number(process.env.BOTHOOK_SUB_RECONCILER_LIMIT || 3)));
+    const secret = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '';
+    if (!secret) {
+      console.log(JSON.stringify({ ok:false, error:'stripe_not_configured' }));
+      return;
+    }
+
+    const { db } = openDb();
+    const ts0 = nowIso();
+
+    const rows = db.prepare(
+      `SELECT d.provision_uuid AS uuid,
+              d.delivery_id AS delivery_id,
+              json_extract(d.meta_json,'$.stripe_event_id') AS stripe_event_id,
+              json_extract(d.meta_json,'$.paid_at') AS paid_at
+         FROM deliveries d
+        WHERE d.status IN ('PAID','DELIVERED')
+          AND json_extract(d.meta_json,'$.stripe_event_id') IS NOT NULL
+          AND datetime(COALESCE(json_extract(d.meta_json,'$.paid_at'), d.updated_at)) >= datetime('now','-7 days')
+        ORDER BY datetime(COALESCE(json_extract(d.meta_json,'$.paid_at'), d.updated_at)) DESC
+        LIMIT 120`
+    ).all() || [];
+
+    let attempted = 0;
+    let fixed = 0;
+    let skipped = 0;
+
+    for (const r of rows) {
+      if (attempted >= LIMIT) break;
+
+      const uuid = String(r.uuid || '').trim();
+      const delivery_id = String(r.delivery_id || '').trim();
+      const evt = String(r.stripe_event_id || '').trim();
+      if (!uuid || !delivery_id || !evt.startsWith('evt_')) { skipped += 1; continue; }
+
+      // Only fix when subscriptions row is missing.
+      const hasSub = db.prepare("SELECT provider_sub_id FROM subscriptions WHERE user_id=? AND provider='stripe' ORDER BY datetime(updated_at) DESC LIMIT 1").get(uuid);
+      if (hasSub?.provider_sub_id) { skipped += 1; continue; }
+
+      attempted += 1;
+
+      let ok = false;
+      let subId = null;
+      let err = null;
+      try {
+        const resp = await fetch(`https://api.stripe.com/v1/events/${encodeURIComponent(evt)}`, {
+          headers: { authorization: `Bearer ${secret}` }
+        });
+        const j = await resp.json().catch(()=>null);
+        if (!resp.ok || !j) throw new Error(`stripe_event_fetch_failed_${resp.status}`);
+        const obj = (j.data || {}).object || {};
+        subId = obj.subscription || null;
+        if (!subId) throw new Error('missing_subscription_id');
+
+        const createdAt = String(r.paid_at || ts0);
+        db.prepare(
+          `INSERT INTO subscriptions(provider_sub_id, provider, user_id, plan, status, current_period_end, cancel_at, canceled_at, ended_at, cancel_at_period_end, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+           ON CONFLICT(provider_sub_id) DO UPDATE SET
+             status=excluded.status,
+             user_id=excluded.user_id,
+             plan=excluded.plan,
+             updated_at=excluded.updated_at`
+        ).run(String(subId), 'stripe', String(uuid), 'standard', 'active', null, null, null, null, 0, createdAt, createdAt);
+
+        ok = true;
+        fixed += 1;
+      } catch (e) {
+        err = String(e?.message || e).slice(0,200);
+      }
+
+      try {
+        db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+          .run(crypto.randomUUID(), nowIso(), 'delivery', delivery_id, ok ? 'SUB_RECONCILE_OK' : 'SUB_RECONCILE_FAILED', JSON.stringify({ uuid, delivery_id, stripe_event_id: evt, provider_sub_id: subId, error: err }));
+      } catch {}
+    }
+
+    try {
+      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+        .run(crypto.randomUUID(), nowIso(), 'ops', 'sub_reconciler', 'SUB_RECONCILER_RUN', JSON.stringify({ attempted, fixed, skipped, limit: LIMIT }));
+    } catch {}
+
+    console.log(JSON.stringify({ ok:true, attempted, fixed, skipped, limit: LIMIT }, null, 2));
+  } finally {
+    try { if (fd) fs.closeSync(fd); } catch {}
+    try { fs.unlinkSync(lockPath); } catch {}
+  }
+}
+
 if (String(process.env.BOTHOOK_OUTBOUND_WORKER || '') === '1') {
   runOutboundWorkerLoop().then(()=>process.exit(0)).catch(()=>process.exit(0));
 } else if (String(process.env.BOTHOOK_OPS_WORKER || '') === '1') {
@@ -6560,6 +6662,8 @@ if (String(process.env.BOTHOOK_OUTBOUND_WORKER || '') === '1') {
   runCutoverReconcilerOnce().then(()=>process.exit(0)).catch(()=>process.exit(0));
 } else if (String(process.env.BOTHOOK_POOL_CLEANER || '') === '1') {
   runPoolCleanerOnce().then(()=>process.exit(0)).catch(()=>process.exit(0));
+} else if (String(process.env.BOTHOOK_SUB_RECONCILER || '') === '1') {
+  runSubscriptionReconcilerOnce().then(()=>process.exit(0)).catch(()=>process.exit(0));
 } else {
   app.listen(PORT, '127.0.0.1', () => {
     console.log(`[bothook-api] listening on 127.0.0.1:${PORT}`);
