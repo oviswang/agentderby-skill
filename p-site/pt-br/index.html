@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BOTHook Provisioning</title>
-  <meta name="description" content="Provisioning page for WhatsApp device linking." />
+  <title>BOTHook — Vincular WhatsApp</title>
+  <meta name="description" content="Página de vinculação do WhatsApp (BOTHook)." />
   <link rel="icon" href="https://bothook.me/assets/logo.jpg" />
   <style>
     :root{--bg:#0b1220;--card:#111a2e;--text:#e8eefc;--muted:#a9b6d6;--accent:#57a6ff;--shadow:0 10px 30px rgba(0,0,0,.35)}
@@ -130,55 +130,55 @@
         <img src="https://bothook.me/assets/logo.jpg" alt="BOTHook" />
         <strong>BOTHook</strong>
       </a>
-      <a href="https://bothook.me/" class="hint" id="backLink">Back to bothook.me</a>
+      <a href="https://bothook.me/" class="hint" id="backLink">Voltar para bothook.me</a>
     </div>
-    <h1 id="pageTitle">Provisioning</h1>
-    <p id="pageIntro">This page creates a unique provisioning session. You’ll use it to link WhatsApp on the next step.</p>
+    <h1 id="pageTitle">Vincular WhatsApp</h1>
+    <p id="pageIntro">Esta página cria uma sessão de vinculação. Você vai usar para conectar o WhatsApp no próximo passo.</p>
 
     <div class="card" id="paidCard" style="margin-top:12px; display:none;">
-      <div class="hint" id="paidTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Subscription</div>
-      <p id="paidActiveLine"><strong>✅ Subscription active.</strong></p>
-      <p class="hint" id="paidHint">You can relink WhatsApp here. For billing actions (cancel / payment method), please contact support.</p>
+      <div class="hint" id="paidTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Assinatura</div>
+      <p id="paidActiveLine"><strong>✅ Assinatura ativa.</strong></p>
+      <p class="hint" id="paidHint">Você pode reconectar seu WhatsApp aqui. Para cobrança (cancelar/cartão), fale com o suporte.</p>
       <div class="btns" style="margin-top:10px;">
-        <button class="primary" id="paidRelinkBtn" type="button">Relink device</button>
-        <button id="paidUpgradeBtn" type="button" disabled>Upgrade (coming soon)</button>
+        <button class="primary" id="paidRelinkBtn" type="button">Reconectar WhatsApp</button>
+        <button id="paidUpgradeBtn" type="button" disabled>Upgrade (em breve)</button>
       </div>
     </div>
 
     <div class="row" id="paidInfoGrid" style="display:none;">
       <div class="card">
-        <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Your server</div>
+        <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Seu servidor</div>
         <div class="kv" id="paidServerKv"></div>
       </div>
       <div class="card">
-        <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Account & delivery</div>
+        <div class="hint" style="color:rgba(232,238,252,.92); font-weight:700;">Conta e entrega</div>
         <div class="kv" id="paidAccountKv"></div>
       </div>
     </div>
 
 
     <div class="card" id="linkingCard" style="margin-top:12px;">
-      <div class="hint" id="importantTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Important</div>
-      <p id="openOtherDevice"><strong>Open this page on a different device</strong> (another phone or a computer).</p>
-      <p class="hint" id="cantScanSamePhone">You can’t scan a QR code displayed on the same phone that’s doing the scanning.</p>
+      <div class="hint" id="importantTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Importante</div>
+      <p id="openOtherDevice"><strong>Abra esta página em outro aparelho</strong> (outro celular ou um computador).</p>
+      <p class="hint" id="cantScanSamePhone">Você não consegue escanear um QR exibido no mesmo celular que está escaneando.</p>
       <label class="hint" style="display:flex; gap:10px; align-items:center; margin-top:10px;">
         <input id="hasOtherDevice" type="checkbox" style="transform:scale(1.1);" />
-        <span id="haveDeviceText">I have another device to scan the QR code.</span>
+        <span id="haveDeviceText">Tenho outro aparelho para escanear o QR.</span>
       </label>
       <div class="btns" style="margin-top:10px;">
-        <button class="primary" id="continueBtn" type="button" disabled>Continue</button>
+        <button class="primary" id="continueBtn" type="button" disabled>Continuar</button>
       </div>
     </div>
 
     <div class="card" id="busyCard" style="margin-top:12px; display:none;">
-      <div class="hint" id="busyQueueTitle" style="color:#ff4d4f; font-weight:700;">Busy / Queue</div>
-      <p id="busyAllBusy"><strong>All machines are currently busy.</strong></p>
+      <div class="hint" id="busyQueueTitle" style="color:#ff4d4f; font-weight:700;">Ocupado / Fila</div>
+      <p id="busyAllBusy"><strong>Todas as máquinas estão ocupadas no momento.</strong></p>
       <p class="hint" id="busyHint">Aguarde alguns minutos e atualize esta página. Seu link UUID continua válido.</p>
       <p class="hint" id="busyMeta"></p>
     </div>
 
     <div class="card" id="verifyCard" style="margin-top:12px; display:none;">
-      <div class="hint" id="busyTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Get QR code</div>
+      <div class="hint" id="busyTitle" style="color:rgba(232,238,252,.92); font-weight:700;">Gerar QR code</div>
       <div id="turnstileBox" style="margin-top:10px; min-height:72px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);">
         <div id="turnstileWidget"></div>
       </div>
@@ -186,16 +186,16 @@
       <p class="hint" id="qrStatus" style="margin-top:10px;"></p>
 
       <div class="btns" style="margin-top:12px;">
-        <button class="primary" id="getQrBtn" type="button" disabled>Get QR code</button>
-        <button class="primary" id="restartBtn" type="button" disabled style="display:none;">Retry</button>
+        <button class="primary" id="getQrBtn" type="button" disabled>Gerar QR code</button>
+        <button class="primary" id="restartBtn" type="button" disabled style="display:none;">Tentar novamente</button>
       </div>
     </div>
 
     <div class="card" id="linkedCard" style="margin-top:12px; display:none;">
       <div class="hint" id="linkedTitle" style="color:rgba(232,238,252,.92); font-weight:700;">✅ Vinculado</div>
-      <p id="linkedStrong"><strong>This delivery machine is now connected to your WhatsApp.</strong></p>
-      <p class="hint" id="closePageHint">You can close this page. To relink later, open your saved delivery link.</p>
-      <p class="hint" id="linkedHint">If WhatsApp shows it under Linked devices, you’re done.</p>
+      <p id="linkedStrong"><strong>Esta máquina de entrega agora está conectada ao seu WhatsApp.</strong></p>
+      <p class="hint" id="closePageHint">Você pode fechar esta página. Para reconectar depois, abra o link de entrega salvo.</p>
+      <p class="hint" id="linkedHint">Se aparecer no WhatsApp em Aparelhos conectados, pronto.</p>
     </div>
 
     <div class="row">
@@ -210,14 +210,14 @@
 
 
     <div class="card" id="uuidCard">
-      <div class="hint" id="deliveryLinkTitle">Your delivery link (save it)</div>
+      <div class="hint" id="deliveryLinkTitle">Seu link de entrega (guarde)</div>
       <div class="uuid" id="provisionLink">Generating…</div>
       <span id="uuid" style="display:none"></span>
       <div class="btns">
-        <button class="primary" id="copyBtn" type="button">Copy link</button>
+        <button class="primary" id="copyBtn" type="button">Copiar link</button>
       </div>
-      <p class="hint" id="saveHint">This link contains your UUID. Save it — you can use it later to relink or check status.</p>
-      <p class="hint" id="helpHint">If you need help, submit the form at <a href="https://bothook.me/contact.html" id="helpLink">bothook.me/contact.html</a> and include this link (or the UUID in it).</p>
+      <p class="hint" id="saveHint">Este link contém seu UUID. Guarde — você pode usar depois para reconectar ou ver status.</p>
+      <p class="hint" id="helpHint">Se precisar de ajuda, envie o formulário em <a href="https://bothook.me/contact.html" id="helpLink">bothook.me/contact.html</a> and include this link (or the UUID in it).</p>
     </div>
 
     </div>
@@ -419,7 +419,7 @@
               // Reuse existing verification flow (continue button handler loads Turnstile).
               try { continueBtn.click(); } catch {}
               const s = window.__bothook_i18n || {};
-              qrStatus.textContent = (s.verifyFirst || 'Complete verification first. After it passes, click “Get QR code”.') + ' (Relink)';
+              qrStatus.textContent = (s.verifyFirst || 'Conclua a verificação. Depois, clique em “Gerar QR code”.') + ' (Reconectar)';
             });
           }
         }
@@ -560,14 +560,14 @@
           await navigator.clipboard.writeText(link);
           const s = window.__bothook_i18n || {};
           copyBtn.textContent = s.copied || 'Copied';
-          setTimeout(()=>copyBtn.textContent=(s.copy || 'Copy link'), 900);
+          setTimeout(()=>copyBtn.textContent=(s.copy || 'Copiar link'), 900);
         } catch {
           const ta = document.createElement('textarea');
           ta.value = link; document.body.appendChild(ta);
           ta.select(); document.execCommand('copy'); ta.remove();
           const s = window.__bothook_i18n || {};
           copyBtn.textContent = s.copied || 'Copied';
-          setTimeout(()=>copyBtn.textContent=(s.copy || 'Copy link'), 900);
+          setTimeout(()=>copyBtn.textContent=(s.copy || 'Copiar link'), 900);
         }
       });
 
@@ -587,7 +587,7 @@
         getQrBtn.disabled = true;
         {
           const s = window.__bothook_i18n || {};
-          qrStatus.textContent = s.verifyFirst || 'Complete verification first. After it passes, click “Get QR code”.';
+          qrStatus.textContent = s.verifyFirst || 'Conclua a verificação. Depois, clique em “Gerar QR code”.';
         }
 
         // Load Turnstile lazily (optional signal for later enforcement)
@@ -634,7 +634,7 @@
                   getQrBtn.disabled = false;
                   {
                     const s = window.__bothook_i18n || {};
-                    qrStatus.textContent = s.verifyPassed || '✅ Verification passed. Click “Get QR code”.';
+                    qrStatus.textContent = s.verifyPassed || '✅ Verificação OK. Clique em “Gerar QR code”.';
                   }
                   // hide verification UI after success
                   const box=document.getElementById('turnstileBox'); if(box) box.style.display='none';
@@ -793,7 +793,7 @@
         const box=document.getElementById('turnstileBox'); if(box) box.style.display='flex';
         {
           const s = window.__bothook_i18n || {};
-          qrStatus.textContent = s.pleaseVerifyAgainThenGetQr || 'Please verify again, then click “Get QR code”.';
+          qrStatus.textContent = s.pleaseVerifyAgainThenGetQr || 'Please verify again, then click “Gerar QR code”.';
         }
         restartBtn.style.display = 'none';
         getQrBtn.style.display = 'inline-flex';
