@@ -1079,7 +1079,7 @@ function isPaid(db, uuid){
   try{
     const d = getDeliveryByUuid(db, uuid);
     if(!d) return false;
-    if(String(d.status||'') === 'PAID') return true;
+    if(String(d.status||'') === 'PAID' || String(d.status||'') === 'DELIVERED') return true;
     const sub = db.prepare('SELECT status, ended_at, cancel_at, current_period_end FROM subscriptions WHERE user_id=? ORDER BY updated_at DESC LIMIT 1').get(uuid);
     if(!sub) return false;
     const st = String(sub.status || '').toLowerCase();
@@ -6319,10 +6319,89 @@ async function runOpsWorkerLoop(){
   }
 }
 
+async function runCutoverReconcilerOnce(){
+  // One-shot reconciler: find deliveries that meet cutover preconditions but are not DELIVERED,
+  // then run the idempotent tryCutoverDelivered() path.
+  // Use a lock file to avoid concurrent runs (timer overlap).
+  const lockPath = '/tmp/bothook_cutover_reconciler.lock';
+  let fd = null;
+  try {
+    fd = fs.openSync(lockPath, 'wx');
+    fs.writeFileSync(lockPath, String(process.pid));
+  } catch {
+    return;
+  }
+
+  try {
+    const LIMIT = Math.max(1, Math.min(5, Number(process.env.BOTHOOK_CUTOVER_RECONCILER_LIMIT || 2)));
+    const { db } = openDb();
+    const ts0 = nowIso();
+
+    // Candidates: pinned to an instance with an IP, already linked.
+    const rows = db.prepare(
+      `SELECT d.provision_uuid AS uuid
+         FROM deliveries d
+         JOIN instances i ON i.instance_id = d.instance_id
+        WHERE d.status IS NOT NULL
+          AND d.status != 'DELIVERED'
+          AND d.wa_jid IS NOT NULL AND d.wa_jid != ''
+          AND d.instance_id IS NOT NULL AND d.instance_id != ''
+          AND i.public_ip IS NOT NULL AND i.public_ip != ''
+        ORDER BY datetime(d.updated_at) ASC
+        LIMIT 80`
+    ).all() || [];
+
+    let attempted = 0;
+    let delivered = 0;
+    for (const r of rows) {
+      if (attempted >= LIMIT) break;
+      const uuid = String(r.uuid || '').trim();
+      if (!uuid) continue;
+
+      // Guard: only attempt when preconditions are met (avoid noisy SSH).
+      const linked = true;
+      const paid = isPaid(db, uuid);
+      const verified = isKeyVerified(db, uuid);
+      if (!linked || !paid || !verified) continue;
+
+      attempted += 1;
+
+      // Record attempt event (helps postmortems).
+      try {
+        db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+          .run(crypto.randomUUID(), ts0, 'delivery', uuid, 'CUTOVER_RECONCILER_ATTEMPT', JSON.stringify({ uuid, paid, verified }));
+      } catch {}
+
+      let out = null;
+      try { out = tryCutoverDelivered(db, uuid, { reason: 'cutover_reconciler' }); } catch (e) { out = { ok:false, error: e?.message || 'cutover_failed' }; }
+
+      if (out && out.ok && out.delivered) delivered += 1;
+
+      // Record result summary.
+      try {
+        db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+          .run(crypto.randomUUID(), nowIso(), 'delivery', uuid, 'CUTOVER_RECONCILER_RESULT', JSON.stringify({ uuid, out }));
+      } catch {}
+    }
+
+    try {
+      db.prepare('INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)')
+        .run(crypto.randomUUID(), nowIso(), 'ops', 'cutover_reconciler', 'CUTOVER_RECONCILER_RUN', JSON.stringify({ attempted, delivered, limit: LIMIT }));
+    } catch {}
+
+    console.log(JSON.stringify({ ok:true, attempted, delivered, limit: LIMIT }, null, 2));
+  } finally {
+    try { if (fd) fs.closeSync(fd); } catch {}
+    try { fs.unlinkSync(lockPath); } catch {}
+  }
+}
+
 if (String(process.env.BOTHOOK_OUTBOUND_WORKER || '') === '1') {
   runOutboundWorkerLoop().then(()=>process.exit(0)).catch(()=>process.exit(0));
 } else if (String(process.env.BOTHOOK_OPS_WORKER || '') === '1') {
   runOpsWorkerLoop().then(()=>process.exit(0)).catch(()=>process.exit(0));
+} else if (String(process.env.BOTHOOK_CUTOVER_RECONCILER || '') === '1') {
+  runCutoverReconcilerOnce().then(()=>process.exit(0)).catch(()=>process.exit(0));
 } else {
   app.listen(PORT, '127.0.0.1', () => {
     console.log(`[bothook-api] listening on 127.0.0.1:${PORT}`);

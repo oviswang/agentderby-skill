@@ -1,0 +1,20 @@
+[Unit]
+Description=BOTHook delivery cutover reconciler (advance LINKED+PAID+KEY_VERIFIED -> DELIVERED)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/.openclaw/workspace
+Environment=BOTHOOK_DB_PATH=/home/ubuntu/.openclaw/workspace/control-plane/data/bothook.sqlite
+Environment=BOTHOOK_CUTOVER_RECONCILER=1
+# safety limits
+Environment=BOTHOOK_CUTOVER_RECONCILER_LIMIT=2
+ExecStart=/usr/bin/node /home/ubuntu/.openclaw/workspace/control-plane/api-server.mjs
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
