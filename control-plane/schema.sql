@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   ended_at TEXT,
 
   cancel_at_period_end INTEGER DEFAULT 0,
+  created_at TEXT,
   updated_at TEXT NOT NULL
 );
 

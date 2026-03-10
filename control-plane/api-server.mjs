@@ -5129,7 +5129,14 @@ app.post('/api/stripe/webhook', async (req, res) => {
               } catch {}
             }, 0);
           }
-        } catch {}
+        } catch (e) {
+          try {
+            db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
+              crypto.randomUUID(), ts, 'delivery', delivery_id, 'SUB_UPSERT_FAILED',
+              JSON.stringify({ uuid, delivery_id, stripe_event_id: eventId, error: String(e?.message || e).slice(0,200) })
+            );
+          } catch {}
+        }
 
         // Best-effort: persist gclid snapshot to delivery meta for later audits.
         try {
