@@ -95,19 +95,21 @@
   send('P_VISIT');
   window.__bothook_track = send;
   // Track key funnel clicks
+  // NOTE: use event delegation so this works even if this script runs before <body> is parsed.
   try{
-    var rel=document.getElementById('paidRelinkBtn');
-    if(rel){
-      rel.addEventListener('click', function(){
+    document.addEventListener('click', function(e){
+      var t = e && e.target;
+      var rel = (t && t.closest) ? t.closest('#paidRelinkBtn') : null;
+      if(rel){
         send('P_RELINK_CLICK',{ cta_id:'paidRelinkBtn', cta_text:(rel.textContent||'').trim() });
-      });
-    }
-    var qr=document.getElementById('getQrBtn');
-    if(qr){
-      qr.addEventListener('click', function(){
+        return;
+      }
+      var qr = (t && t.closest) ? t.closest('#getQrBtn') : null;
+      if(qr){
         send('P_QR_CLICK',{ cta_id:'getQrBtn', cta_text:(qr.textContent||'').trim() });
-      });
-    }
+        return;
+      }
+    }, { capture:true });
   }catch(e){}
 })();
 </script>

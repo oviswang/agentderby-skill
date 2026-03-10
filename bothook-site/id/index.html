@@ -208,13 +208,14 @@
   // Track visit
   send('WEB_VISIT');
   // Track primary CTA click
+  // NOTE: use event delegation so this works even if this script runs before <body> is parsed.
   try{
-    var c=document.getElementById('ctaPrimary');
-    if(c){
-      c.addEventListener('click', function(){
-        send('WEB_CTA_CLICK',{ cta_id:'ctaPrimary', cta_text:(c.textContent||'').trim(), cta_href:c.getAttribute('href')||'' });
-      });
-    }
+    document.addEventListener('click', function(e){
+      var t = e && e.target;
+      var c = (t && t.closest) ? t.closest('#ctaPrimary') : null;
+      if(!c) return;
+      send('WEB_CTA_CLICK',{ cta_id:'ctaPrimary', cta_text:(c.textContent||'').trim(), cta_href:c.getAttribute('href')||'' });
+    }, { capture:true });
   }catch(e){}
 })();
 </script>
