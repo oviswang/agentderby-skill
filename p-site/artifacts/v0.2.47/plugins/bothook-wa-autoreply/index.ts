@@ -9,6 +9,7 @@ const UUID_PATH = '/opt/bothook/UUID.txt';
 const STATE_PATH = '/opt/bothook/state.json';
 const EVID_DIR = '/opt/bothook/evidence';
 const AUTOREPLY_LOADED_MARK = `${EVID_DIR}/autoreply_loaded`;
+const WELCOME_UNPAID_SENT_MARK = `${EVID_DIR}/welcome_unpaid_sent.json`;
 const AUTH_PROFILES_PATH = '/home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json';
 
 function nowIso(){ return new Date().toISOString(); }
@@ -18,6 +19,14 @@ function markAutoreplyLoaded() {
     fs.mkdirSync(EVID_DIR, { recursive: true });
     // A cheap marker that postboot_verify can read without invoking openclaw CLI.
     fs.writeFileSync(AUTOREPLY_LOADED_MARK, nowIso() + '\n');
+  } catch {}
+}
+
+function markWelcomeUnpaidSent(kind: string, uuid: string | null) {
+  try {
+    fs.mkdirSync(EVID_DIR, { recursive: true });
+    const payload = { ts: nowIso(), kind: String(kind || 'unknown'), uuid: uuid || null };
+    fs.writeFileSync(WELCOME_UNPAID_SENT_MARK, JSON.stringify(payload) + '\n');
   } catch {}
 }
 
@@ -602,6 +611,7 @@ export default {
               st.autoreply.cachedWelcomeUnpaidAt = nowIso();
               st.autoreply.cachedWelcomeUnpaidUuid = uuid;
               await sendWhatsApp(api, self!, text);
+              markWelcomeUnpaidSent('full', uuid);
               st.autoreply.welcome_full_sent_at = nowIso();
               st.autoreply.welcome_full_scheduled_at = null;
               st.autoreply.last_any_reply_at = nowIso();
@@ -614,6 +624,7 @@ export default {
           if (!fullSent && !shortSent) {
             const shortMsg = shortWelcomeForLang(lang);
             await sendWhatsApp(api, self!, shortMsg);
+            markWelcomeUnpaidSent('short', uuid);
             st.autoreply.welcome_short_sent_at = nowIso();
             st.autoreply.welcome_full_scheduled_at = new Date(Date.now() + 30_000).toISOString();
             st.autoreply.last_any_reply_at = nowIso();
@@ -626,6 +637,7 @@ export default {
           if (!fullSent) {
             if (!shouldThrottle(st.autoreply.last_any_reply_at, 15_000)) {
               await sendWhatsApp(api, self!, shortWelcomeForLang(lang));
+              markWelcomeUnpaidSent('ack', uuid);
               st.autoreply.last_any_reply_at = nowIso();
               saveState(st);
               return;
@@ -659,9 +671,11 @@ export default {
 
             if (echoText) {
               await sendWhatsApp(api, self!, echoText);
+              markWelcomeUnpaidSent('echo_full', uuid);
             } else {
               // Last-resort offline fallback (no pay shortlink generation).
               await sendWhatsApp(api, self!, minimalWelcomeUnpaid(lang, uuid));
+              markWelcomeUnpaidSent('minimal', uuid);
             }
 
             st.autoreply.welcome_full_echo_after_user_msg_at = nowIso();
