@@ -358,7 +358,7 @@ function parseChannelsStatusJson(text) {
 
 // (normalizeWaBase already defined above)
 
-function probeInstanceWhatsappClean(db, instance, { timeoutMs = 3500 } = {}) {
+function probeInstanceWhatsappClean(db, instance, { timeoutMs = 12000 } = {}) {
   // A-mode strict gate: pool instances must be WhatsApp-unlinked before allocation.
   // Returns { ok, clean, linked, connected, selfJid, detail }
   // IMPORTANT: keep this probe lightweight and non-interactive.
