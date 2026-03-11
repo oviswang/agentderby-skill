@@ -3609,6 +3609,7 @@ app.post('/api/wa/start', async (req, res) => {
     const STRICT_RELINK = force && String(process.env.BOTHOOK_RELINK_STRICT_PROVISION_START || '1') === '1';
     try {
       const cmd = `set -euo pipefail; `
+        + (STRICT_RELINK ? `sudo rm -f /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true; ` : ``)
         + `sudo systemctl start bothook-provision.service; `
         + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-loopback >/dev/null 2>&1 || true; `
         + `sudo -u ubuntu /home/ubuntu/.npm-global/bin/openclaw plugins enable bothook-wa-sendguard >/dev/null 2>&1 || true; `
@@ -4404,7 +4405,10 @@ app.get('/api/wa/status', async (req, res) => {
       try {
         const tmuxSession = `wa-login-${uuid}`.replace(/[^a-zA-Z0-9_-]/g, '');
         const delivered = String(delivery?.status || '') === 'DELIVERED';
-        const cmd = delivered
+        const meta0 = jsonMeta(delivery?.meta_json) || {};
+        const relinkInProgress = delivered && Boolean(meta0.relink_force);
+
+        const cmd = (delivered && !relinkInProgress)
           ? (
               `set -euo pipefail; `
               + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
@@ -4418,6 +4422,7 @@ app.get('/api/wa/status', async (req, res) => {
           : (
               `set -euo pipefail; `
               + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
+              + `sudo rm -f /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true; `
               + `sudo systemctl enable bothook-provision.service 2>/dev/null || true; `
               + `sudo systemctl start bothook-provision.service 2>/dev/null || true; `
               + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
@@ -4429,13 +4434,15 @@ app.get('/api/wa/status', async (req, res) => {
           const out = String(rr?.stdout || rr?.stderr || '').trim();
           const ok = out.includes('services_restarted_delivered') || out.includes('services_restarted');
           const ts = nowIso();
-          const et = delivered
-            ? (ok ? 'DELIVERED_SERVICES_CONVERGED' : 'DELIVERED_SERVICES_CONVERGE_FAILED')
-            : (ok ? 'LINKING_SERVICES_CONVERGED' : 'LINKING_SERVICES_CONVERGE_FAILED');
+          const et = relinkInProgress
+            ? (ok ? 'RELINK_SERVICES_PREPARED' : 'RELINK_SERVICES_PREPARE_FAILED')
+            : delivered
+              ? (ok ? 'DELIVERED_SERVICES_CONVERGED' : 'DELIVERED_SERVICES_CONVERGE_FAILED')
+              : (ok ? 'LINKING_SERVICES_CONVERGED' : 'LINKING_SERVICES_CONVERGE_FAILED');
           const detail = out.replace(/\s+/g, ' ').slice(0, 300);
           db.prepare(`INSERT OR IGNORE INTO events(event_id, ts, entity_type, entity_id, event_type, payload_json) VALUES (?,?,?,?,?,?)`).run(
             crypto.randomUUID(), ts, 'delivery', (delivery?.delivery_id || uuid), et,
-            JSON.stringify({ uuid, instance_id: instance.instance_id, delivered, ok, detail })
+            JSON.stringify({ uuid, instance_id: instance.instance_id, delivered, relinkInProgress, ok, detail })
           );
         } catch {}
       } catch {}
@@ -4613,6 +4620,13 @@ app.get('/api/wa/status', async (req, res) => {
               // convergence steps (auth/model/config), then let the user continue chatting normally.
               try { tryCutoverDelivered(db2, uuid, { reason: 'relink_connected' }); } catch {}
               try { writeOpenAiAuthOnInstance(db2, inst2, { uuid }); } catch {}
+
+              // Clear relink intent to avoid permanently bypassing DELIVERED convergence.
+              try {
+                const ts3 = nowIso();
+                const meta3 = mergeMeta(d2.meta_json, { relink_force: false, relink_done_at: ts3 });
+                db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta3, ts3, d2.delivery_id);
+              } catch {}
             } else {
               // First-link paid path (or non-force paid connect): keep legacy behavior.
               // Self-heal delivered cutover (auth/model/config). Idempotent.
