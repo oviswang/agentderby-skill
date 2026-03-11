@@ -7,6 +7,10 @@ import crypto from 'node:crypto';
 const WINDOW_MIN = Number(process.env.BOTHOOK_WELCOME_GAP_WINDOW_MIN || 30);
 const LIMIT = Number(process.env.BOTHOOK_WELCOME_GAP_LIMIT || 50);
 
+// If control-plane proactive welcome is disabled (default), then "no welcome sent" is NOT a bug
+// unless we have evidence of an attempted send (outbound task exists and failed/stuck).
+const CP_WELCOME_UNPAID = String(process.env.BOTHOOK_CONTROL_PLANE_WELCOME_UNPAID || '0') === '1';
+
 function safeJsonParse(s){
   try { return JSON.parse(String(s||'')); } catch { return null; }
 }
@@ -46,6 +50,9 @@ function main(){
         LIMIT 1
       `).get(d.delivery_id) || null;
     } catch { task = null; }
+
+    // In plugin-first mode, if there's no outbound task at all, we treat it as expected (not a gap).
+    if (!CP_WELCOME_UNPAID && !task) continue;
 
     gaps.push({
       delivery_id: d.delivery_id,
