@@ -3659,6 +3659,21 @@ app.post('/api/wa/start', async (req, res) => {
       });
     }
 
+    // Force relink: proactively logout WhatsApp on the instance so /api/wa/status won't short-circuit as "connected".
+    // This makes the QR flow deterministic: disconnected -> QR -> scan -> connected.
+    if (force) {
+      try {
+        poolSsh(
+          instance,
+          `set -euo pipefail; `
+            + `openclaw channels logout --channel whatsapp 2>/dev/null || true; `
+            + `rm -rf /home/ubuntu/.openclaw/channels/whatsapp 2>/dev/null || true; `
+            + `echo wa_logged_out`,
+          { timeoutMs: 8000, tty: false, retries: 0 }
+        );
+      } catch {}
+    }
+
     const rr = await poolFetch(instance, startPath, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -4621,12 +4636,11 @@ app.get('/api/wa/status', async (req, res) => {
               try { tryCutoverDelivered(db2, uuid, { reason: 'relink_connected' }); } catch {}
               try { writeOpenAiAuthOnInstance(db2, inst2, { uuid }); } catch {}
 
-              // Clear relink intent to avoid permanently bypassing DELIVERED convergence.
-              try {
-                const ts3 = nowIso();
-                const meta3 = mergeMeta(d2.meta_json, { relink_force: false, relink_done_at: ts3 });
-                db2.prepare('UPDATE deliveries SET meta_json=?, updated_at=? WHERE delivery_id=?').run(meta3, ts3, d2.delivery_id);
-              } catch {}
+              // NOTE: do NOT clear relink_force here.
+              // Rationale: when the user is still connected, `/api/wa/status` may temporarily claim connected
+              // even though a force-relink QR flow is in progress. Clearing relink_force early re-enables
+              // DELIVERED convergence which can stop/disable provision and re-touch LOGIN_AUTHORITY,
+              // causing the UI to get stuck waiting for QR.
             } else {
               // First-link paid path (or non-force paid connect): keep legacy behavior.
               // Self-heal delivered cutover (auth/model/config). Idempotent.
