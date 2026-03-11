@@ -1201,8 +1201,16 @@ async function createStripeCheckout({ uuid, delivery_id }){
   body.set('line_items[0][quantity]', '1');
   body.set('success_url', success_url);
   body.set('cancel_url', cancel_url);
+
+  // NOTE: Checkout Session metadata does NOT propagate to the Subscription.
+  // We must write subscription_data.metadata so Stripe webhooks can map subId -> uuid.
   body.set('metadata[provision_uuid]', uuid);
   body.set('metadata[delivery_id]', delivery_id);
+  body.set('subscription_data[metadata][provision_uuid]', uuid);
+  body.set('subscription_data[metadata][delivery_id]', delivery_id);
+
+  // Optional: helps ops search in Stripe dashboard/logs.
+  body.set('client_reference_id', uuid);
 
   const resp = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
