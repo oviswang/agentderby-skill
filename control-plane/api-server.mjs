@@ -4441,8 +4441,7 @@ app.get('/api/wa/status', async (req, res) => {
               + `sudo mkdir -p /opt/bothook 2>/dev/null || true; `
               + `sudo touch /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true; `
               + `# Enforce self-chat only (first-link + delivered): never reply to other contacts. `
-              + `E164=$(openclaw channels status --probe --json 2>/dev/null | python3 -c "import sys,json; raw=sys.stdin.read(); i=raw.find('{'); j=json.loads(raw[i:]) if i>=0 else {}; w=(j.get('channels') or {}).get('whatsapp') or {}; s=(w.get('self') or {}); print((s.get('e164') or '').strip())" 2>/dev/null || true); `
-              + `if [ -n \"$E164\" ]; then E164=\"$E164\" python3 -c "import json,os; p='/home/ubuntu/.openclaw/openclaw.json'; j=json.load(open(p)); wa=j.setdefault('channels',{}).setdefault('whatsapp',{}); wa['dmPolicy']='allowlist'; wa['allowFrom']=[os.environ.get('E164','').strip()]; wa['groupPolicy']='disabled'; json.dump(j, open(p,'w'), ensure_ascii=False, indent=2)" 2>/dev/null || true; fi; `
+              + `python3 -c "import os,json,re; p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'; j=json.load(open(p)) if os.path.exists(p) else {}; me=(j.get('me') or {}); jid=(me.get('id') or me.get('jid') or ''); m=re.match(r'^(\\d+):', str(jid));\nif not m: raise SystemExit(0); e164='+'+m.group(1); cfg='/home/ubuntu/.openclaw/openclaw.json'; conf=json.load(open(cfg)); wa=conf.setdefault('channels',{}).setdefault('whatsapp',{}); wa['dmPolicy']='allowlist'; wa['allowFrom']=[e164]; wa['groupPolicy']='disabled'; json.dump(conf, open(cfg,'w'), ensure_ascii=False, indent=2)" 2>/dev/null || true; `
               + `echo services_restarted_delivered`
             )
           : (
@@ -4453,8 +4452,7 @@ app.get('/api/wa/status', async (req, res) => {
               + `sudo systemctl start bothook-provision.service 2>/dev/null || true; `
               + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
               + `# Enforce self-chat only (first-link + delivered): never reply to other contacts. `
-              + `E164=$(openclaw channels status --probe --json 2>/dev/null | python3 -c "import sys,json; raw=sys.stdin.read(); i=raw.find('{'); j=json.loads(raw[i:]) if i>=0 else {}; w=(j.get('channels') or {}).get('whatsapp') or {}; s=(w.get('self') or {}); print((s.get('e164') or '').strip())" 2>/dev/null || true); `
-              + `if [ -n \"$E164\" ]; then E164=\"$E164\" python3 -c "import json,os; p='/home/ubuntu/.openclaw/openclaw.json'; j=json.load(open(p)); wa=j.setdefault('channels',{}).setdefault('whatsapp',{}); wa['dmPolicy']='allowlist'; wa['allowFrom']=[os.environ.get('E164','').strip()]; wa['groupPolicy']='disabled'; json.dump(j, open(p,'w'), ensure_ascii=False, indent=2)" 2>/dev/null || true; fi; `
+              + `python3 -c "import os,json,re; p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'; j=json.load(open(p)) if os.path.exists(p) else {}; me=(j.get('me') or {}); jid=(me.get('id') or me.get('jid') or ''); m=re.match(r'^(\\d+):', str(jid));\nif not m: raise SystemExit(0); e164='+'+m.group(1); cfg='/home/ubuntu/.openclaw/openclaw.json'; conf=json.load(open(cfg)); wa=conf.setdefault('channels',{}).setdefault('whatsapp',{}); wa['dmPolicy']='allowlist'; wa['allowFrom']=[e164]; wa['groupPolicy']='disabled'; json.dump(conf, open(cfg,'w'), ensure_ascii=False, indent=2)" 2>/dev/null || true; `
               + `echo services_restarted`
             );
         const rr = poolSsh(instance, cmd, { timeoutMs: 20000, tty: false, retries: 0 });
