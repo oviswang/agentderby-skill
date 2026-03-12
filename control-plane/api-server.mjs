@@ -4440,6 +4440,9 @@ app.get('/api/wa/status', async (req, res) => {
               + `sudo systemctl disable bothook-provision.service 2>/dev/null || true; `
               + `sudo mkdir -p /opt/bothook 2>/dev/null || true; `
               + `sudo touch /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true; `
+              + `# Enforce self-chat only (first-link + delivered): never reply to other contacts. `
+              + `E164=$(openclaw channels status --probe --json 2>/dev/null | python3 -c "import sys,json; raw=sys.stdin.read(); i=raw.find('{'); j=json.loads(raw[i:]) if i>=0 else {}; w=(j.get('channels') or {}).get('whatsapp') or {}; s=(w.get('self') or {}); print((s.get('e164') or '').strip())" 2>/dev/null || true); `
+              + `if [ -n \"$E164\" ]; then E164=\"$E164\" python3 - <<'PY'\nimport json, os\np='/home/ubuntu/.openclaw/openclaw.json'\nj=json.load(open(p))\nwa=j.setdefault('channels',{}).setdefault('whatsapp',{})\nwa['dmPolicy']='allowlist'\nwa['allowFrom']=[os.environ.get('E164','').strip()]\nwa['groupPolicy']='disabled'\njson.dump(j, open(p,'w'), ensure_ascii=False, indent=2)\nPY\n; fi; `
               + `echo services_restarted_delivered`
             )
           : (
@@ -4449,6 +4452,9 @@ app.get('/api/wa/status', async (req, res) => {
               + `sudo systemctl enable bothook-provision.service 2>/dev/null || true; `
               + `sudo systemctl start bothook-provision.service 2>/dev/null || true; `
               + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
+              + `# Enforce self-chat only (first-link + delivered): never reply to other contacts. `
+              + `E164=$(openclaw channels status --probe --json 2>/dev/null | python3 -c "import sys,json; raw=sys.stdin.read(); i=raw.find('{'); j=json.loads(raw[i:]) if i>=0 else {}; w=(j.get('channels') or {}).get('whatsapp') or {}; s=(w.get('self') or {}); print((s.get('e164') or '').strip())" 2>/dev/null || true); `
+              + `if [ -n \"$E164\" ]; then E164=\"$E164\" python3 - <<'PY'\nimport json, os\np='/home/ubuntu/.openclaw/openclaw.json'\nj=json.load(open(p))\nwa=j.setdefault('channels',{}).setdefault('whatsapp',{})\nwa['dmPolicy']='allowlist'\nwa['allowFrom']=[os.environ.get('E164','').strip()]\nwa['groupPolicy']='disabled'\njson.dump(j, open(p,'w'), ensure_ascii=False, indent=2)\nPY\n; fi; `
               + `echo services_restarted`
             );
         const rr = poolSsh(instance, cmd, { timeoutMs: 20000, tty: false, retries: 0 });
