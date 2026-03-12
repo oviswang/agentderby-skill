@@ -1149,6 +1149,14 @@ function tryCutoverDelivered(db, uuid, { reason } = {}) {
   // This is required for the model-driven assistant to work post-delivery.
   const authSync = writeOpenAiAuthOnInstance(db, inst, { uuid });
   if (!authSync.ok) {
+    // Safety: even if auth sync fails, still harden inbound to self-chat only so we never open to external contacts.
+    // Derive self e164 from whatsapp creds.json (more reliable than probing CLI output).
+    try {
+      const harden = `set -euo pipefail; `
+        + `python3 -c "import os,json,re; p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'; j=json.load(open(p)) if os.path.exists(p) else {}; me=(j.get('me') or {}); jid=(me.get('id') or me.get('jid') or ''); m=re.match(r'^(\\d+):', str(jid));\nif not m: raise SystemExit(0); e164='+'+m.group(1); cfg='/home/ubuntu/.openclaw/openclaw.json'; conf=json.load(open(cfg)); wa=conf.setdefault('channels',{}).setdefault('whatsapp',{}); wa['dmPolicy']='allowlist'; wa['allowFrom']=[e164]; wa['groupPolicy']='disabled'; json.dump(conf, open(cfg,'w'), ensure_ascii=False, indent=2)" 2>/dev/null || true; `
+        + `sudo systemctl restart openclaw-gateway.service 2>/dev/null || true; `;
+      poolSsh(inst, harden, { timeoutMs: 25000, tty: false, retries: 0 });
+    } catch {}
     return { ok:false, delivered:false, skip:'auth_sync_failed', detail: authSync };
   }
 
