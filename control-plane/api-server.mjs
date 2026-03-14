@@ -363,8 +363,10 @@ function probeInstanceWhatsappClean(db, instance, { timeoutMs = 12000 } = {}) {
   // Returns { ok, clean, linked, connected, selfJid, detail }
   // IMPORTANT: keep this probe lightweight and non-interactive.
   // Do NOT call sudo/systemctl here: it can hang or fail under non-tty SSH and will create false negatives.
+  const maxMb = parseInt(process.env.BOTHOOK_OPENCLAW_CLI_MAX_OLD_SPACE_MB || '2048', 10);
+  const nodeOpts = Number.isFinite(maxMb) && maxMb > 0 ? `NODE_OPTIONS=--max-old-space-size=${maxMb}` : '';
   const cmd = `set -euo pipefail; `
-    + `openclaw channels status --json`;
+    + `${nodeOpts} openclaw channels status --json`;
 
   // Fail-fast: do NOT let web handlers block on slow/overloaded instances.
   const r = poolSsh(instance, cmd, { timeoutMs, tty: false, retries: 0, profile: 'fast' });
