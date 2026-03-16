@@ -62,6 +62,26 @@ main(){
 
   backup_file /home/ubuntu/.openclaw/openclaw.json
 
+  # 0) Ownership hardening: ensure ubuntu can write OpenClaw agent state.
+  # Rationale: root-owned ~/.openclaw/agents causes ubuntu-side installs to skip by design.
+  if [[ -d /home/ubuntu/.openclaw/agents ]]; then
+    owner="$(stat -c '%U:%G' /home/ubuntu/.openclaw/agents 2>/dev/null || echo '?')"
+    if [[ "$owner" != "ubuntu:ubuntu" ]]; then
+      log "fixing openclaw agents ownership (was $owner)"
+      mkdir -p /home/ubuntu/.openclaw/agents || true
+      chown -R ubuntu:ubuntu /home/ubuntu/.openclaw/agents 2>/dev/null || true
+      chmod 700 /home/ubuntu/.openclaw/agents 2>/dev/null || true
+      log "OPENCLAW_AGENTS_OWNERSHIP_FIXED"
+    else
+      log "OPENCLAW_AGENTS_OWNERSHIP_OK"
+    fi
+  else
+    mkdir -p /home/ubuntu/.openclaw/agents || true
+    chown -R ubuntu:ubuntu /home/ubuntu/.openclaw/agents 2>/dev/null || true
+    chmod 700 /home/ubuntu/.openclaw/agents 2>/dev/null || true
+    log "OPENCLAW_AGENTS_OWNERSHIP_CREATED"
+  fi
+
   # 1) Stop provisioning/onboarding service to avoid prompts/polling.
   # Do not rely on list-unit-files output (can be environment-dependent); best-effort stop/disable.
   systemctl stop bothook-provision.service >/dev/null 2>&1 || true
@@ -99,10 +119,10 @@ main(){
   # - Disable onboarding responders
   # - Restrict WhatsApp inbound DMs to controller only (dm allowlist)
   # - Disable groups
-  if command -v openclaw >/dev/null 2>&1; then
+  OC="/home/ubuntu/.npm-global/bin/openclaw"
+  if [[ -x "$OC" ]]; then
     # IMPORTANT: OpenClaw config must be written as ubuntu.
     # If run as root, openclaw.json becomes root-owned (0600) and breaks subsequent CLI/gateway operations.
-    OC="/home/ubuntu/.npm-global/bin/openclaw"
 
     # Hooks
     sudo -u ubuntu "$OC" config set hooks.internal.entries.bothook-onboarding.enabled false >/dev/null 2>&1 || true
