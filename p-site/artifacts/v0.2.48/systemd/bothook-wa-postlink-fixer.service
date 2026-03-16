@@ -1,0 +1,12 @@
+[Unit]
+Description=BOTHook post-link fixer (restart openclaw gateway once after WA link)
+After=network-online.target openclaw-gateway.service
+Wants=network-online.target
+
+# Only during delivery window.
+ConditionPathExists=/opt/bothook/UUID.txt
+ConditionPathExists=!/opt/bothook/DELIVERED
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash /opt/bothook/bin/wa_postlink_fixer.sh

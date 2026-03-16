@@ -1,0 +1,290 @@
+{
+  "version": "0.2.48",
+  "files": [
+    {
+      "path": "bootstrap.sh",
+      "sha256": "e2f9a77551522ffbf2559e4f1685050229e0f53e8621e8ddc37fc2f29bb8f6e5",
+      "bytes": 29217
+    },
+    {
+      "path": "hooks/bothook-memory-init/handler.ts",
+      "sha256": "627bc029ddda4037341e0ad70087b1f6665b54946c6d7d5c9118eeccf4ba00cb",
+      "bytes": 1722
+    },
+    {
+      "path": "hooks/bothook-onboarding/handler.ts",
+      "sha256": "4aa542e2d863e91a34a3c1c24facb7b4052b364ed6724a8f520e715339a1bf4a",
+      "bytes": 8906
+    },
+    {
+      "path": "ops-scripts/fix_openclaw_credentials_perms.sh",
+      "sha256": "96f752c5b265df345d212de8e9921505e27c4052723727543afead8ad5befa33",
+      "bytes": 853
+    },
+    {
+      "path": "plugins/bothook-wa-autoreply/index.ts",
+      "sha256": "a87184f4cfe51037522a0628619979e19b742550eb6ee6f844ed87b749e7006b",
+      "bytes": 30276
+    },
+    {
+      "path": "plugins/bothook-wa-autoreply/openclaw.plugin.json",
+      "sha256": "f043b26f88dbe23e3beec60696c832af9ee1072e4804aca7f13d1cc8ee533f13",
+      "bytes": 313
+    },
+    {
+      "path": "plugins/bothook-wa-autoreply/package.json",
+      "sha256": "cc993efa9a39378ae0e7f1aa91bec3425bc42b49d8ba492cf5175d42203bc13f",
+      "bytes": 185
+    },
+    {
+      "path": "plugins/bothook-wa-loopback/index.ts",
+      "sha256": "4dde88aeac2f991275271f8ccfb0ce115420c7fc0f266ce3987c086b30c0ae23",
+      "bytes": 2825
+    },
+    {
+      "path": "plugins/bothook-wa-loopback/openclaw.plugin.json",
+      "sha256": "4ec37fff0a45ec24b0f7b0e2dc4a555c5b3ecb44b0e651a1a276ff10d205e246",
+      "bytes": 254
+    },
+    {
+      "path": "plugins/bothook-wa-loopback/package.json",
+      "sha256": "5275cd0e61ef9dfe8197f4a93e9f8680f1ab769483bced8638af666ea8628fda",
+      "bytes": 173
+    },
+    {
+      "path": "plugins/bothook-wa-sendguard/index.ts",
+      "sha256": "dbb790f5bcd354abadcb2afdc9d6f315fc9230fa24bbf901e66f87cfa081ebc4",
+      "bytes": 2176
+    },
+    {
+      "path": "plugins/bothook-wa-sendguard/openclaw.plugin.json",
+      "sha256": "5462bcf84e3410abec499ced93b33fd7fe8ac4f6a70cc3765ca3c2137df9c8b9",
+      "bytes": 232
+    },
+    {
+      "path": "plugins/bothook-wa-sendguard/package.json",
+      "sha256": "76740b6472e37c310c54728bc80ec6bfc8d28ed3acdc6bd708d2289b446e4567",
+      "bytes": 174
+    },
+    {
+      "path": "prompts/whatsapp_prompts/ar.json",
+      "sha256": "55180ad584fd89b2f9bc2604a9f1a20c33de2651b4fcdbe4381a400f2b815730",
+      "bytes": 2539
+    },
+    {
+      "path": "prompts/whatsapp_prompts/de.json",
+      "sha256": "17da9b470ac427f9cad1a479867ddd0f352ad1a9bd9ed0e2b65cef41310694b7",
+      "bytes": 2115
+    },
+    {
+      "path": "prompts/whatsapp_prompts/en.json",
+      "sha256": "53b963c9838c948f4d4204f19f663ee4faf0eea6e2dbeea0c2907c2f21145bc6",
+      "bytes": 1939
+    },
+    {
+      "path": "prompts/whatsapp_prompts/es.json",
+      "sha256": "2b3b4267a7f1fc0bdeb03273cbff1a32e7d16e3e5bea1ec71deb9695ce22b5b0",
+      "bytes": 2048
+    },
+    {
+      "path": "prompts/whatsapp_prompts/fr.json",
+      "sha256": "4c589c17db3d4390b26e9a2f0e23ef6de1b2984e4801f2f243575e1c338a2236",
+      "bytes": 2112
+    },
+    {
+      "path": "prompts/whatsapp_prompts/hi.json",
+      "sha256": "6953ba9da02af3b97d8fb27d9e9410e3e84168ce715f8b3bb68dd5a969f367eb",
+      "bytes": 2684
+    },
+    {
+      "path": "prompts/whatsapp_prompts/id.json",
+      "sha256": "65df5b0d07383b9495b66aa3125ea7b1154bdce77070a773e1421f1168ac8454",
+      "bytes": 1888
+    },
+    {
+      "path": "prompts/whatsapp_prompts/ja.json",
+      "sha256": "39d4dc27ab89108787de0bd2de4ee13c6edc643c23aa264b15148d6d7b60433e",
+      "bytes": 2476
+    },
+    {
+      "path": "prompts/whatsapp_prompts/ko.json",
+      "sha256": "cd82ddb405db3a86e75c7c765c87d6b493956c2b98dfc7649831f6d7474c7689",
+      "bytes": 2142
+    },
+    {
+      "path": "prompts/whatsapp_prompts/pt-br.json",
+      "sha256": "bff511100d1c22bcf473670aebac9618318ca8dd4a3cc3fa61d5b92326ac913a",
+      "bytes": 1903
+    },
+    {
+      "path": "prompts/whatsapp_prompts/ru.json",
+      "sha256": "d02e8a53d88b6833c7bc46ba9878ca022a03ef0a37ea413d37961e4a26a9dc41",
+      "bytes": 2827
+    },
+    {
+      "path": "prompts/whatsapp_prompts/th.json",
+      "sha256": "00f50b5fc2f05a6a07f2723b2069c6dc06cbed0a16df24fbdff15778370e88bb",
+      "bytes": 3355
+    },
+    {
+      "path": "prompts/whatsapp_prompts/tr.json",
+      "sha256": "61658cd2cbe78a3a7eba49e79278e90e8a24ad02372863ce9d49411687900f39",
+      "bytes": 1952
+    },
+    {
+      "path": "prompts/whatsapp_prompts/vi.json",
+      "sha256": "1e92db4feaac4a431f7ee81a3a566bc736c7586bdfe5cdb9abaff985f9452fc8",
+      "bytes": 2149
+    },
+    {
+      "path": "prompts/whatsapp_prompts/zh-tw.json",
+      "sha256": "906cc8b681e482626a395044051801a5f0b0e9f29d7eef57cf5215e94381eba4",
+      "bytes": 2184
+    },
+    {
+      "path": "prompts/whatsapp_prompts/zh.json",
+      "sha256": "6bc4f3458cab691db4a49f0a4c710bdfa7f28c93cfb5ad36efb3d42f2357244e",
+      "bytes": 2204
+    },
+    {
+      "path": "provision/package.json",
+      "sha256": "0211ea90418dee2fc8d1d274267ab5306aabb48a1376e220f79edac91cfcbd26",
+      "bytes": 218
+    },
+    {
+      "path": "provision/provision.tgz",
+      "sha256": "619f181974b34333dd76c0de518898a678d2fbc72dbf8844c1b9fea79736550c",
+      "bytes": 4245
+    },
+    {
+      "path": "provision/qr_worker.mjs",
+      "sha256": "cee916e2dbb7100dc61e910f49df6078efad1e8c4882186e6633e9fbc26fa434",
+      "bytes": 2166
+    },
+    {
+      "path": "provision/server.mjs",
+      "sha256": "dbcdbdd9aa345be0c6f7bb3712318823a7d1d90661a971947c7156c2c836a4a7",
+      "bytes": 25272
+    },
+    {
+      "path": "README.md",
+      "sha256": "d184156effee5cfb960ea03ffac39c2ee4920f53d94927965f540455c83a0420",
+      "bytes": 512
+    },
+    {
+      "path": "scripts/apply_inboundguard_v1_patch.sh",
+      "sha256": "1b6d0f50d95cb493c5a2618c6ab03722b1bd5a9a4e906c3a38bac591f55e1055",
+      "bytes": 6018
+    },
+    {
+      "path": "scripts/apply_inboundguard_v2_patch.sh",
+      "sha256": "65d36772c9d4493f66842f57e6294d776377177726c329233f5802ff976c58af",
+      "bytes": 15027
+    },
+    {
+      "path": "scripts/apply_sendguard_v2_patch.sh",
+      "sha256": "a79bb61c6ae2f2a87b857f7c9a9076423015869da20a583d8ef835d9eb63cbdf",
+      "bytes": 3078
+    },
+    {
+      "path": "scripts/apply_sendguard_v3_patch.sh",
+      "sha256": "090d56540deded13cdfdbda082866b1f3afe4a8816ab13fd9ef2aa91af3a42e6",
+      "bytes": 1939
+    },
+    {
+      "path": "scripts/cutover_delivered.sh",
+      "sha256": "b0b23c99ae876070dfafa5bcd0d5463d75f0f495c9ed58b07c2f4a843a18c023",
+      "bytes": 8221
+    },
+    {
+      "path": "scripts/cutover.sh",
+      "sha256": "9f32af70ba9f090545ff385fa8099c59535847c70fc76fe14e3a6d2013086222",
+      "bytes": 4962
+    },
+    {
+      "path": "scripts/healthcheck.sh",
+      "sha256": "8e97005d680e136f1eeca44461797f396ecc2ead71e5f329bab1ed5826ef7428",
+      "bytes": 1699
+    },
+    {
+      "path": "scripts/openclaw_watchdog.sh",
+      "sha256": "bb05c34210ef46842d558815175bcf370be0a17d711c26e44df1698c87c213c7",
+      "bytes": 5873
+    },
+    {
+      "path": "scripts/openclaw-gateway-start.sh",
+      "sha256": "f0ccc388423e72b4e888f8aa79e0046f41fc93a919fa6a71b54ec51a12e32bd1",
+      "bytes": 2214
+    },
+    {
+      "path": "scripts/patch_openclaw_enable_memory_search_openai.sh",
+      "sha256": "72d95ba3a45ef44c3f6f90d62ee15e8275dc9dfde913f9f0ec5fea9c01f521f8",
+      "bytes": 1517
+    },
+    {
+      "path": "scripts/patch_openclaw_suppress_missing_key_warning.sh",
+      "sha256": "9687cec2c98dccd6185f4fa16a88f4cdd8472bcf53009bde0bdfbf6cf666f00c",
+      "bytes": 2636
+    },
+    {
+      "path": "scripts/postboot_verify.sh",
+      "sha256": "cc8be3fb96eacef703c9d43a0dc0a3c04fba462b44d5ed1fdf77df4e928ee2a7",
+      "bytes": 13817
+    },
+    {
+      "path": "scripts/rollback_sendguard_v2_patch.sh",
+      "sha256": "f42d7aad652ccb0dca1d1a21a2d433de3d0e1848622be51b0de9c200f6b0ca35",
+      "bytes": 3104
+    },
+    {
+      "path": "scripts/wa_postlink_fixer.sh",
+      "sha256": "e5d95bff01cb458637304e7adaea512e2d14c152a756aa08d4ef25dbea381b3a",
+      "bytes": 3770
+    },
+    {
+      "path": "SHA256SUMS.expected",
+      "sha256": "7f24ff53089786f5bde09d198343f86e5d1d6bbe084cfe4dc5cceebad98deb8b",
+      "bytes": 314
+    },
+    {
+      "path": "systemd/bothook-openclaw-watchdog.service",
+      "sha256": "5e8399999f5cafa283b96e0e39113f461154c940cc7ea7ccfd5fcb9c94227388",
+      "bytes": 289
+    },
+    {
+      "path": "systemd/bothook-openclaw-watchdog.timer",
+      "sha256": "d30fd1ae9f9ed07dd744618aec6590509404c1b049ad89577890a5852df016ef",
+      "bytes": 204
+    },
+    {
+      "path": "systemd/bothook-postboot-verify.service",
+      "sha256": "7d16aeb7edb7c60337d18100ec8ef57e883a7b7f5ecefeddbd195e9ecaf694ec",
+      "bytes": 636
+    },
+    {
+      "path": "systemd/bothook-provision.service",
+      "sha256": "459fc6b7cb59baef63732616f52a14b53980ad968e10a1452883549b5ee0b37d",
+      "bytes": 1364
+    },
+    {
+      "path": "systemd/bothook-wa-postlink-fixer.path",
+      "sha256": "315b74fc4bc009e3976cd09b6e0e49e363f2e434859549ffdec155dbe392f508",
+      "bytes": 479
+    },
+    {
+      "path": "systemd/bothook-wa-postlink-fixer.service",
+      "sha256": "872e626569669e975ce520c8a9b3213d0c034bd7a111eee1f2f00dc21df2850d",
+      "bytes": 378
+    },
+    {
+      "path": "systemd/bothook-wa-postlink-fixer.timer",
+      "sha256": "62bbd317898d8e98426ee7cac14734b86288244453c07aa6c863e7eccef9d54e",
+      "bytes": 199
+    },
+    {
+      "path": "systemd/openclaw-gateway.service",
+      "sha256": "987245d95e81ee2412dca39261e51ab0156f310955610841fdd266c088b426cd",
+      "bytes": 936
+    }
+  ]
+}

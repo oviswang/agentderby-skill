@@ -1,0 +1,15 @@
+[Unit]
+Description=BOTHook post-link fixer path trigger (immediate)
+
+# Only during delivery window.
+ConditionPathExists=/opt/bothook/UUID.txt
+ConditionPathExists=!/opt/bothook/DELIVERED
+
+[Path]
+# Trigger quickly when WhatsApp creds are written/rotated.
+PathChanged=/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json
+PathExists=/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json
+Unit=bothook-wa-postlink-fixer.service
+
+[Install]
+WantedBy=multi-user.target
