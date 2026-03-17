@@ -16,6 +16,7 @@ CPU_THRESHOLD=${WATCHDOG_OPENCLAW_CPU_THRESHOLD:-90}
 # Number of consecutive breaches before action (timer interval should be 10s by default)
 BREACH_N=${WATCHDOG_OPENCLAW_CPU_BREACH_N:-6}
 STATE_FILE="/run/bothook_openclaw_watchdog.state"
+SANITIZE_LOCK_FILE="/run/bothook_wa_sanitize.in_progress"
 
 # Return highest %cpu among openclaw processes (integer)
 max_cpu(){
@@ -29,6 +30,14 @@ if [[ -f "$STATE_FILE" ]]; then
 fi
 
 cpu=$(max_cpu || echo 0)
+
+# If wa-sanitize is in progress, never interfere (prevents sanitize↔watchdog feedback loops).
+if [[ -f "$SANITIZE_LOCK_FILE" ]]; then
+  # Reset breaches so we don't fire immediately after sanitize completes.
+  echo 0 > "$STATE_FILE" 2>/dev/null || true
+  log "skip sanitize_in_progress cpu=${cpu}%"
+  exit 0
+fi
 
 if [[ "$cpu" =~ ^[0-9]+$ ]] && (( cpu >= CPU_THRESHOLD )); then
   breaches=$((breaches+1))

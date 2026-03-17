@@ -2777,6 +2777,15 @@ app.post('/api/ops/pool/wa-sanitize', (req, res) => {
 
     const remote = `set -euo pipefail; 
 `+
+`LOCK_FILE="/run/bothook_wa_sanitize.in_progress";
+`+
+`sudo bash -lc "echo $(date -u +%Y-%m-%dT%H:%M:%SZ) > $LOCK_FILE" 2>/dev/null || true;
+`+
+`trap 'sudo rm -f "$LOCK_FILE" 2>/dev/null || true' EXIT;
+`+
+`echo "step:sanitize_lock:acquired:$LOCK_FILE";
+`+
+
 `DATA_DIR='/opt/bothook/provision/data';
 `+
 `HAS_UNIT=0;
