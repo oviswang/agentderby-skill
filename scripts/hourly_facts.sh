@@ -134,3 +134,62 @@ for iid, ip, rf, kcnt, exp in sorted(items):
 else
   echo "- tccli/credentials 不可用，跳过云侧快照"
 fi
+
+echo
+
+echo "【事实源 5：关键 systemd 服务状态（is-active）】"
+services=(
+  caddy
+  bothook-api
+  bothook-ops-worker
+  bothook-pool-replenish
+  bothook-delivery-watchdog
+  openclaw-gateway
+  a2a-fun-daemon
+  a2a-bootstrap-dev
+  a2a-relay
+)
+for s in "${services[@]}"; do
+  if systemctl list-unit-files --type=service --no-pager 2>/dev/null | awk '{print $1}' | grep -qx "${s}.service"; then
+    st=$(systemctl is-active "${s}.service" 2>/dev/null || true)
+    echo "- ${s}.service: ${st}"
+  else
+    echo "- ${s}.service: (not installed)"
+  fi
+done
+
+echo
+
+echo "【事实源 6：最近 6h 错误事件计数（SQLite events / systemd journal）】"
+python3 - <<'PY'
+import sqlite3
+con=sqlite3.connect('control-plane/data/bothook.sqlite')
+cur=con.cursor()
+# Generic error-ish event types
+rows=cur.execute("""
+  select event_type, count(*)
+    from events
+   where ts >= datetime('now','-6 hours')
+     and upper(event_type) like '%ERROR%'
+   group by event_type
+   order by count(*) desc
+   limit 20
+""").fetchall()
+if not rows:
+  print('- SQLite events: past 6h no *ERROR* event_type')
+else:
+  print('- SQLite events (*ERROR*):')
+  for et,c in rows:
+    print(f"  - {et}: {c}")
+PY
+
+echo
+
+echo "- systemd journal (past 6h, priority=err..alert):"
+for s in "${services[@]}"; do
+  if systemctl list-unit-files --type=service --no-pager 2>/dev/null | awk '{print $1}' | grep -qx "${s}.service"; then
+    n=$(journalctl -u "${s}.service" --since "6 hours ago" -p err..alert --no-pager 2>/dev/null | wc -l | tr -d ' ')
+    echo "  - ${s}.service: ${n}"
+  fi
+done
+
