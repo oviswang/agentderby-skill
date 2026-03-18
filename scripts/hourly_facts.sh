@@ -7,6 +7,34 @@ NOW_LOCAL=$(date '+%Y-%m-%d %H:00 %Z')
 HOURS=${BOTHOOK_REPORT_HOURS:-1}
 SINCE="${HOURS} hour ago"
 
+# BOTHook SQLite authoritative path (hard rule)
+BOTHOOK_DB_REAL="/home/ubuntu/.openclaw/workspace/control-plane/data/bothook.sqlite"
+BOTHOOK_DB_LINK="/home/ubuntu/.openclaw/workspace/bothook.sqlite"
+export BOTHOOK_DB_REAL
+
+echo "【事实源 -DB：权威 bothook.sqlite 路径】"
+echo "- authoritative: ${BOTHOOK_DB_REAL}"
+if [ -e "${BOTHOOK_DB_LINK}" ]; then
+  if [ -L "${BOTHOOK_DB_LINK}" ]; then
+    tgt=$(readlink -f "${BOTHOOK_DB_LINK}" || true)
+    echo "- workspace link: ${BOTHOOK_DB_LINK} -> ${tgt}"
+    if [ "${tgt}" != "${BOTHOOK_DB_REAL}" ]; then
+      echo "- WARNING: workspace bothook.sqlite symlink target mismatch (risk of misread)"
+    fi
+  else
+    sz=$(stat -c%s "${BOTHOOK_DB_LINK}" 2>/dev/null || echo "?")
+    echo "- WARNING: ${BOTHOOK_DB_LINK} is a regular file (size=${sz}). Risk of reading placeholder/decoy DB."
+  fi
+else
+  echo "- NOTE: ${BOTHOOK_DB_LINK} not present (ok; scripts should use authoritative path only)"
+fi
+
+if [ ! -s "${BOTHOOK_DB_REAL}" ]; then
+  echo "- ERROR: authoritative DB missing or empty: ${BOTHOOK_DB_REAL}"
+fi
+
+echo
+
 echo "时间窗：过去 ${HOURS} 小时（截至 ${NOW_LOCAL}）"
 echo
 
@@ -68,8 +96,8 @@ echo
 
 echo "【事实源 3：池状态快照（SQLite）】"
 python3 - <<'PY'
-import sqlite3
-con=sqlite3.connect('control-plane/data/bothook.sqlite')
+import os, sqlite3
+con=sqlite3.connect(os.environ['BOTHOOK_DB_REAL'])
 cur=con.cursor()
 rows=cur.execute("select lifecycle_status, count(*) from instances group by lifecycle_status").fetchall()
 print('lifecycle_status counts:', ', '.join([f"{k}={v}" for k,v in rows]))
@@ -84,7 +112,7 @@ echo "【事实源 3.1：本小时 Pool 补货/创建事件（SQLite events: POO
 python3 - <<'PY'
 import os, sqlite3, json
 hours=int(os.environ.get('BOTHOOK_REPORT_HOURS','1'))
-con=sqlite3.connect('control-plane/data/bothook.sqlite')
+con=sqlite3.connect(os.environ['BOTHOOK_DB_REAL'])
 cur=con.cursor()
 rows=cur.execute("""
   select ts, entity_id, payload_json
@@ -137,33 +165,88 @@ fi
 
 echo
 
-echo "【事实源 5：关键 systemd 服务状态（is-active）】"
-services=(
-  caddy
-  bothook-api
-  bothook-ops-worker
-  bothook-pool-replenish
-  bothook-delivery-watchdog
-  openclaw-gateway
-  a2a-fun-daemon
-  a2a-bootstrap-dev
-  a2a-relay
-)
-for s in "${services[@]}"; do
-  if systemctl list-unit-files --type=service --no-pager 2>/dev/null | awk '{print $1}' | grep -qx "${s}.service"; then
-    st=$(systemctl is-active "${s}.service" 2>/dev/null || true)
-    echo "- ${s}.service: ${st}"
+echo "【事实源 5：关键服务状态（按实际部署方式判定）】"
+
+unit_exists() {
+  local u="$1"
+  systemctl list-unit-files --type=service --no-pager 2>/dev/null | awk '{print $1}' | grep -qx "${u}.service"
+}
+
+check_systemd() {
+  local u="$1"
+  if unit_exists "$u"; then
+    local st
+    st=$(systemctl is-active "${u}.service" 2>/dev/null || true)
+    echo "- ${u}: method=systemd status=${st}"
   else
-    echo "- ${s}.service: (not installed)"
+    echo "- ${u}: method=systemd status=not_installed"
   fi
-done
+}
+
+check_systemd_or_proc() {
+  local u="$1"
+  local pat="$2"
+  if unit_exists "$u"; then
+    local st
+    st=$(systemctl is-active "${u}.service" 2>/dev/null || true)
+    echo "- ${u}: method=systemd status=${st}"
+    return
+  fi
+  # fallback: process pattern (read-only)
+  if ps aux | grep -E "$pat" | grep -v grep >/dev/null 2>&1; then
+    echo "- ${u}: method=process status=running"
+  else
+    echo "- ${u}: method=process status=not_running"
+  fi
+}
+
+check_openclaw_gateway() {
+  # openclaw gateway may be supervised outside systemd; prefer CLI truth
+  if unit_exists "openclaw-gateway"; then
+    local st
+    st=$(systemctl is-active openclaw-gateway.service 2>/dev/null || true)
+    echo "- openclaw-gateway: method=systemd status=${st}"
+    return
+  fi
+  if command -v openclaw >/dev/null 2>&1; then
+    local out
+    out=$(openclaw gateway status 2>/dev/null || true)
+    if echo "$out" | grep -qi "running"; then
+      echo "- openclaw-gateway: method=openclaw-cli status=running"
+    else
+      echo "- openclaw-gateway: method=openclaw-cli status=unknown"
+    fi
+  else
+    echo "- openclaw-gateway: method=openclaw-cli status=not_available"
+  fi
+}
+
+# Web
+check_systemd caddy
+
+# BOTHook control-plane
+check_systemd_or_proc bothook-api "/control-plane/api-server\\.mjs"
+check_systemd_or_proc bothook-support-server "/support-server"
+check_systemd_or_proc bothook-ops-worker "bothook-ops-worker|ops-worker"
+
+# Pool/ops background services (may be static/disabled on some hosts)
+check_systemd bothook-pool-replenish
+check_systemd bothook-delivery-watchdog
+
+# OpenClaw
+check_openclaw_gateway
+
+# A2A (informational)
+check_systemd a2a-fun-daemon
+check_systemd a2a-bootstrap-dev
+check_systemd a2a-relay
 
 echo
 
 echo "【事实源 6：最近 6h 错误事件计数（SQLite events / systemd journal）】"
 python3 - <<'PY'
-import sqlite3
-con=sqlite3.connect('control-plane/data/bothook.sqlite')
+import os, sqlite3
+con=sqlite3.connect(os.environ['BOTHOOK_DB_REAL'])
 cur=con.cursor()
 # Generic error-ish event types
 rows=cur.execute("""
