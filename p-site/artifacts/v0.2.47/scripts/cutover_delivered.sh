@@ -23,6 +23,28 @@ need_root(){
   fi
 }
 
+# IMPORTANT (scheme-1): ensure cutover runs outside the OpenClaw gateway process lifecycle.
+# Rationale: cutover performs OpenClaw config changes that can trigger a gateway restart.
+# If cutover is spawned by a gateway plugin, the restart can kill the parent process and
+# interrupt cutover mid-way, leaving dmPolicy/groupPolicy/update.auto in an incorrect state.
+#
+# Solution: re-exec cutover via systemd-run (detached oneshot). This unit will keep running
+# even if openclaw-gateway restarts.
+if [[ "${BOTHOOK_CUTOVER_SYSTEMD:-0}" != "1" ]]; then
+  unit="bothook-cutover-${BOTHOOK_UUID:-unknown}-$(date -u +%s)"
+  systemd-run --unit "$unit" --collect \
+    /usr/bin/env \
+      BOTHOOK_CUTOVER_SYSTEMD=1 \
+      BOTHOOK_UUID="${BOTHOOK_UUID:-}" \
+      BOTHOOK_CONTROLLER_E164="${BOTHOOK_CONTROLLER_E164:-}" \
+      /opt/bothook/bin/cutover_delivered.sh >/dev/null 2>&1 || {
+        echo "failed to systemd-run cutover unit" >&2
+        exit 3
+      }
+  echo "scheduled cutover via systemd: $unit"
+  exit 0
+fi
+
 backup_file(){
   local p="$1"
   if [[ -f "$p" ]]; then

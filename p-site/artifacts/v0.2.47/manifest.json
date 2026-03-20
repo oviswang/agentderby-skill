@@ -193,8 +193,8 @@
     },
     {
       "path": "scripts/cutover_delivered.sh",
-      "sha256": "b0b23c99ae876070dfafa5bcd0d5463d75f0f495c9ed58b07c2f4a843a18c023",
-      "bytes": 8221
+      "sha256": "bd317924893e611466df5b8216d955bfe10b8c66ae3d15c3c48c54f784b44d97",
+      "bytes": 9234
     },
     {
       "path": "scripts/cutover.sh",
