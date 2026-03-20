@@ -4454,6 +4454,7 @@ app.get('/api/wa/status', async (req, res) => {
           ? (
               `set -euo pipefail; `
               + `tmux kill-session -t '${tmuxSession}' 2>/dev/null || true; `
+              + `sudo fuser -k 18789/tcp 2>/dev/null || true; `
               + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
               + `sudo systemctl stop bothook-provision.service 2>/dev/null || true; `
               + `sudo systemctl disable bothook-provision.service 2>/dev/null || true; `
@@ -4469,6 +4470,7 @@ app.get('/api/wa/status', async (req, res) => {
               + `sudo rm -f /opt/bothook/LOGIN_AUTHORITY.control-plane 2>/dev/null || true; `
               + `sudo systemctl enable bothook-provision.service 2>/dev/null || true; `
               + `sudo systemctl start bothook-provision.service 2>/dev/null || true; `
+              + `sudo fuser -k 18789/tcp 2>/dev/null || true; `
               + `sudo systemctl start openclaw-gateway.service 2>/dev/null || true; `
               + `# Enforce self-chat only (first-link + delivered): never reply to other contacts. `
               + `python3 -c "import os,json,re; p='/home/ubuntu/.openclaw/credentials/whatsapp/default/creds.json'; j=json.load(open(p)) if os.path.exists(p) else {}; me=(j.get('me') or {}); jid=(me.get('id') or me.get('jid') or ''); m=re.match(r'^(\\d+):', str(jid));\nif not m: raise SystemExit(0); e164='+'+m.group(1); cfg='/home/ubuntu/.openclaw/openclaw.json'; conf=json.load(open(cfg)); wa=conf.setdefault('channels',{}).setdefault('whatsapp',{}); wa['dmPolicy']='allowlist'; wa['allowFrom']=[e164]; wa['groupPolicy']='disabled'; json.dump(conf, open(cfg,'w'), ensure_ascii=False, indent=2)" 2>/dev/null || true; `
