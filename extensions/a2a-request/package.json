@@ -1,0 +1,10 @@
+{
+  "name": "a2a-request",
+  "version": "0.9.0-rc1",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "openclaw": "*"
+  }
+}
