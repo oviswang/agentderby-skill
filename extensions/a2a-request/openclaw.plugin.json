@@ -8,6 +8,7 @@
     "additionalProperties": false,
     "properties": {
       "sidecarUrl": { "type": "string", "description": "Optional override for the local A2A sidecar base URL (default: http://127.0.0.1:17888)." },
+      "sidecarSocketPath": { "type": "string", "description": "Optional Unix socket path for the local A2A sidecar (preferred when set). Example: ~/.openclaw/a2a/sidecar.sock" },
       "relayUrl": { "type": "string", "description": "Optional override for A2A relay WebSocket URL (wss://...)." },
       "defaultTarget": { "type": "string", "description": "Optional default remote node id to target when params.target is missing." }
     }

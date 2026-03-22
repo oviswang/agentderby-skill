@@ -1,3 +1,5 @@
+import http from 'node:http';
+
 const TOOL_NAME = 'a2a_request';
 
 function toolNameOk(name) {
@@ -43,6 +45,47 @@ async function postJson(url, body, timeoutMs) {
   } finally {
     clearTimeout(t);
   }
+}
+
+async function postJsonUds({ socketPath, requestPath, body, timeoutMs }) {
+  const payload = Buffer.from(JSON.stringify(body), 'utf8');
+  return await new Promise((resolve) => {
+    const req = http.request(
+      {
+        socketPath,
+        path: requestPath,
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': String(payload.length),
+        },
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const txt = Buffer.concat(chunks).toString('utf8');
+          let j = null;
+          try { j = JSON.parse(txt); } catch {}
+          resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode || 0, json: j, raw: txt });
+        });
+      }
+    );
+
+    const t = setTimeout(() => {
+      try { req.destroy(new Error('TIMEOUT')); } catch {}
+      resolve({ ok: false, status: 0, json: null, error: 'UDS_TIMEOUT' });
+    }, Math.max(200, Number(timeoutMs) || 5000));
+
+    req.on('error', (e) => {
+      clearTimeout(t);
+      resolve({ ok: false, status: 0, json: null, error: String(e?.message || e) });
+    });
+
+    req.on('close', () => clearTimeout(t));
+    req.write(payload);
+    req.end();
+  });
 }
 
 // ------------------------
@@ -276,6 +319,7 @@ export default {
 
         const pluginCfg = (api?.pluginConfig && typeof api.pluginConfig === 'object') ? api.pluginConfig : {};
 
+        const sidecarSocketPath = String(pluginCfg.sidecarSocketPath || process.env.A2A_SIDECAR_SOCKET_PATH || '').trim() || null;
         const sidecarBase = String(pluginCfg.sidecarUrl || process.env.A2A_SIDECAR_URL || 'http://127.0.0.1:17888').replace(/\/$/, '');
         const sidecarUrl = sidecarBase + '/a2a/request';
 
@@ -295,7 +339,9 @@ export default {
 
         // 1) Prefer sidecar if it is available (it already implements network-first + fallback).
         // If sidecar is down, we still must succeed via in-plugin fallback.
-        const sidecarAttempt = await postJson(sidecarUrl, { task_type, payload, timeout_ms, mode, target }, Math.min(timeout_ms, 1500));
+        const sidecarAttempt = sidecarSocketPath
+          ? await postJsonUds({ socketPath: sidecarSocketPath, requestPath: '/a2a/request', body: { task_type, payload, timeout_ms, mode, target }, timeoutMs: Math.min(timeout_ms, 1500) })
+          : await postJson(sidecarUrl, { task_type, payload, timeout_ms, mode, target }, Math.min(timeout_ms, 1500));
         if (sidecarAttempt.ok && sidecarAttempt.json && typeof sidecarAttempt.json === 'object') {
           return {
             content: [{ type: 'text', text: JSON.stringify(sidecarAttempt.json, null, 2) }],
