@@ -1,6 +1,33 @@
 import http from 'node:http';
 
+function isLoopback(addr) {
+  if (!addr) return false;
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+}
+
+async function readJson(req, maxBytes = 64_000) {
+  return await new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > maxBytes) { reject(new Error('body_too_large')); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      try {
+        const s = Buffer.concat(chunks).toString('utf8');
+        resolve(s ? JSON.parse(s) : {});
+      } catch {
+        reject(new Error('bad_json'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
 const TOOL_NAME = 'a2a_request';
+const TOOL_NAME_COMPARE = 'a2a_compare';
 
 function toolNameOk(name) {
   return /^[a-zA-Z0-9_-]+$/.test(String(name || ''));
@@ -294,6 +321,99 @@ export default {
       version_marker: 'v0.9.0-rc1-plugin-first-user-loop',
     });
 
+    // Loopback-only LLM completion bridge for A2A (model-agnostic; uses this node's OpenClaw runtime).
+    // POST 127.0.0.1:18789/__a2a__/llm/complete { prompt, policy_hint?, timeout_ms? }
+    api.registerHttpRoute({
+      path: '/__a2a__/llm/complete',
+      auth: 'plugin',
+      match: 'exact',
+      handler: async (req, res) => {
+        try {
+          if (!isLoopback(req?.socket?.remoteAddress)) {
+            res.statusCode = 403;
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ ok: false, error: 'forbidden' }));
+            return;
+          }
+          if ((req.method || 'GET').toUpperCase() !== 'POST') {
+            res.statusCode = 405;
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
+            return;
+          }
+
+          const body = await readJson(req);
+          const prompt = String(body?.prompt || '').trim();
+          const policy_hint = String(body?.policy_hint || body?.system || '').trim();
+          const timeout_ms = Math.max(1000, Math.min(60000, Number(body?.timeout_ms || 20000) || 20000));
+          if (!prompt) {
+            res.statusCode = 400;
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ ok: false, error: 'prompt_required' }));
+            return;
+          }
+
+          const rt = api?.runtime;
+          if (!rt?.subagent?.run || !rt?.subagent?.waitForRun || !rt?.subagent?.getSessionMessages) {
+            res.statusCode = 500;
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ ok: false, error: 'subagent_runtime_unavailable' }));
+            return;
+          }
+
+          const sessionKey = `a2a-llm:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`;
+          const run = await rt.subagent.run({
+            // Required by newer OpenClaw subagent runtime contract
+            idempotencyKey: `a2a-llm:${sessionKey}`,
+            sessionKey,
+            message: prompt,
+            extraSystemPrompt: policy_hint || undefined,
+            deliver: false,
+          });
+
+          const w = await rt.subagent.waitForRun({ runId: run.runId, timeoutMs: timeout_ms });
+          if (w.status !== 'ok') {
+            try { await rt.subagent.deleteSession({ sessionKey, deleteTranscript: true }); } catch {}
+            res.statusCode = 504;
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ ok: false, error: 'llm_timeout', detail: w.error || null }));
+            return;
+          }
+
+          const hist = await rt.subagent.getSessionMessages({ sessionKey, limit: 50 });
+          try { await rt.subagent.deleteSession({ sessionKey, deleteTranscript: true }); } catch {}
+
+          // Best-effort extract last assistant text.
+          const msgs = Array.isArray(hist?.messages) ? hist.messages : [];
+          let text = '';
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            const m = msgs[i];
+            const role = String(m?.role || m?.author || m?.type || '').toLowerCase();
+            const c = m?.content ?? m?.text ?? m?.message ?? null;
+            const s = typeof c === 'string'
+              ? c
+              : (Array.isArray(c)
+                ? c.map((x) => {
+                    if (typeof x === 'string') return x;
+                    if (x && typeof x === 'object' && typeof x.text === 'string') return x.text;
+                    return '';
+                  }).join('')
+                : '');
+            if (s && (role.includes('assistant') || role.includes('ai') || role === '')) { text = String(s).trim(); break; }
+          }
+
+          res.statusCode = 200;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ ok: true, text, llm_via: 'openclaw_subagent' }));
+        } catch (e) {
+          res.statusCode = 500;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ ok: false, error: 'internal_error', detail: String(e?.message || e) }));
+        }
+      },
+    });
+
+    // Tool 1: single request
     api.registerTool({
       name: TOOL_NAME,
       label: 'A2A Request',
@@ -481,6 +601,63 @@ export default {
           network_attempted: false,
         });
         return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], details: out };
+      },
+    });
+
+    // Tool 2: batch compare (sidecar-powered)
+    api.registerTool({
+      name: TOOL_NAME_COMPARE,
+      label: 'A2A Compare',
+      description: 'Send the same task to multiple target nodes over A2A network and return an aggregated comparison report.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          task_type: { type: 'string' },
+          payload: { type: 'object', additionalProperties: true },
+          targets: { type: 'array', items: { type: 'string' } },
+          timeout_ms: { type: 'number' },
+          mode: { type: 'string', description: 'network recommended (no local fallback) for comparisons' },
+          cross_critique: { type: 'boolean' },
+        },
+      },
+      async execute(_toolCallId, params) {
+        const p = params || {};
+        const task_type = String(p.task_type || '').trim();
+        const payload = (p.payload && typeof p.payload === 'object') ? p.payload : {};
+        const targets = Array.isArray(p.targets) ? p.targets.map((x) => String(x).trim()).filter(Boolean) : [];
+        const timeout_ms = Number.isFinite(Number(p.timeout_ms)) ? Number(p.timeout_ms) : 8000;
+        const mode = String(p.mode || 'network').trim() || 'network';
+        const cross_critique = Boolean(p.cross_critique);
+
+        const pluginCfg = (api?.pluginConfig && typeof api.pluginConfig === 'object') ? api.pluginConfig : {};
+        const sidecarSocketPath = String(pluginCfg.sidecarSocketPath || process.env.A2A_SIDECAR_SOCKET_PATH || '').trim() || null;
+        const sidecarBase = String(pluginCfg.sidecarUrl || process.env.A2A_SIDECAR_URL || 'http://127.0.0.1:17888').replace(/\/$/, '');
+        const sidecarUrl = sidecarBase + '/a2a/compare';
+
+        const body = { task_type, payload, targets, timeout_ms, mode, cross_critique };
+
+        const sidecarAttempt = sidecarSocketPath
+          ? await postJsonUds({ socketPath: sidecarSocketPath, requestPath: '/a2a/compare', body, timeoutMs: Math.min(timeout_ms, 2000) })
+          : await postJson(sidecarUrl, body, Math.min(timeout_ms, 2000));
+
+        if (sidecarAttempt.ok && sidecarAttempt.json && typeof sidecarAttempt.json === 'object') {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(sidecarAttempt.json, null, 2) }],
+            details: sidecarAttempt.json,
+          };
+        }
+
+        // Fail closed: compare requires sidecar.
+        const err = {
+          ok: false,
+          error: {
+            code: 'SIDECAR_UNAVAILABLE',
+            reason: sidecarAttempt.error || 'sidecar_compare_unavailable',
+            http_status: sidecarAttempt.status || 0,
+          },
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(err, null, 2) }], details: err };
       },
     });
   },
