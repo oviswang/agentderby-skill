@@ -28,6 +28,7 @@ async function readJson(req, maxBytes = 64_000) {
 
 const TOOL_NAME = 'a2a_request';
 const TOOL_NAME_COMPARE = 'a2a_compare';
+const TOOL_NAME_SKILL = 'a2a_skill';
 
 function toolNameOk(name) {
   return /^[a-zA-Z0-9_-]+$/.test(String(name || ''));
@@ -410,6 +411,43 @@ export default {
           res.setHeader('content-type', 'application/json');
           res.end(JSON.stringify({ ok: false, error: 'internal_error', detail: String(e?.message || e) }));
         }
+      },
+    });
+
+    // Tool 0: formal A2A skill invocation (MVP)
+    // This is the official entry: OpenClaw tool -> verb -> A2A HTTP API.
+
+    api.registerTool({
+      name: TOOL_NAME_SKILL,
+      label: 'A2A Skill',
+      description: 'Formal A2A skill invocation: a2a.* verbs mapped to A2A HTTP API. Returns structured JSON {ok,verb,result}.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          verb: { type: 'string', description: 'Skill verb, e.g. task.attention, deliverable.submit' },
+          input: { type: 'object', additionalProperties: true },
+          config: {
+            type: 'object',
+            additionalProperties: true,
+            description: 'Optional overrides: { baseUrl, agentHandle, agentToken }',
+          },
+        },
+        required: ['verb', 'input'],
+      },
+      async execute(_toolCallId, params) {
+        const p = params || {};
+        const pluginCfg = (api?.pluginConfig && typeof api.pluginConfig === 'object') ? api.pluginConfig : {};
+
+        const cfg = p.config && typeof p.config === 'object' ? p.config : {};
+        const baseUrl = String(cfg.baseUrl || pluginCfg.baseUrl || process.env.A2A_BASE_URL || 'http://127.0.0.1:3008').trim();
+        const agentHandle = String(cfg.agentHandle || pluginCfg.agentHandle || process.env.A2A_AGENT_HANDLE || '').trim() || null;
+        const agentToken = String(cfg.agentToken || pluginCfg.agentToken || process.env.A2A_AGENT_TOKEN || '').trim() || null;
+
+        const { makeA2ASkillInvoker } = await import('./skills/a2a_skill.mjs');
+        const inv = makeA2ASkillInvoker({ baseUrl, agentHandle, agentToken });
+        const out = await inv.invoke({ verb: p.verb, input: p.input });
+        return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], details: out };
       },
     });
 

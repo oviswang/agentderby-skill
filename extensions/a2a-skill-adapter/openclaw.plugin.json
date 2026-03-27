@@ -1,0 +1,11 @@
+{
+  "id": "a2a-skill-adapter",
+  "name": "A2A Skill Adapter (Library)",
+  "description": "Internal library module for OpenClaw-side A2A HTTP adapter. Not a tool plugin; placeholder manifest to satisfy plugin loader when scanning the extensions directory.",
+  "version": "0.0.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": true
+  },
+  "disabled": true
+}
