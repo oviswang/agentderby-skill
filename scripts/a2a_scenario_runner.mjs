@@ -18,15 +18,21 @@
 //   A2A_WORKER_TOKEN=<token>       (optional; if missing runner will register)
 //
 // Output:
-// - prints JSON trace to stdout
+// - writes JSON trace artifact to ./artifacts/a2a-scenarios/
+// - prints a short one-line-ish summary for CI/humans
+// - prints JSON trace to stdout only when A2A_SCENARIO_PRINT_TRACE=1
 
 import { createA2AClient } from '../extensions/a2a-skill-adapter/index.ts';
+import fs from 'node:fs/promises';
 
 const scenarioName = process.argv[2];
 if (!scenarioName || !['single_agent_iteration', 'multi_agent_review_loop'].includes(scenarioName)) {
   console.error('Usage: node scripts/a2a_scenario_runner.mjs <single_agent_iteration|multi_agent_review_loop>');
   process.exit(2);
 }
+
+const PRINT_TRACE = process.env.A2A_SCENARIO_PRINT_TRACE === '1';
+const ARTIFACTS_DIR = process.env.A2A_SCENARIO_ARTIFACTS_DIR || './artifacts/a2a-scenarios';
 
 const cfg = {
   baseUrl: process.env.A2A_BASE_URL || 'http://127.0.0.1:3008',
@@ -40,6 +46,34 @@ const cfg = {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function tsCompact() {
+  // YYYYMMDD-HHMMSSZ (UTC)
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+}
+
+async function writeArtifact(trace) {
+  await fs.mkdir(ARTIFACTS_DIR, { recursive: true });
+  const filename = `${trace.scenario}-${tsCompact()}.json`;
+  const path = `${ARTIFACTS_DIR.replace(/\/$/, '')}/${filename}`;
+  await fs.writeFile(path, JSON.stringify(trace, null, 2) + '\n', 'utf8');
+  return path;
+}
+
+function printSummary({ scenario, ok, stepsCount, failedStep, artifactPath }) {
+  const status = ok ? 'OK' : 'FAILED';
+  const parts = [
+    `A2A_SCENARIO ${status}`,
+    `scenario=${scenario}`,
+    `steps=${stepsCount}`,
+    failedStep ? `failed_step=${failedStep}` : null,
+    artifactPath ? `artifact=${artifactPath}` : null,
+  ].filter(Boolean);
+  // single line for CI grepping
+  console.log(parts.join(' '));
 }
 
 function step(action, input, fn) {
@@ -350,11 +384,36 @@ async function multiAgentReviewLoop() {
   if (scenarioName === 'single_agent_iteration') trace = await singleAgentIteration();
   if (scenarioName === 'multi_agent_review_loop') trace = await multiAgentReviewLoop();
 
-  // redact tokens in printed output
+  // redact tokens in printed output + artifacts
   const out = JSON.parse(JSON.stringify(trace));
   out.endedAt = out.endedAt || nowIso();
-  console.log(JSON.stringify(out, null, 2));
-})().catch((e) => {
-  console.error(JSON.stringify({ ok: false, scenario: scenarioName, error: e?.message || String(e) }, null, 2));
+
+  const artifactPath = await writeArtifact(out);
+
+  const failedStep = out.ok ? null : out.stop?.failedStep;
+  printSummary({
+    scenario: out.scenario,
+    ok: !!out.ok,
+    stepsCount: (out.steps || []).length,
+    failedStep,
+    artifactPath,
+  });
+
+  if (PRINT_TRACE) {
+    console.log(JSON.stringify(out, null, 2));
+  }
+
+  process.exit(out.ok ? 0 : 1);
+})().catch(async (e) => {
+  const out = { ok: false, scenario: scenarioName, error: e?.message || String(e) };
+  try {
+    const artifactPath = await writeArtifact(out);
+    printSummary({ scenario: scenarioName, ok: false, stepsCount: 0, failedStep: 'runner_crash', artifactPath });
+  } catch {
+    // last resort: still print something
+    printSummary({ scenario: scenarioName, ok: false, stepsCount: 0, failedStep: 'runner_crash', artifactPath: null });
+  }
+
+  console.error(JSON.stringify(out, null, 2));
   process.exit(1);
 });
