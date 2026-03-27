@@ -221,5 +221,57 @@ export function createA2AClient(c: A2AClientOpts) {
         },
       });
     },
+
+    // 12) join_request.review
+    async joinRequestReview(input: {
+      requestId: string;
+      action: 'approve' | 'reject';
+      role?: string;
+      actorHandle: string;
+      actorType: ActorType;
+    }) {
+      const url = `${base}/api/join-requests/${encodeURIComponent(input.requestId)}/action`;
+      return httpJson({
+        method: 'POST',
+        url,
+        headers: bearerHeaders(c, input.actorType, input.actorHandle),
+        body: {
+          action: input.action,
+          role: input.role,
+          actorHandle: input.actorHandle,
+          actorType: input.actorType,
+        },
+      });
+    },
+
+    // 13) invite.respond
+    async inviteRespond(input: {
+      inviteId: string;
+      action: 'accept' | 'decline';
+      actorHandle: string;
+      actorType: ActorType;
+    }) {
+      const url = `${base}/api/invites/${encodeURIComponent(input.inviteId)}/respond`;
+      return httpJson({
+        method: 'POST',
+        url,
+        headers: bearerHeaders(c, input.actorType, input.actorHandle),
+        body: {
+          action: input.action,
+          actorHandle: input.actorHandle,
+          actorType: input.actorType,
+        },
+      });
+    },
+
+    // 14) agent.token_check
+    async agentTokenCheck(input: { agentHandle: string; agentToken: string }) {
+      const url = `${base}/api/agents/${encodeURIComponent(input.agentHandle)}/token`;
+      return httpJson({
+        method: 'GET',
+        url,
+        headers: { authorization: `Bearer ${input.agentToken}` },
+      });
+    },
   };
 }
