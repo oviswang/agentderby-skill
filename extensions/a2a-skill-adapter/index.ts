@@ -136,7 +136,38 @@ export function createA2AClient(c: A2AClientOpts) {
       return httpJson({ method: 'GET', url });
     },
 
-    // 7) deliverable.save_draft
+    // 7) task.coordination_feed
+    async taskCoordinationFeed(input: { taskId: string; limit?: number }) {
+      const limit = input.limit ?? 15;
+      const url = `${base}/api/tasks/${encodeURIComponent(input.taskId)}/children/events?limit=${encodeURIComponent(String(limit))}`;
+      return httpJson({ method: 'GET', url });
+    },
+
+    // 8) task.blocker.set_or_clear
+    async taskBlockerSetOrClear(input: {
+      taskId: string;
+      isBlocked: boolean;
+      blockedReason?: string;
+      blockedByTaskId?: string;
+      actorHandle: string;
+      actorType: ActorType;
+    }) {
+      const url = `${base}/api/tasks/${encodeURIComponent(input.taskId)}/block`;
+      return httpJson({
+        method: 'POST',
+        url,
+        headers: bearerHeaders(c, input.actorType, input.actorHandle),
+        body: {
+          isBlocked: input.isBlocked,
+          blockedReason: input.blockedReason,
+          blockedByTaskId: input.blockedByTaskId,
+          actorHandle: input.actorHandle,
+          actorType: input.actorType,
+        },
+      });
+    },
+
+    // 9) deliverable.save_draft
     async deliverableSaveDraft(input: {
       taskId: string;
       summaryMd: string;
@@ -158,7 +189,7 @@ export function createA2AClient(c: A2AClientOpts) {
       });
     },
 
-    // 8) deliverable.submit
+    // 10) deliverable.submit
     async deliverableSubmit(input: { taskId: string; actorHandle: string; actorType: ActorType }) {
       const url = `${base}/api/tasks/${encodeURIComponent(input.taskId)}/deliverable/submit`;
       return httpJson({
@@ -166,6 +197,28 @@ export function createA2AClient(c: A2AClientOpts) {
         url,
         headers: bearerHeaders(c, input.actorType, input.actorHandle),
         body: { actorHandle: input.actorHandle, actorType: input.actorType },
+      });
+    },
+
+    // 11) deliverable.review
+    async deliverableReview(input: {
+      taskId: string;
+      action: 'accept' | 'request_changes';
+      revisionNote?: string;
+      actorHandle: string;
+      actorType: ActorType;
+    }) {
+      const url = `${base}/api/tasks/${encodeURIComponent(input.taskId)}/deliverable/review`;
+      return httpJson({
+        method: 'POST',
+        url,
+        headers: bearerHeaders(c, input.actorType, input.actorHandle),
+        body: {
+          action: input.action,
+          revisionNote: input.revisionNote,
+          actorHandle: input.actorHandle,
+          actorType: input.actorType,
+        },
       });
     },
   };

@@ -8,14 +8,16 @@
 //   A2A_AGENT_TOKEN=<agentToken>
 //   A2A_PARENT_TASK_ID=t-c7ac4c5b (optional)
 //
-// Demo flow (phase 1.1):
+// Demo flow (phase 1.2):
 // - project.search("e2e")
 // - project.join("e2e-restricted") as agent
-// - task.create_child (fallback -> task.create)
+// - task.create_child
 // - deliverable.save_draft
 // - deliverable.submit
+// - deliverable.review (accept OR request_changes)
+// - task.blocker.set_or_clear (set then clear)
+// - task.coordination_feed
 // - task.get (verify events)
-// - task.attention (parent)
 
 import { createA2AClient } from '../extensions/a2a-skill-adapter/index.ts';
 
@@ -40,29 +42,16 @@ const run = async () => {
   const j = await a2a.projectJoin({ slug: 'e2e-restricted', actorHandle: agentHandle, actorType: 'agent' });
   console.log('join', j.result || j);
 
-  let child;
   console.log('# task.create_child');
-  try {
-    child = await a2a.taskCreateChild({
-      projectSlug: 'e2e-restricted',
-      parentTaskId,
-      title: 'Adapter demo child task',
-      description: 'child created via OpenClaw A2A adapter',
-      actorHandle: agentHandle,
-      actorType: 'agent',
-    });
-    console.log('child.task.id', child.task?.id, 'parent', parentTaskId);
-  } catch (e) {
-    console.log('task.create_child fallback -> task.create (reason:', e.message + ')');
-    child = await a2a.taskCreate({
-      projectSlug: 'e2e-restricted',
-      title: 'Adapter demo task (no parent)',
-      description: 'fallback: parent not found/accessible',
-      actorHandle: agentHandle,
-      actorType: 'agent',
-    });
-    console.log('task.id', child.task?.id);
-  }
+  const child = await a2a.taskCreateChild({
+    projectSlug: 'e2e-restricted',
+    parentTaskId,
+    title: 'Adapter demo child task (phase 1.2)',
+    description: 'created via OpenClaw A2A adapter',
+    actorHandle: agentHandle,
+    actorType: 'agent',
+  });
+  console.log('child.task.id', child.task?.id, 'parent', parentTaskId);
 
   console.log('# deliverable.save_draft');
   const draft = await a2a.deliverableSaveDraft({
@@ -78,14 +67,43 @@ const run = async () => {
   const sub = await a2a.deliverableSubmit({ taskId: child.task.id, actorHandle: agentHandle, actorType: 'agent' });
   console.log('submitted.status', sub.deliverable?.status);
 
+  console.log('# deliverable.review');
+  // NOTE: For request_changes, the server may require revisionNote; we always include it.
+  const rev = await a2a.deliverableReview({
+    taskId: child.task.id,
+    action: 'accept',
+    actorHandle: agentHandle,
+    actorType: 'agent',
+  });
+  console.log('review.status', rev.deliverable?.status);
+
+  console.log('# task.blocker.set_or_clear (set)');
+  await a2a.taskBlockerSetOrClear({
+    taskId: child.task.id,
+    isBlocked: true,
+    blockedReason: 'phase-1.2 demo blocker',
+    actorHandle: agentHandle,
+    actorType: 'agent',
+  });
+  console.log('blocker set ok');
+
+  console.log('# task.blocker.set_or_clear (clear)');
+  await a2a.taskBlockerSetOrClear({
+    taskId: child.task.id,
+    isBlocked: false,
+    actorHandle: agentHandle,
+    actorType: 'agent',
+  });
+  console.log('blocker cleared ok');
+
+  console.log('# task.coordination_feed');
+  const feed = await a2a.taskCoordinationFeed({ taskId: parentTaskId, limit: 10 });
+  console.log('coordination.events', (feed.events || []).length);
+
   console.log('# task.get');
   const tg = await a2a.taskGet({ taskId: child.task.id });
-  const kinds = (tg.events || []).slice(-8).map((e) => e.kind);
+  const kinds = (tg.events || []).slice(-12).map((e) => e.kind);
   console.log('task.status', tg.task?.status, 'recentEventKinds', kinds);
-
-  console.log('# task.attention (parent)');
-  const att = await a2a.taskAttention({ taskId: parentTaskId });
-  console.log('attention.counts', att.counts);
 };
 
 run().catch((e) => {
