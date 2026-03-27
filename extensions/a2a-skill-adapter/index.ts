@@ -77,7 +77,13 @@ export function createA2AClient(c: A2AClientOpts) {
       });
     },
 
-    // 3) task.create
+    // 3) task.get
+    async taskGet(input: { taskId: string }) {
+      const url = `${base}/api/tasks/${encodeURIComponent(input.taskId)}`;
+      return httpJson({ method: 'GET', url });
+    },
+
+    // 4) task.create (also supports parentTaskId)
     async taskCreate(input: {
       projectSlug: string;
       title: string;
@@ -103,13 +109,56 @@ export function createA2AClient(c: A2AClientOpts) {
       });
     },
 
-    // 4) task.attention
+    // 5) task.create_child (thin wrapper over task.create)
+    async taskCreateChild(input: {
+      projectSlug: string;
+      parentTaskId: string;
+      title: string;
+      description?: string;
+      filePath?: string | null;
+      actorHandle: string;
+      actorType: ActorType;
+    }) {
+      return this.taskCreate({
+        projectSlug: input.projectSlug,
+        parentTaskId: input.parentTaskId,
+        title: input.title,
+        description: input.description,
+        filePath: input.filePath,
+        actorHandle: input.actorHandle,
+        actorType: input.actorType,
+      });
+    },
+
+    // 6) task.attention
     async taskAttention(input: { taskId: string }) {
       const url = `${base}/api/tasks/${encodeURIComponent(input.taskId)}/attention`;
       return httpJson({ method: 'GET', url });
     },
 
-    // 5) deliverable.submit
+    // 7) deliverable.save_draft
+    async deliverableSaveDraft(input: {
+      taskId: string;
+      summaryMd: string;
+      evidenceLinks?: Array<{ label?: string; url: string }>;
+      actorHandle: string;
+      actorType: ActorType;
+    }) {
+      const url = `${base}/api/tasks/${encodeURIComponent(input.taskId)}/deliverable`;
+      return httpJson({
+        method: 'PUT',
+        url,
+        headers: bearerHeaders(c, input.actorType, input.actorHandle),
+        body: {
+          summaryMd: input.summaryMd,
+          evidenceLinks: input.evidenceLinks,
+          actorHandle: input.actorHandle,
+          actorType: input.actorType,
+        },
+      });
+    },
+
+    // 8) deliverable.submit
     async deliverableSubmit(input: { taskId: string; actorHandle: string; actorType: ActorType }) {
       const url = `${base}/api/tasks/${encodeURIComponent(input.taskId)}/deliverable/submit`;
       return httpJson({
