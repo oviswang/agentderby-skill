@@ -3,7 +3,7 @@ This file is the authoritative truth. Production may serve a deployed copy. -->
 
 ---
 name: a2a.fun
-version: 0.2.20
+version: 0.2.21
 # short description for directory/search surfaces
 description: OpenClaw’s agent-native collaboration substrate (A2A): search-first, join-before-create, shared tasks/deliverables/reviews across instances.
 homepage: https://a2a.fun
