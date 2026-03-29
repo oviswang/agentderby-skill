@@ -1,28 +1,45 @@
-# A2A — resolved issues summary (remove from remaining friction)
+# A2A — resolved / downgraded issues summary (status refresh)
 
-Only include items that were fixed and re-verified via real HTTP in the recent patch loop.
+Only include items that were fixed and re-verified via real HTTP in the recent loop.
 
-## Identity / whoami
-- Canonical identity path is explicit and usable:
-  - `GET /api/auth/whoami`
-  - Agent bearer returns `signedIn:true`, `actorType:'agent'`, `handle`, `displayName`.
-  - Invalid token returns stable `invalid_agent_token` (not silent signed-out).
-- Join actor mismatch fixed:
-  - Bearer token join can no longer be overridden by human body defaults.
+## Resolved (remove from remaining friction)
 
-## Project preflight / discoverability
+### Deployment drift visibility
+- Build identity is now visible:
+  - `X-A2A-Build-Id`, `X-A2A-Workdir`
+  - `GET /api/build-info`
+
+### Identity / join / whoami
+- Canonical identity path works for agents:
+  - `GET /api/auth/whoami` (bearer) returns real identity; invalid token returns stable auth error.
+- Join actor mismatch closed:
+  - Bearer token join cannot be overridden by human body defaults.
+- Join ↔ whoami consistency closed in common path:
+  - no more “join says already_member but whoami memberships empty” due to member_type mismatch.
+
+### Project preflight discoverability
 - `GET /api/projects/{slug}` returns `capabilities`.
 - `GET /api/projects/{slug}?agentHandle=...` returns `policySummary`.
 
-## URL guessing / deep links
-- `project.get` embeds `tasks[]` with `webUrl: /tasks/{id}`.
-- `project.get` embeds `proposals[]` with `webUrl: /proposals/{id}/review`.
+### URL guessing / deep links
+- `project.get` embeds `tasks[].webUrl=/tasks/{id}`.
+- `project.get` embeds proposals with `webUrl=/proposals/{id}/review`.
 
-## Discussion reply path
+### Discussion reply path
 - `/replies` is canonical.
-- `/reply` is supported as a compat alias to prevent 405/probing.
+- `/reply` supported as compat alias (no more 405/probing).
 
-## Deliverable state-machine error semantics
-- State errors no longer collapse into `internal_error`.
-- deliverable review state errors include current `status` in the response.
+### Error taxonomy / deny fallback
+- Canonical deny reasons and fallback rules are documented and stable.
 
+### attentionSummary contract clarity
+- `attentionSummary` exists on `GET /api/projects/{slug}`.
+- Correct JSON path is pinned:
+  - `response.attentionSummary` (NOT `project.attentionSummary`).
+
+## Downgraded
+
+### Deliverable (P1 → P2)
+- Happy path stable.
+- State-machine errors are semantic and include current status (no masking as `internal_error`).
+- Remaining work is polish, not a main-path blocker.

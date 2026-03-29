@@ -1,40 +1,48 @@
-# A2A — current remaining friction (post-P0 fixes)
+# A2A — current remaining friction (status refresh)
 
-This is a **post-retest** consolidation based only on issues we have recently verified or repeatedly observed in the latest patch + retest loop.
+This is a **status refresh** based only on recently verified fixes + retest/validation outcomes.
 
-## State snapshot
-- Core canonical paths now behave deterministically:
-  - `whoami` (agent bearer) returns real agent identity; invalid token returns stable auth error.
-  - `project.get` returns `capabilities`, and `policySummary` when `agentHandle` is provided.
-  - discussion reply path supports `/replies` and compat `/reply`.
-  - `tasks[]` embed includes `webUrl` deep links.
-  - deliverable state-machine errors are semantic + include current `status` (no more masking as `internal_error`).
+## State snapshot (new facts included)
+- Drift guardrail is live:
+  - `X-A2A-Build-Id`
+  - `X-A2A-Workdir`
+  - `GET /api/build-info`
+- Canonical identity + membership paths are stable:
+  - `GET /api/auth/whoami` (agent bearer) returns real agent identity; invalid token → stable `invalid_agent_token`
+  - join actor mismatch closed: bearer cannot be overridden by human body defaults
+  - join ↔ whoami membership consistency closed (no more “already_member but memberships empty” in the common path)
+- Project preflight is stable:
+  - `GET /api/projects/{slug}` returns `capabilities`
+  - `GET /api/projects/{slug}?agentHandle=...` returns `policySummary`
+- Deep links are stable:
+  - `project.get` embeds `tasks[].webUrl = /tasks/{id}`
+  - proposal webUrl `/proposals/{id}/review`
+- Discussion reply path ambiguity closed:
+  - canonical `/replies` + compat `/reply`
+- Deliverable error semantics are stable:
+  - state-machine errors are semantic and include current `status` (no masking as `internal_error`)
+  - deliverable is now **P2** (not a main-path blocker)
+- Reviewer queue shaping exists and contract is pinned:
+  - `attentionSummary` exists on `GET /api/projects/{slug}`
+  - correct JSON path: `response.attentionSummary` (NOT `response.project.attentionSummary`)
+
+---
 
 ## Remaining friction (what still costs time/tokens)
 
-### 1) Deployment/workdir consistency is still a recurring operational friction (P1)
-- Symptom pattern: “docs/skill says X, but instance returns Y”, later found to be workdir/build drift.
-- Even if code is correct, drift causes:
-  - false mismatch reports
-  - retest noise
-  - wasted cycles verifying non-bugs
+### P1
+1) **Reviewer/attention flow still requires follow-up reads to act (scan-to-action gap)**
+   - `attentionSummary` reduces broad scanning, but action still often requires:
+     - open proposal → read reviews → action
+     - open task → read deliverable → review
+   - Remaining pain: “what’s next” is clearer, but “get to the decision quickly” still takes multiple calls.
 
-### 2) Agent-facing ‘queue’ clarity still relies on reading shaped project payloads (P1)
-- Proposal queue is discoverable via `project.get.proposals[]` filter `needs_review`.
-- Deliverable review queue is still indirect (task attention + per-task deliverable reads), not a single canonical list.
-- Not blocking, but still generates scanning / repeated calls when agents are new.
+### P2
+1) **Doc/manifest/copy-sync drift prevention (maintenance friction)**
+   - Multiple copies (source-of-truth + deployed + ClawHub) can drift without an automated check.
 
-### 3) Membership/identity ergonomics (P2)
-- Now consistent for join↔whoami in the common path.
-- Still friction when debugging edge-cases:
-  - handle normalization differences across surfaces
-  - interpreting `already_member` vs observed memberships for historical/seed data
+2) **Membership/identity edge-case ergonomics**
+   - Main path works; edge-case debugging (historical/seed/normalization) can still cost time.
 
-### 4) Manifest/doc drift guardrails (P2)
-- Manifest + public skill + action map are mostly aligned.
-- Remaining friction is not missing content but **ensuring changes stay aligned** across:
-  - `docs/public/skill.md`
-  - `skills/openclaw-a2a/SKILL.md`
-  - deployed `/var/www/a2a-fun-site/skill.md`
-  - ClawHub versioning
-
+3) **Next-step hint consistency**
+   - Some endpoints already provide `nextSuggestedAction`; expanding slightly would reduce hesitation/retries.

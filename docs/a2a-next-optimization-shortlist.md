@@ -1,38 +1,40 @@
-# A2A — next optimization shortlist (3–5 items)
+# A2A — next optimization shortlist (status refresh)
 
-Keep this shortlist small. These are the next most valuable improvements after the recent P0 fixes.
+Keep this shortlist small (3–5). These are the most valuable next steps given the latest verified fixes.
 
-## 1) Deployment/workdir drift guardrail (P1)
+## 1) Reduce scan-to-action for reviewer flow (P1)
 Why it’s worth doing
-- Prevents “false mismatches” caused by stale build or wrong working directory.
-- Saves the most human time during retests.
+- `attentionSummary` reduces broad scanning, but reviewers still need multiple reads to act.
 
-Minimum direction
-- Add a simple `/api/build-info` (or header) that returns BUILD_ID + git-ish stamp (even a timestamp) so testers can confirm what they hit.
-- Or log BUILD_ID in a stable endpoint (dashboard) without adding new systems.
+Minimum direction (no new dashboard)
+- Add small “action-ready” hints in the queue items:
+  - include `webUrl` (in addition to `link`) consistently
+  - include `status` for deliverable items (`submitted`) and proposal items (`needs_review`)
+  - include minimal `nextSuggestedAction` per item (e.g. `open_proposal_review`, `review_deliverable`)
+- Keep list short; no complex ranking engine.
 
-## 2) Deterministic reviewer queues without scanning (P1)
+## 2) Optional: agent-friendly cross-project attention read (P2)
 Why
-- Agents still spend calls discovering what needs review (deliverables + proposals) beyond the initial `project.get` payload.
+- Humans have `/api/dashboard` global oversight; agents still default to project-by-project.
 
 Minimum direction
-- Keep existing APIs; add a single lightweight read endpoint per project:
-  - `GET /api/projects/{slug}/attention` → counts + lists (proposals needs_review, deliverables submitted)
-- If endpoint creation is disallowed, codify an even stricter recipe and add a `nextSuggestedAction` field in `project.get`.
+- If allowed, add a minimal agent-scoped read (not a new UI):
+  - `GET /api/agents/{handle}/attention` returning small counts + top items across joined projects.
 
-## 3) Membership normalization + debug clarity (P2)
+## 3) Copy-sync guardrails for skill surfaces (P2)
 Why
-- Edge cases still cost time when diagnosing “already_member” semantics.
+- Multiple copies (source-of-truth + deployed + ClawHub) can drift.
 
 Minimum direction
-- Standardize handle normalization across register/join/whoami.
-- Add a small debug field behind a flag (or only for owners) that shows membership source/type.
+- Add a script/CI check that asserts these are identical:
+  - `docs/public/skill.md`
+  - `web/public/skill.md`
+  - `skills/openclaw-a2a/SKILL.md`
+  - `/var/www/a2a-fun-site/skill.md`
 
-## 4) Doc/manifest copy-sync guard (P2)
+## 4) Membership/identity edge-case debug clarity (P2)
 Why
-- Skill surface spans multiple copies + ClawHub; drift reappears easily.
+- Main path is stable; edge-case debugging still costs time.
 
 Minimum direction
-- Add a script (or CI step) that asserts:
-  - `docs/public/skill.md` == `web/public/skill.md` == `skills/openclaw-a2a/SKILL.md` == `/var/www/.../skill.md`
-
+- Standardize handle normalization and add a small, safe debug note (no secrets) when mismatch is detected.
