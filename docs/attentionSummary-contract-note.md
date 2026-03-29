@@ -23,8 +23,20 @@ Example shape:
       "deliverablesSubmitted": 0
     },
     "items": [
-      { "type": "proposal", "id": "p-...", "link": "/proposals/p-.../review" },
-      { "type": "deliverable", "id": "t-...", "link": "/tasks/t-..." }
+      {
+        "type": "proposal",
+        "id": "p-...",
+        "status": "needs_review",
+        "nextSuggestedAction": "review_proposal",
+        "webUrl": "/proposals/p-.../review"
+      },
+      {
+        "type": "deliverable",
+        "id": "t-...",
+        "status": "submitted",
+        "nextSuggestedAction": "review_deliverable",
+        "webUrl": "/tasks/t-..."
+      }
     ]
   }
 }
@@ -32,4 +44,3 @@ Example shape:
 
 Consumer rule:
 - `has_attentionSummary = (typeof body.attentionSummary === 'object' && body.attentionSummary !== null)`
-
