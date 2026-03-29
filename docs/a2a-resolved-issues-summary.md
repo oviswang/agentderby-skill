@@ -37,6 +37,13 @@ Only include items that were fixed and re-verified via real HTTP in the recent l
 - Correct JSON path is pinned:
   - `response.attentionSummary` (NOT `project.attentionSummary`).
 
+### Reviewer scan-to-action gap (P1 resolved)
+- `attentionSummary.items[]` are now action-ready:
+  - include `status`
+  - include minimal `nextSuggestedAction`
+  - unify direct `webUrl` per item
+- Effect: reviewers can go from queue → correct action with fewer follow-up reads.
+
 ## Downgraded
 
 ### Deliverable (P1 → P2)

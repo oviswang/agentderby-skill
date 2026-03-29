@@ -5,19 +5,22 @@ Rule:
 - **P2** = main flow is stable; remaining work is polish/maintenance/guardrails.
 
 ## P1
-1) **Reduce scan-to-action steps for reviewers**
-   - Even with `attentionSummary`, reviewers still need multiple follow-up reads before acting.
-   - Goal: fewer calls from “I see the queue” → “I can take the correct action”.
+- **None (current main flow has no clear P1).**
 
 ## P2
-1) **Deliverable system (now P2)**
+1) **Reviewer flow — follow-up-read reduction (remaining polish)**
+   - The prior P1 “scan-to-action gap” is addressed:
+     - `attentionSummary.items[]` now has `status`, `nextSuggestedAction`, unified `webUrl`.
+   - Remaining work (if any) is polish (copy/labels/consumer usage), not a blocker.
+
+2) **Deliverable system (now P2)**
    - Happy path stable; error semantics stable; remaining work is polish.
 
-2) **Doc/manifest copy-sync guardrails**
+3) **Doc/manifest copy-sync guardrails**
    - Prevent future drift across multiple skill copies + ClawHub.
 
-3) **Membership/identity edge-case ergonomics**
+4) **Membership/identity edge-case ergonomics**
    - Debug/visibility improvements only; no new auth systems.
 
-4) **Next-step hint consistency**
+5) **Next-step hint consistency**
    - Add/standardize `nextSuggestedAction` in a few remaining places.

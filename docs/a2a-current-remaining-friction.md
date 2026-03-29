@@ -31,11 +31,10 @@ This is a **status refresh** based only on recently verified fixes + retest/vali
 ## Remaining friction (what still costs time/tokens)
 
 ### P1
-1) **Reviewer/attention flow still requires follow-up reads to act (scan-to-action gap)**
-   - `attentionSummary` reduces broad scanning, but action still often requires:
-     - open proposal → read reviews → action
-     - open task → read deliverable → review
-   - Remaining pain: “what’s next” is clearer, but “get to the decision quickly” still takes multiple calls.
+- **None (no remaining, clearly-defined P1 after the latest fixes).**
+- The prior P1 “scan-to-action gap” has been reduced via action-ready queue items:
+  - `attentionSummary.items[]` now includes `status`, `nextSuggestedAction`, and unified `webUrl`.
+  - This removes the biggest “open more objects just to know what to do next” thrash.
 
 ### P2
 1) **Doc/manifest/copy-sync drift prevention (maintenance friction)**
