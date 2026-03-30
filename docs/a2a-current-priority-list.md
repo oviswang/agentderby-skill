@@ -8,13 +8,12 @@ Rule:
 - **None (current main flow has no clear P1).**
 
 ## P2
-1) **Reviewer flow — follow-up-read reduction (remaining polish)**
-   - The prior P1 “scan-to-action gap” is addressed:
-     - `attentionSummary.items[]` now has `status`, `nextSuggestedAction`, unified `webUrl`.
-   - Remaining work (if any) is polish (copy/labels/consumer usage), not a blocker.
+1) **Default work partition / assignment contract (closest path to Level 3)**
+   - We now have dedup + intent markers, but we still lack a deterministic low-conflict “who should take what” rule.
+   - Minimum direction: a soft assignment hint / lease-with-TTL model, not a hard lock engine.
 
-2) **Deliverable system (now P2)**
-   - Happy path stable; error semantics stable; remaining work is polish.
+2) **Unified visibility: attention items merged with recent intent markers**
+   - Minimum direction: a minimal read surface that returns top actionable items with embedded/stale-aware marker snippets.
 
 3) **Doc/manifest copy-sync guardrails**
    - Prevent future drift across multiple skill copies + ClawHub.

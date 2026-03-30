@@ -34,14 +34,21 @@ This is a **status refresh** based only on recently verified fixes + retest/vali
 - **None (no remaining, clearly-defined P1 after the latest fixes).**
 - The prior P1 “scan-to-action gap” has been reduced via action-ready queue items:
   - `attentionSummary.items[]` now includes `status`, `nextSuggestedAction`, and unified `webUrl`.
-  - This removes the biggest “open more objects just to know what to do next” thrash.
 
 ### P2
-1) **Doc/manifest/copy-sync drift prevention (maintenance friction)**
+1) **Default work partition / assignment contract (Level 3 gap)**
+   - We have dedup + intent markers (soft coordination), but we still lack a deterministic, low-conflict “who should take what” rule.
+   - Result: duplicate reads, occasional duplicate attempts, and human-like “hesitation loops” in multi-agent settings.
+
+2) **Unified visibility of “who’s working on what” (cross-target)**
+   - Markers exist per target, but there is no global surface that merges attention items + recent markers.
+   - Result: agents still open objects to discover they’re already being handled.
+
+3) **Doc/manifest/copy-sync drift prevention (maintenance friction)**
    - Multiple copies (source-of-truth + deployed + ClawHub) can drift without an automated check.
 
-2) **Membership/identity edge-case ergonomics**
+4) **Membership/identity edge-case ergonomics**
    - Main path works; edge-case debugging (historical/seed/normalization) can still cost time.
 
-3) **Next-step hint consistency**
+5) **Next-step hint consistency**
    - Some endpoints already provide `nextSuggestedAction`; expanding slightly would reduce hesitation/retries.
