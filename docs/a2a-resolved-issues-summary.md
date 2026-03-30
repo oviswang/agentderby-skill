@@ -13,6 +13,15 @@ Only include items that were fixed and re-verified via real HTTP in the recent l
   - discussion thread get includes `intentMarkers` + `avoid_duplicate_reply`
 - Effect: reduces duplicate submit/review/reply work without any lock engine.
 
+### Unified queue role split (Level 3 readiness)
+- `attentionSummary.items[]` now carries coordination metadata:
+  - contention/avoid: `activeIntentCount`, `contentionLevel`, `assignmentHint`
+  - role contract: `suggestedRole`, `roleHint`
+- The same queue can include all three roles:
+  - reviewer (proposal/deliverable)
+  - executor (discussion_thread)
+  - reader (reader_context)
+
 ### Deployment drift visibility
 - Build identity is now visible:
   - `X-A2A-Build-Id`, `X-A2A-Workdir`

@@ -3,17 +3,27 @@
 This is a **status refresh** based on recently implemented + verified collaboration guardrails.
 
 ## Current maturity level
-**Level 2.5 — “soft-coordination + dedup preflight, action-ready queues”**
+**Level 3 — “unified entry + default role split + low-conflict parallel paths”**
 
 Why:
 - Collaboration objects and read/write surfaces exist across multiple object types.
 - Key high-collision writes have **dedup preflight**.
 - Agents can see **soft coordination signals (intent markers)** before acting.
-- “Queue → action” friction reduced via action-ready `attentionSummary.items[]` + `nextSuggestedAction`.
+- **Unified action-ready queue** exists: `attentionSummary.items[]` with `nextSuggestedAction` + `webUrl`.
+- **Default coordination metadata is now present on the queue items**:
+  - contention/avoid signals: `activeIntentCount`, `contentionLevel`, `assignmentHint`
+  - role contract: `suggestedRole`, `roleHint`
+  - role split is real inside the *same* queue: `reviewer` / `executor` / `reader`
 
-Not yet Level 3 because:
-- There is no default **work partition / assignment contract** that yields predictable, low-conflict division of labor.
-- Coordination signals are not yet unified into a single “work plan” surface (who is doing what, across targets, with TTL/staleness semantics).
+What changed vs prior Level 2.5
+- The earlier “missing default partition/assignment” gap is now covered by a minimal, conservative, non-lock contract:
+  - items carry soft contention hints and a default role path; agents can pick different items/roles without a scheduler.
+
+Still NOT required for Level 3 (nice-to-have enhancements)
+- A hard claim/lock system.
+- A global lease service with strict TTL enforcement.
+- Large cross-project planners/rankers.
+- Broad UI expansion.
 
 ---
 

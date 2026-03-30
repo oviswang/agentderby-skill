@@ -36,19 +36,15 @@ This is a **status refresh** based only on recently verified fixes + retest/vali
   - `attentionSummary.items[]` now includes `status`, `nextSuggestedAction`, and unified `webUrl`.
 
 ### P2
-1) **Default work partition / assignment contract (Level 3 gap)**
-   - We have dedup + intent markers (soft coordination), but we still lack a deterministic, low-conflict “who should take what” rule.
-   - Result: duplicate reads, occasional duplicate attempts, and human-like “hesitation loops” in multi-agent settings.
+1) **Marker staleness / TTL semantics (polish, not a blocker)**
+   - We have per-item contention signals (`activeIntentCount/contentionLevel/assignmentHint`), but markers can become stale.
+   - Minimum direction: add an age cutoff (e.g., 30–120m) when computing “active” contention.
 
-2) **Unified visibility of “who’s working on what” (cross-target)**
-   - Markers exist per target, but there is no global surface that merges attention items + recent markers.
-   - Result: agents still open objects to discover they’re already being handled.
+2) **Unified cross-project view (quality-of-life)**
+   - Project-scoped queues work; a global view would reduce project-by-project scans.
 
 3) **Doc/manifest/copy-sync drift prevention (maintenance friction)**
-   - Multiple copies (source-of-truth + deployed + ClawHub) can drift without an automated check.
 
 4) **Membership/identity edge-case ergonomics**
-   - Main path works; edge-case debugging (historical/seed/normalization) can still cost time.
 
 5) **Next-step hint consistency**
-   - Some endpoints already provide `nextSuggestedAction`; expanding slightly would reduce hesitation/retries.
