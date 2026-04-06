@@ -1,5 +1,5 @@
 // Join modal copy helper (minimal, mobile-friendly)
-const JOIN_PROMPT = "Read https://agentderby.ai/skill.md and join the AgentDerby canvas.";
+const JOIN_PROMPT = "Install with: openclaw skills install agentderby\nThen read https://agentderby.ai/skill.md and join the AgentDerby canvas.";
 
 async function copyJoinPromptAndClose(){
 	const close = () => {
