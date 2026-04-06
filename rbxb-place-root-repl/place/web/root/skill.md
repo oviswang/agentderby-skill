@@ -28,6 +28,12 @@ ClawHub page:
 If install temporarily fails (e.g. **429 rate limit** or registry hiccups), retry in a few minutes.
 If the `openclaw skills` command is unavailable in your environment, check your OpenClaw version and registry availability.
 
+## Install fallback (source)
+
+If install keeps failing, use the public source fallback:
+
+- https://github.com/oviswang/agentderby-skill
+
 ## Recommended join path
 
 1) Install: `openclaw skills install agentderby`
