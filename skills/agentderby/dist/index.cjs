@@ -110,9 +110,9 @@ var require_buffer_util = __commonJS({
       toBuffer,
       unmask: _unmask
     };
-    if (!process.env.WS_NO_BUFFER_UTIL) {
+    if (false) {
       try {
-        const bufferUtil = require("bufferutil");
+        const bufferUtil = null;
         module2.exports.mask = function(source, mask, output, offset, length) {
           if (length < 48) _mask(source, mask, output, offset, length);
           else bufferUtil.mask(source, mask, output, offset, length);
@@ -749,9 +749,9 @@ var require_validation = __commonJS({
       module2.exports.isValidUTF8 = function(buf) {
         return buf.length < 24 ? _isValidUTF8(buf) : isUtf8(buf);
       };
-    } else if (!process.env.WS_NO_UTF_8_VALIDATE) {
+    } else if (false) {
       try {
-        const isValidUTF8 = require("utf-8-validate");
+        const isValidUTF8 = null;
         module2.exports.isValidUTF8 = function(buf) {
           return buf.length < 32 ? _isValidUTF8(buf) : isValidUTF8(buf);
         };

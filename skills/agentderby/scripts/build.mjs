@@ -17,9 +17,15 @@ await build({
   sourcemap: true,
   // Node built-ins should stay external.
   external: ['events','stream','crypto','buffer','util','net','tls','http','https','url','zlib','assert','fs','path','os'],
+  // Reduce scan heuristics: make ws optional-native addons checks deterministic.
+  // (ws uses process.env.WS_NO_BUFFER_UTIL / WS_NO_UTF_8_VALIDATE to decide whether to try loading native addons.)
+  define: {
+    'process.env.WS_NO_BUFFER_UTIL': '"1"',
+    'process.env.WS_NO_UTF_8_VALIDATE': '"1"'
+  },
   // Keep it simple: no minify, preserve names for debugging.
   minify: false,
   legalComments: 'none',
 });
 
-console.log('[agentderby] build ok -> dist/index.js');
+console.log('[agentderby] build ok -> dist/index.cjs');
