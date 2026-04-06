@@ -1,0 +1,33 @@
+TEST_ID 1775491375669
+R1 { x: 135, y: 40, w: 6, h: 6 }
+R2 { x: 155, y: 40, w: 6, h: 6 }
+1) A.register_agent
+{"ok":true,"presence":{"agent_id":"agent:A:1775491375669","display_name":"Agent A","version":"0.1","last_seen_ts":1775491375749}}
+2) B.register_agent
+{"ok":true,"presence":{"agent_id":"agent:B:1775491375669","display_name":"Agent B","version":"0.1","last_seen_ts":1775491375769}}
+3) A.get_recent_intents
+{"ok":true,"count":0}
+3b) B.get_recent_intents
+{"ok":true,"count":0}
+4) A.claim_region R1
+{"ok":true,"claim":{"claim_id":"clm_1775491375809_2","agent_id":"agent:A:1775491375669","region":{"x":135,"y":40,"w":6,"h":6},"reason":"integration_test","expires_ts":1775491435809}}
+5) B.claim_region overlap R1 -> expect conflict
+{"ok":false,"error":{"code":"CONFLICT","message":"overlaps existing claim","conflicts":[{"claim_id":"clm_1775491375809_2","agent_id":"agent:A:1775491375669","region":{"x":135,"y":40,"w":6,"h":6},"reason":"integration_test","expires_ts":1775491435809}]}}
+6) B.claim_region R2
+{"ok":true,"claim":{"claim_id":"clm_1775491375819_3","agent_id":"agent:B:1775491375669","region":{"x":155,"y":40,"w":6,"h":6},"reason":"integration_test","expires_ts":1775491435819}}
+7) A.draw_pixels in R1 (observe=true)
+{"ok":true,"accepted":true,"observed":true,"results":[{"x":136,"y":41,"color":"#ff0000","ok":true,"accepted":true,"observed":true},{"x":137,"y":41,"color":"#ff0000","ok":true,"accepted":true,"observed":true},{"x":136,"y":42,"color":"#ff0000","ok":true,"accepted":true,"observed":true}]}
+8) B.draw_pixels in R2 (observe=true)
+{"ok":true,"accepted":true,"observed":true,"results":[{"x":156,"y":41,"color":"#0000ff","ok":true,"accepted":true,"observed":true},{"x":157,"y":41,"color":"#0000ff","ok":true,"accepted":true,"observed":true},{"x":156,"y":42,"color":"#0000ff","ok":true,"accepted":true,"observed":true}]}
+9) A.send_chat status (wait_for_broadcast)
+{"ok":true,"accepted":true,"sent":true,"observed_in_buffer":true,"ts":1775491377294,"name":"Q9NC","text":"integration_test 1775491375669 A done: claimed R1 + drew 3 pixels"}
+10) B.send_chat status (wait_for_broadcast)
+{"ok":true,"accepted":true,"sent":true,"observed_in_buffer":true,"ts":1775491377345,"name":"S6MU","text":"integration_test 1775491375669 B done: claimed R2 + drew 3 pixels"}
+11) A.release_region R1
+{"ok":true}
+12) B.release_region R2
+{"ok":true}
+13) list_active_claims -> expect OUR claims released
+{"ok":true,"claims":[{"claim_id":"clm_1775491347681_1","agent_id":"agent:A:1775491347332","region":{"x":40,"y":40,"w":6,"h":6},"reason":"integration_test","expires_ts":1775491407681}]}
+NOTE: active claims not empty due to pre-existing claims (TTL-based): 1
+PASS

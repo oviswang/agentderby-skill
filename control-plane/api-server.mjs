@@ -1295,6 +1295,77 @@ app.use(express.json({ limit: '256kb', verify: (req, res, buf) => { req.rawBody 
 
 app.get('/healthz', (req, res) => res.type('text/plain').send('ok'));
 
+// Funnel reporting (ops)
+// Delta semantics (owner-confirmed): since last report run.
+// State is kept in a small local JSON file (similar to other alert-state files).
+const FUNNEL_STATE_PATH = '/home/ubuntu/.openclaw/workspace/control-plane/data/funnel_state.json';
+
+function loadFunnelState(){
+  try {
+    const raw = fs.readFileSync(FUNNEL_STATE_PATH, 'utf8');
+    const j = JSON.parse(String(raw || '{}'));
+    if (j && typeof j === 'object') return { last_report_ts: j.last_report_ts || null };
+  } catch {}
+  return { last_report_ts: null };
+}
+
+function saveFunnelState(st){
+  try {
+    const dir = path.dirname(FUNNEL_STATE_PATH);
+    try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+    fs.writeFileSync(FUNNEL_STATE_PATH, JSON.stringify({ last_report_ts: st?.last_report_ts || null }, null, 2) + '\n');
+  } catch {}
+}
+
+function clampIsoOrNull(s){
+  const t = String(s || '').trim();
+  if (!t) return null;
+  const ms = Date.parse(t);
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms).toISOString();
+}
+
+// Ops: funnel summary (total + delta since last run)
+// - by default, uses state.last_report_ts
+// - optional override: ?since=<iso> (audit only; does not advance state)
+app.get('/api/ops/funnel/summary', (req, res) => {
+  try {
+    res.set('x-bothook-build', 'funnel-v1');
+    const { db } = openDb();
+
+    const TYPES = [
+      'WEB_VISIT','WEB_CTA_CLICK',
+      'P_VISIT','P_RELINK_CLICK','P_QR_CLICK',
+      'QR_GENERATED','WA_LINKED',
+      'PAY_OPEN','PAYMENT_PAID','PAYMENT_CONFIRMED','PAYMENT_FAILED',
+      'OPENAI_KEY_VERIFIED','CUTOVER_DELIVERED',
+      'SUB_CANCELED','REIMAGE','TERMINATE'
+    ];
+
+    const st = loadFunnelState();
+    const since = clampIsoOrNull(req.query?.since || st.last_report_ts);
+
+    const rows = [];
+    const qTotal = db.prepare('SELECT COUNT(1) AS n FROM events WHERE event_type=?');
+    const qDeltaSince = db.prepare('SELECT COUNT(1) AS n FROM events WHERE event_type=? AND ts > ?');
+
+    for (const t of TYPES) {
+      const total = Number(qTotal.get(t)?.n || 0);
+      const delta = since ? Number(qDeltaSince.get(t, since)?.n || 0) : total;
+      rows.push({ event_type: t, total, delta });
+    }
+
+    const now = nowIso();
+    if (!req.query?.since) {
+      st.last_report_ts = now;
+      saveFunnelState(st);
+    }
+    return send(res, 200, { ok:true, since: since || null, now, rows });
+  } catch {
+    return send(res, 500, { ok:false, error:'server_error' });
+  }
+});
+
 // Web analytics tracking (first-party, minimal)
 // Used for hourly funnel reports and future ads attribution.
 app.post('/api/track', (req, res) => {
