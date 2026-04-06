@@ -219,7 +219,7 @@ body {
 	border: 1px solid rgba(0,0,0,0.35);
 	border-radius: 10px;
 	padding: 10px 12px;
-	margin-top: 10px;
+	margin-top: 16px; /* extra blank-line worth of space under the heading */
 	margin-bottom: 12px;
 	background: rgba(0,0,0,0.04);
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
