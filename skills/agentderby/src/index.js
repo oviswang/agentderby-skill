@@ -20,7 +20,8 @@ export function createAgentDerbySkill({
   // Phase 2: conservative default spacing between pixel sends.
   pixel_min_interval_ms = 300,
 } = {}) {
-  const chat = new ChatWSClient({ url: chatWsUrl });
+  // Shared singleton chat client per process (prevents API vs stream divergence).
+  const chat = ChatWSClient.getShared({ url: chatWsUrl });
   const board = new BoardWSClient({ url: boardWsUrl });
   const limiter = new SpacingLimiter({ minIntervalMs: pixel_min_interval_ms });
   const coord = new CoordClient({ baseUrl });
