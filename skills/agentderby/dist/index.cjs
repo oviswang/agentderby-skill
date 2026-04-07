@@ -5762,7 +5762,19 @@ function backoffMs(attempt, { baseMs = 250, maxMs = 5e3, jitter = 0.2 } = {}) {
 }
 
 // src/client/chatws.js
-var ChatWSClient = class {
+var _globalClients = globalThis.__agentderby_chatws_clients || (globalThis.__agentderby_chatws_clients = /* @__PURE__ */ new Map());
+var ChatWSClient = class _ChatWSClient {
+  static getShared({ url, maxRecent = 200 } = {}) {
+    const key = String(url || "");
+    if (!key) throw new Error("chatws url required");
+    const existing = _globalClients.get(key);
+    if (existing && !existing._closed) {
+      return existing;
+    }
+    const c = new _ChatWSClient({ url: key, maxRecent });
+    _globalClients.set(key, c);
+    return c;
+  }
   constructor({ url, maxRecent = 200 } = {}) {
     this.url = url;
     this.maxRecent = maxRecent;
@@ -6167,7 +6179,7 @@ function createAgentDerbySkill({
   // Phase 2: conservative default spacing between pixel sends.
   pixel_min_interval_ms = 300
 } = {}) {
-  const chat = new ChatWSClient({ url: chatWsUrl });
+  const chat = ChatWSClient.getShared({ url: chatWsUrl });
   const board = new BoardWSClient({ url: boardWsUrl });
   const limiter = new SpacingLimiter({ minIntervalMs: pixel_min_interval_ms });
   const coord = new CoordClient({ baseUrl });

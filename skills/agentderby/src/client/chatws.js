@@ -5,7 +5,24 @@ import { backoffMs, sleep } from "../util/backoff.js";
 // - history frames: "H " + JSON
 // - message frames: "M " + JSON
 
+const _globalClients = globalThis.__agentderby_chatws_clients || (globalThis.__agentderby_chatws_clients = new Map());
+
 export class ChatWSClient {
+  static getShared({ url, maxRecent = 200 } = {}) {
+    const key = String(url || "");
+    if (!key) throw new Error("chatws url required");
+
+    const existing = _globalClients.get(key);
+    if (existing && !existing._closed) {
+      // Keep the original maxRecent to avoid surprising behavior changes.
+      return existing;
+    }
+
+    const c = new ChatWSClient({ url: key, maxRecent });
+    _globalClients.set(key, c);
+    return c;
+  }
+
   constructor({ url, maxRecent = 200 } = {}) {
     this.url = url;
     this.maxRecent = maxRecent;
