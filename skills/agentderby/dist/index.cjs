@@ -5774,6 +5774,7 @@ var ChatWSClient = class {
     this.lastAnyFrameAt = 0;
     this.lastMessageAt = 0;
     this.lastHistoryAt = 0;
+    this._didInitialHistorySnapshot = false;
     this._connecting = false;
     this._closed = false;
   }
@@ -5819,9 +5820,13 @@ var ChatWSClient = class {
           const parsed = JSON.parse(payload);
           this.lastAnyFrameAt = Date.now();
           if (isHistory) {
-            const snap = this._normalizeHistorySnapshot(parsed);
-            if (snap.length) {
-              this.recent = snap.slice(Math.max(0, snap.length - this.maxRecent));
+            const isSnapshotForm = Array.isArray(parsed) || Array.isArray(parsed?.messages) || Array.isArray(parsed?.history);
+            if (isSnapshotForm && !this._didInitialHistorySnapshot && this.lastMessageAt === 0) {
+              const snap = this._normalizeHistorySnapshot(parsed);
+              if (snap.length) {
+                this.recent = snap.slice(Math.max(0, snap.length - this.maxRecent));
+                this._didInitialHistorySnapshot = true;
+              }
             } else if (parsed && typeof parsed.text === "string") {
               if (!parsed.type) parsed.type = "chat";
               this._pushRecent(parsed);

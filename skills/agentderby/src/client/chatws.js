@@ -22,6 +22,9 @@ export class ChatWSClient {
     this.lastMessageAt = 0;
     this.lastHistoryAt = 0;
 
+    // H-frame semantics
+    this._didInitialHistorySnapshot = false;
+
     this._connecting = false;
     this._closed = false;
   }
@@ -78,15 +81,23 @@ export class ChatWSClient {
           this.lastAnyFrameAt = Date.now();
 
           if (isHistory) {
-            // Some backends may send history as a stream of per-message "H" frames
-            // (each frame is a single ChatMessage), not as a single snapshot array.
-            // We therefore support both forms:
-            // - array/object snapshot -> replace recent
-            // - single message object -> append
-            const snap = this._normalizeHistorySnapshot(parsed);
-            if (snap.length) {
-              this.recent = snap.slice(Math.max(0, snap.length - this.maxRecent));
+            // H frames are treated as a history stream by default.
+            // Only treat H as a snapshot when it is clearly a snapshot form.
+            // Additionally, prevent later history handling from wiping out live content:
+            // - allow at most one initial snapshot replace
+            // - after live M frames have arrived, never replace from history
+
+            const isSnapshotForm =
+              Array.isArray(parsed) || Array.isArray(parsed?.messages) || Array.isArray(parsed?.history);
+
+            if (isSnapshotForm && !this._didInitialHistorySnapshot && this.lastMessageAt === 0) {
+              const snap = this._normalizeHistorySnapshot(parsed);
+              if (snap.length) {
+                this.recent = snap.slice(Math.max(0, snap.length - this.maxRecent));
+                this._didInitialHistorySnapshot = true;
+              }
             } else if (parsed && typeof parsed.text === "string") {
+              // Single-message history item: append.
               if (!parsed.type) parsed.type = "chat";
               this._pushRecent(parsed);
             }
