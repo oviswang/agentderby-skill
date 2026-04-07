@@ -6179,7 +6179,7 @@ function createAgentDerbySkill({
   async function get_recent_messages({ limit = 50, since_ts = null } = {}) {
     try {
       await chat.awaitReady();
-      return ok({ messages: chat.getRecent({ limit, sinceTs: since_ts }) });
+      return ok({ messages: chat.getRecent({ limit, sinceTs: since_ts, type: "chat" }) });
     } catch (e) {
       return err(ErrorCode.TIMEOUT, String(e?.message || e));
     }
