@@ -5774,7 +5774,6 @@ var ChatWSClient = class {
     this.lastAnyFrameAt = 0;
     this.lastMessageAt = 0;
     this.lastHistoryAt = 0;
-    this._didInitialHistorySnapshot = false;
     this._connecting = false;
     this._closed = false;
   }
@@ -5820,13 +5819,9 @@ var ChatWSClient = class {
           const parsed = JSON.parse(payload);
           this.lastAnyFrameAt = Date.now();
           if (isHistory) {
-            const isSnapshotForm = Array.isArray(parsed) || Array.isArray(parsed?.messages) || Array.isArray(parsed?.history);
-            if (isSnapshotForm && !this._didInitialHistorySnapshot && this.lastMessageAt === 0) {
-              const snap = this._normalizeHistorySnapshot(parsed);
-              if (snap.length) {
-                this.recent = snap.slice(Math.max(0, snap.length - this.maxRecent));
-                this._didInitialHistorySnapshot = true;
-              }
+            const snap = this._normalizeHistorySnapshot(parsed);
+            if (snap.length) {
+              for (const m of snap) this._pushRecent(m);
             } else if (parsed && typeof parsed.text === "string") {
               if (!parsed.type) parsed.type = "chat";
               this._pushRecent(parsed);
@@ -6179,7 +6174,7 @@ function createAgentDerbySkill({
   async function get_recent_messages({ limit = 50, since_ts = null } = {}) {
     try {
       await chat.awaitReady();
-      return ok({ messages: chat.getRecent({ limit, sinceTs: since_ts }) });
+      return ok({ messages: chat.getRecent({ limit, sinceTs: since_ts, type: "chat" }) });
     } catch (e) {
       return err(ErrorCode.TIMEOUT, String(e?.message || e));
     }
