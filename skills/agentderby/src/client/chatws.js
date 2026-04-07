@@ -6,6 +6,16 @@ import { backoffMs, sleep } from "../util/backoff.js";
 // - message frames: "M " + JSON
 
 const _globalClients = globalThis.__agentderby_chatws_clients || (globalThis.__agentderby_chatws_clients = new Map());
+const _nextClientId = (() => {
+  const k = "__agentderby_chatws_next_id";
+  globalThis[k] = globalThis[k] || 1;
+  return () => globalThis[k]++;
+})();
+
+function _ringPush(arr, item, cap = 50) {
+  arr.push(item);
+  if (arr.length > cap) arr.splice(0, arr.length - cap);
+}
 
 export class ChatWSClient {
   static getShared({ url, maxRecent = 200 } = {}) {
@@ -14,11 +24,14 @@ export class ChatWSClient {
 
     const existing = _globalClients.get(key);
     if (existing && !existing._closed) {
-      // Keep the original maxRecent to avoid surprising behavior changes.
+      existing._sharedKey = key;
+      existing._wasReused = true;
       return existing;
     }
 
     const c = new ChatWSClient({ url: key, maxRecent });
+    c._sharedKey = key;
+    c._wasReused = false;
     _globalClients.set(key, c);
     return c;
   }
@@ -26,6 +39,15 @@ export class ChatWSClient {
   constructor({ url, maxRecent = 200 } = {}) {
     this.url = url;
     this.maxRecent = maxRecent;
+
+    // TEMP TRACE identity
+    this.clientId = `chatws_${_nextClientId()}`;
+    this._sharedKey = null;
+    this._wasReused = null;
+
+    // TEMP TRACE rings
+    this._writeTrace = [];
+    this._readTrace = [];
 
     this.ws = null;
     this.connected = false;
@@ -108,10 +130,10 @@ export class ChatWSClient {
 
             const snap = this._normalizeHistorySnapshot(parsed);
             if (snap.length) {
-              for (const m of snap) this._pushRecent(m);
+              for (const m of snap) this._pushRecent(m, { kind: "H" });
             } else if (parsed && typeof parsed.text === "string") {
               if (!parsed.type) parsed.type = "chat";
-              this._pushRecent(parsed);
+              this._pushRecent(parsed, { kind: "H" });
             }
 
             this.lastHistoryAt = Date.now();
@@ -126,7 +148,7 @@ export class ChatWSClient {
           const msg = parsed;
           if (msg && typeof msg.text === "string") {
             if (!msg.type) msg.type = "chat";
-            this._pushRecent(msg);
+            this._pushRecent(msg, { kind: "M" });
             this.lastMessageAt = Date.now();
             if (this._readyResolve) {
               this._readyResolve();
@@ -155,11 +177,26 @@ export class ChatWSClient {
     });
   }
 
-  _pushRecent(msg) {
+  _pushRecent(msg, meta = null) {
     this.recent.push(msg);
     if (this.recent.length > this.maxRecent) {
       this.recent = this.recent.slice(this.recent.length - this.maxRecent);
     }
+
+    // TEMP TRACE: record write
+    const latestChatTs = Math.max(...this.recent.filter((m) => (m?.type || "chat") === "chat").map((m) => m.ts || 0), 0) || 0;
+    const latestIntentTs = Math.max(...this.recent.filter((m) => (m?.type || "chat") === "intent").map((m) => m.ts || 0), 0) || 0;
+    _ringPush(this._writeTrace, {
+      at: Date.now(),
+      clientId: this.clientId,
+      kind: meta?.kind || null,
+      type: msg?.type || null,
+      ts: msg?.ts || null,
+      appended: true,
+      recentLen: this.recent.length,
+      latestChatTs,
+      latestIntentTs,
+    }, 50);
   }
 
   async awaitReady({ timeoutMs = 4000 } = {}) {
@@ -230,6 +267,25 @@ export class ChatWSClient {
     if (sinceTs != null) xs = xs.filter((m) => (m.ts ?? 0) >= sinceTs);
     if (type) xs = xs.filter((m) => m.type === type);
     if (limit != null) xs = xs.slice(Math.max(0, xs.length - limit));
+
+    // TEMP TRACE: record read
+    const latestChatTs = Math.max(...this.recent.filter((m) => (m?.type || "chat") === "chat").map((m) => m.ts || 0), 0) || 0;
+    const latestIntentTs = Math.max(...this.recent.filter((m) => (m?.type || "chat") === "intent").map((m) => m.ts || 0), 0) || 0;
+    const retMaxTs = Math.max(...xs.map((m) => m.ts || 0), 0) || 0;
+    _ringPush(this._readTrace, {
+      at: Date.now(),
+      clientId: this.clientId,
+      sharedKey: this._sharedKey,
+      readyState: this.ws ? this.ws.readyState : null,
+      connected: !!this.connected,
+      recentLen: this.recent.length,
+      latestChatTs,
+      latestIntentTs,
+      filter: { limit, sinceTs, type },
+      retCount: xs.length,
+      retMaxTs,
+    }, 50);
+
     return xs;
   }
 
