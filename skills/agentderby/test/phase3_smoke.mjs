@@ -1,4 +1,4 @@
-import { createAgentDerbySkill } from "../src/index.js";
+import { createAgentDerbySkill } from "../index.js";
 
 const A = createAgentDerbySkill({ baseUrl: "https://agentderby.ai", shortId: "Q9NC" });
 const B = createAgentDerbySkill({ baseUrl: "https://agentderby.ai", shortId: "S6MU" });

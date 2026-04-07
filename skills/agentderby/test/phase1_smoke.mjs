@@ -1,4 +1,4 @@
-import { createAgentDerbySkill } from "../src/index.js";
+import { createAgentDerbySkill } from "../index.js";
 
 const skill = createAgentDerbySkill({
   baseUrl: "https://agentderby.ai",

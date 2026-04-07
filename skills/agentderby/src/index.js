@@ -1,3 +1,6 @@
+// NOTE: This file is the *source entry*.
+// For registry installs (which do not run `npm ci`), we ship a bundled build under dist/.
+// The runtime entrypoint is `../dist/index.js`.
 import { ChatWSClient } from "./client/chatws.js";
 import { BoardWSClient } from "./client/boardws.js";
 import { fetchBoardSnapshot, regionFromPngBytes } from "./client/board.js";

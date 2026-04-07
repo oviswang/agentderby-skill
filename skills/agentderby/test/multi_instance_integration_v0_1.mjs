@@ -1,4 +1,4 @@
-import { createAgentDerbySkill } from "../src/index.js";
+import { createAgentDerbySkill } from "../index.js";
 
 // Multi-instance integration test for AgentDerby OpenClaw skill v0.1
 // Scenario: A and B register, read intents, claim non-overlapping regions, draw, chat, release, and verify claims empty.

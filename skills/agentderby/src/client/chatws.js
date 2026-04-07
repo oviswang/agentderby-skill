@@ -16,6 +16,15 @@ export class ChatWSClient {
     this._readyResolve = null;
 
     this.recent = []; // ChatMessage[]
+
+    // Freshness/liveness tracking
+    this.lastAnyFrameAt = 0;
+    this.lastMessageAt = 0;
+    this.lastHistoryAt = 0;
+
+    // H-frame semantics
+    this._didInitialHistorySnapshot = false;
+
     this._connecting = false;
     this._closed = false;
   }
@@ -60,24 +69,60 @@ export class ChatWSClient {
 
       ws.on("message", (data) => {
         const s = data.toString();
-        if (s.startsWith("H ") || s.startsWith("M ")) {
-          const payload = s.slice(2);
-          try {
-            const msg = JSON.parse(payload);
-            if (msg && typeof msg.text === "string") {
-              // Ensure type is always present for deterministic filtering.
-              // Messages without type are treated as normal chat.
-              if (!msg.type) msg.type = "chat";
-              this._pushRecent(msg);
-              // Ready after we receive at least one history frame OR first message.
-              if (this._readyResolve) {
-                this._readyResolve();
-                this._readyResolve = null;
+        const isHistory = s.startsWith("H ");
+        const isMessage = s.startsWith("M ");
+        if (!isHistory && !isMessage) return;
+
+        const payload = s.slice(2);
+        try {
+          const parsed = JSON.parse(payload);
+
+          // Update liveness for any valid H/M frame.
+          this.lastAnyFrameAt = Date.now();
+
+          if (isHistory) {
+            // H frames are treated as a history stream by default.
+            // Only treat H as a snapshot when it is clearly a snapshot form.
+            // Additionally, prevent later history handling from wiping out live content:
+            // - allow at most one initial snapshot replace
+            // - after live M frames have arrived, never replace from history
+
+            const isSnapshotForm =
+              Array.isArray(parsed) || Array.isArray(parsed?.messages) || Array.isArray(parsed?.history);
+
+            if (isSnapshotForm && !this._didInitialHistorySnapshot && this.lastMessageAt === 0) {
+              const snap = this._normalizeHistorySnapshot(parsed);
+              if (snap.length) {
+                this.recent = snap.slice(Math.max(0, snap.length - this.maxRecent));
+                this._didInitialHistorySnapshot = true;
               }
+            } else if (parsed && typeof parsed.text === "string") {
+              // Single-message history item: append.
+              if (!parsed.type) parsed.type = "chat";
+              this._pushRecent(parsed);
             }
-          } catch (_) {
-            // ignore
+
+            this.lastHistoryAt = Date.now();
+            if (this._readyResolve) {
+              this._readyResolve();
+              this._readyResolve = null;
+            }
+            return;
           }
+
+          // Live message frame
+          const msg = parsed;
+          if (msg && typeof msg.text === "string") {
+            if (!msg.type) msg.type = "chat";
+            this._pushRecent(msg);
+            this.lastMessageAt = Date.now();
+            if (this._readyResolve) {
+              this._readyResolve();
+              this._readyResolve = null;
+            }
+          }
+        } catch (_) {
+          // ignore
         }
       });
 
@@ -121,7 +166,54 @@ export class ChatWSClient {
     }
   }
 
-  getRecent({ limit = 50, sinceTs = null, type = null } = {}) {
+  _normalizeHistorySnapshot(parsed) {
+    // Backend may send history as:
+    // - an array of messages
+    // - { messages: [...] }
+    // - { history: [...] }
+    const arr = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.messages)
+        ? parsed.messages
+        : Array.isArray(parsed?.history)
+          ? parsed.history
+          : [];
+
+    const out = [];
+    for (const m of arr) {
+      if (!m || typeof m.text !== "string") continue;
+      if (!m.type) m.type = "chat";
+      out.push(m);
+    }
+    return out;
+  }
+
+  _ensureFreshOrReconnect({ maxStaleMs = 15000 } = {}) {
+    if (this._closed) return;
+
+    const ws = this.ws;
+    const open = !!ws && ws.readyState === WebSocket.OPEN;
+
+    // If we've never seen any frames yet, don't aggressively churn the socket.
+    // Let awaitReady() handle initial connect/ready.
+    if (!this.lastAnyFrameAt) return;
+
+    const stale = Date.now() - this.lastAnyFrameAt > maxStaleMs;
+
+    if (!open || stale) {
+      // Best-effort: close and reconnect.
+      try {
+        ws?.close();
+      } catch {}
+      this.connected = false;
+      this.ws = null;
+      this.connect().catch(() => {});
+    }
+  }
+
+  getRecent({ limit = 50, sinceTs = null, type = null, maxStaleMs = 15000 } = {}) {
+    this._ensureFreshOrReconnect({ maxStaleMs });
+
     let xs = this.recent;
     if (sinceTs != null) xs = xs.filter((m) => (m.ts ?? 0) >= sinceTs);
     if (type) xs = xs.filter((m) => m.type === type);
