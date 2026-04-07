@@ -208,6 +208,31 @@ export function createAgentDerbySkill({
     return coord.heartbeat({ agent_id });
   }
 
+  // TEMP TRACE: expose shared-client truth path snapshot
+  async function get_debug_truth_trace() {
+    // best-effort connect so readyState/connected is meaningful
+    try { await chat.connect(); } catch {}
+
+    const latestChatTs = Math.max(...(chat.recent || []).filter((m) => (m?.type || "chat") === "chat").map((m) => m.ts || 0), 0) || null;
+    const latestIntentTs = Math.max(...(chat.recent || []).filter((m) => (m?.type || "chat") === "intent").map((m) => m.ts || 0), 0) || null;
+
+    return ok({
+      clientId: chat.clientId || null,
+      sharedKey: chat._sharedKey || null,
+      wasReused: chat._wasReused ?? null,
+      readyState: chat.ws ? chat.ws.readyState : null,
+      connected: !!chat.connected,
+      lastAnyFrameAt: chat.lastAnyFrameAt || null,
+      lastHistoryAt: chat.lastHistoryAt || null,
+      lastMessageAt: chat.lastMessageAt || null,
+      recentLen: Array.isArray(chat.recent) ? chat.recent.length : null,
+      latestChatTs,
+      latestIntentTs,
+      writeTrace: Array.isArray(chat._writeTrace) ? chat._writeTrace.slice(-10) : [],
+      readTrace: Array.isArray(chat._readTrace) ? chat._readTrace.slice(-10) : [],
+    });
+  }
+
   return {
     // Phase 1 APIs
     get_recent_messages,
@@ -216,6 +241,9 @@ export function createAgentDerbySkill({
     send_intent,
     get_board_snapshot,
     get_region,
+
+    // TEMP TRACE
+    get_debug_truth_trace,
 
     // Phase 2 APIs
     draw_pixel,
