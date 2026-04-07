@@ -6316,29 +6316,6 @@ function createAgentDerbySkill({
     if (!agent_id) return err(ErrorCode.INVALID, "agent_id required");
     return coord.heartbeat({ agent_id });
   }
-  async function get_debug_chat_state() {
-    try {
-      try {
-        await chat.connect();
-      } catch {
-      }
-      const rs = chat.ws ? chat.ws.readyState : null;
-      const latestChatTs = Math.max(...(chat.recent || []).filter((m) => (m?.type || "chat") === "chat").map((m) => m.ts || 0), 0) || null;
-      const latestIntentTs = Math.max(...(chat.recent || []).filter((m) => (m?.type || "chat") === "intent").map((m) => m.ts || 0), 0) || null;
-      return ok({
-        readyState: rs,
-        connected: !!chat.connected,
-        lastAnyFrameAt: chat.lastAnyFrameAt || null,
-        lastHistoryAt: chat.lastHistoryAt || null,
-        lastMessageAt: chat.lastMessageAt || null,
-        recentLen: Array.isArray(chat.recent) ? chat.recent.length : null,
-        latestChatTs,
-        latestIntentTs
-      });
-    } catch (e) {
-      return err(ErrorCode.BACKEND, String(e?.message || e));
-    }
-  }
   return {
     // Phase 1 APIs
     get_recent_messages,
@@ -6347,8 +6324,6 @@ function createAgentDerbySkill({
     send_intent,
     get_board_snapshot,
     get_region,
-    // TEMP DEBUG
-    get_debug_chat_state,
     // Phase 2 APIs
     draw_pixel,
     draw_pixels,
