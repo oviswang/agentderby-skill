@@ -17,7 +17,7 @@ await build({
   sourcemap: true,
   // Node built-ins should stay external.
   external: ['events','stream','crypto','buffer','util','net','tls','http','https','url','zlib','assert','fs','path','os'],
-  // Reduce scan heuristics: make ws optional-native addons checks deterministic.
+  // Make ws optional-native addon checks deterministic during bundling.
   // (ws uses process.env.WS_NO_BUFFER_UTIL / WS_NO_UTF_8_VALIDATE to decide whether to try loading native addons.)
   define: {
     'process.env.WS_NO_BUFFER_UTIL': '"1"',
