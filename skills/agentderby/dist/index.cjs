@@ -5771,6 +5771,9 @@ var ChatWSClient = class {
     this._ready = null;
     this._readyResolve = null;
     this.recent = [];
+    this.lastAnyFrameAt = 0;
+    this.lastMessageAt = 0;
+    this.lastHistoryAt = 0;
     this._connecting = false;
     this._closed = false;
   }
@@ -5808,20 +5811,39 @@ var ChatWSClient = class {
       });
       ws.on("message", (data) => {
         const s = data.toString();
-        if (s.startsWith("H ") || s.startsWith("M ")) {
-          const payload = s.slice(2);
-          try {
-            const msg = JSON.parse(payload);
-            if (msg && typeof msg.text === "string") {
-              if (!msg.type) msg.type = "chat";
-              this._pushRecent(msg);
-              if (this._readyResolve) {
-                this._readyResolve();
-                this._readyResolve = null;
-              }
+        const isHistory = s.startsWith("H ");
+        const isMessage = s.startsWith("M ");
+        if (!isHistory && !isMessage) return;
+        const payload = s.slice(2);
+        try {
+          const parsed = JSON.parse(payload);
+          this.lastAnyFrameAt = Date.now();
+          if (isHistory) {
+            const snap = this._normalizeHistorySnapshot(parsed);
+            if (snap.length) {
+              this.recent = snap.slice(Math.max(0, snap.length - this.maxRecent));
+            } else if (parsed && typeof parsed.text === "string") {
+              if (!parsed.type) parsed.type = "chat";
+              this._pushRecent(parsed);
             }
-          } catch (_) {
+            this.lastHistoryAt = Date.now();
+            if (this._readyResolve) {
+              this._readyResolve();
+              this._readyResolve = null;
+            }
+            return;
           }
+          const msg = parsed;
+          if (msg && typeof msg.text === "string") {
+            if (!msg.type) msg.type = "chat";
+            this._pushRecent(msg);
+            this.lastMessageAt = Date.now();
+            if (this._readyResolve) {
+              this._readyResolve();
+              this._readyResolve = null;
+            }
+          }
+        } catch (_) {
         }
       });
       ws.on("close", () => {
@@ -5859,7 +5881,35 @@ var ChatWSClient = class {
       clearTimeout(t);
     }
   }
-  getRecent({ limit = 50, sinceTs = null, type = null } = {}) {
+  _normalizeHistorySnapshot(parsed) {
+    const arr = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.messages) ? parsed.messages : Array.isArray(parsed?.history) ? parsed.history : [];
+    const out = [];
+    for (const m of arr) {
+      if (!m || typeof m.text !== "string") continue;
+      if (!m.type) m.type = "chat";
+      out.push(m);
+    }
+    return out;
+  }
+  _ensureFreshOrReconnect({ maxStaleMs = 15e3 } = {}) {
+    if (this._closed) return;
+    const ws = this.ws;
+    const open = !!ws && ws.readyState === wrapper_default.OPEN;
+    if (!this.lastAnyFrameAt) return;
+    const stale = Date.now() - this.lastAnyFrameAt > maxStaleMs;
+    if (!open || stale) {
+      try {
+        ws?.close();
+      } catch {
+      }
+      this.connected = false;
+      this.ws = null;
+      this.connect().catch(() => {
+      });
+    }
+  }
+  getRecent({ limit = 50, sinceTs = null, type = null, maxStaleMs = 15e3 } = {}) {
+    this._ensureFreshOrReconnect({ maxStaleMs });
     let xs = this.recent;
     if (sinceTs != null) xs = xs.filter((m) => (m.ts ?? 0) >= sinceTs);
     if (type) xs = xs.filter((m) => m.type === type);
