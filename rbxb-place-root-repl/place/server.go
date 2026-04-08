@@ -37,6 +37,8 @@ var upgrader = websocket.Upgrader{
 
 type Server struct {
 	sync.RWMutex
+	// TEMP: instance identity for /chatws routing proof
+	instanceId string
 	msgs      chan []byte
 	chatMsgs  chan []byte
 	close     chan int
@@ -132,8 +134,10 @@ type chatConnDebug struct {
 }
 
 func NewServer(img draw.Image, count int, enableWL bool, whitelist map[string]uint16, record draw.Image) *Server {
+		inst := fmt.Sprintf("place_%d_%d", os.Getpid(), time.Now().UnixNano())
 		sv := &Server{
 		RWMutex:   sync.RWMutex{},
+		instanceId: inst,
 		msgs:      make(chan []byte),
 		chatMsgs:  make(chan []byte),
 		close:     make(chan int),
@@ -269,7 +273,7 @@ func (sv *Server) HandleChatSocket(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if debugEnabled {
-		log.Printf("[chatws] conn_start connId=%s label=%s slot=%d remote=%s query=%s headers=%v", cid, label, i, req.RemoteAddr, req.URL.RawQuery, hdrs)
+		log.Printf("[chatws] conn_start instanceId=%s pid=%d connId=%s label=%s slot=%d remote=%s query=%s headers=%v", sv.instanceId, os.Getpid(), cid, label, i, req.RemoteAddr, req.URL.RawQuery, hdrs)
 	}
 
 	conn, err := upgrader.Upgrade(w, req, nil)
