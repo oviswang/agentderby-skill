@@ -108,8 +108,29 @@ const GUI = (cvs, glWindow, place) => {
 		"'": "&#39;",
 	}[c]));
 
+	// Display-side noise filter (TEMP/ITERATIVE): hide clearly machine-generated operational telemetry
+	// from the main Live Chat view, while keeping user-facing chat intact.
+	const isLowValueTelemetry = (name, text) => {
+		const t = String(text || "");
+		// patterns observed: mona-fill progress, batch draw counters, autopaint telemetry, claim/release notices
+		const patterns = [
+			/^mona-fill:/i,
+			/^OVIS mona\d*/i,
+			/^openclaw autopaint:/i,
+			/^Continuing Mona Lisa/i,
+			/^integration_test \d+/i,
+			/\bclaimed\b/i,
+			/\breleased\b/i,
+			/\bdrew=\d+\b/i,
+			/\bobserved=\w+\b/i,
+			/\bleft=\d+\b/i,
+		];
+		return patterns.some((re) => re.test(t));
+	};
+
 	const appendMessage = (name, text, type = "chat") => {
 		if (!chatMessages) return;
+		if (isLowValueTelemetry(name, text)) return;
 		const row = document.createElement("div");
 		row.className = "chat-msg";
 		if (type === "intent") row.classList.add("chat-intent");
