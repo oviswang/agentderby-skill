@@ -148,14 +148,93 @@ const GUI = (cvs, glWindow, place) => {
 		}
 	};
 
+	// Group repetitive telemetry into compact summaries.
+	// Keyed by a stable signature derived from (name + normalized pattern).
+	const activityGroups = new Map();
+	const activityOrder = []; // signatures in recency order
+
+	const activitySignature = (name, text) => {
+		const t = String(text || "");
+		if (/^mona-fill:/i.test(t)) return `${name}|mona-fill`;
+		if (/^OVIS mona\d*/i.test(t)) return `${name}|ovis-mona`;
+		if (/^openclaw autopaint:/i.test(t)) return `${name}|autopaint`;
+		if (/^Continuing Mona Lisa/i.test(t)) return `${name}|continuing-mona`;
+		if (/^integration_test \d+/i.test(t)) return `${name}|integration_test`;
+		// fallback: group generic operational tokens by sender
+		if (/\b(drew=\d+|observed=\w+|left=\d+|claimed|released)\b/i.test(t)) return `${name}|ops`;
+		return null; // not groupable
+	};
+
+	const renderActivityGroup = (g) => {
+		const label = g.label;
+		const lastText = g.items[g.items.length - 1]?.text || "";
+		const count = g.items.length;
+		g.row.innerHTML = `
+			<div style="display:flex; justify-content:space-between; gap:10px;">
+				<div><span class="chat-name">${escapeHtml(g.name)}</span> <span style="opacity:.85">${escapeHtml(label)}</span></div>
+				<div style="opacity:.75; font-weight:700;">×${count}</div>
+			</div>
+			<div style="opacity:.85; margin-top:2px;">${escapeHtml(lastText)}</div>
+		`;
+		if (g.body) {
+			g.body.innerHTML = g.items
+				.slice(-30)
+				.map((it) => `<div class="chat-activity-msg" style="margin-bottom:4px;">${escapeHtml(it.text)}</div>`)
+				.join('');
+		}
+	};
+
 	const appendActivity = (name, text) => {
 		if (!chatActivityBody) return;
+
+		const sig = activitySignature(name, text);
+		if (sig) {
+			let g = activityGroups.get(sig);
+			if (!g) {
+				const label = sig.split('|')[1].replace(/_/g,' ');
+				const row = document.createElement('div');
+				row.className = 'chat-activity-msg';
+				row.style.border = '1px solid rgba(0,0,0,0.15)';
+				row.style.borderRadius = '8px';
+				row.style.padding = '8px 10px';
+				row.style.marginBottom = '8px';
+				row.style.background = 'rgba(255,255,255,0.6)';
+
+				const body = document.createElement('div');
+				body.style.display = 'none';
+				body.style.marginTop = '6px';
+				body.style.borderTop = '1px solid rgba(0,0,0,0.12)';
+				body.style.paddingTop = '6px';
+
+				row.addEventListener('click', () => {
+					const open = body.style.display !== 'none';
+					body.style.display = open ? 'none' : 'block';
+				});
+
+				chatActivityBody.appendChild(row);
+				chatActivityBody.appendChild(body);
+
+				g = { sig, name, label, row, body, items: [] };
+				activityGroups.set(sig, g);
+				activityOrder.push(sig);
+			}
+
+			g.items.push({ at: Date.now(), text: String(text || "") });
+			// cap per-group
+			if (g.items.length > 200) g.items.splice(0, g.items.length - 200);
+			renderActivityGroup(g);
+
+			activityCount++;
+			bumpActivityBadge();
+			return;
+		}
+
+		// Not groupable: append as-is
 		const row = document.createElement('div');
 		row.className = 'chat-activity-msg';
 		row.innerHTML = `<span class="chat-name">${escapeHtml(name)}</span>: ${escapeHtml(text)}`;
 		chatActivityBody.appendChild(row);
-		// keep last ~200 rows
-		while (chatActivityBody.children.length > 200) {
+		while (chatActivityBody.children.length > 400) {
 			chatActivityBody.removeChild(chatActivityBody.firstChild);
 		}
 		activityCount++;
