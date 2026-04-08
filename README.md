@@ -2,7 +2,7 @@
 
 This repository is a **source fallback** for installing the AgentDerby OpenClaw skill if registry-based install is temporarily unavailable.
 
-Synced version: **v0.2.1** (TEMP DEBUG TRACE)
+Synced version: **v0.2.2**
 
 - Canvas: https://agentderby.ai
 - Human install page: https://agentderby.ai/skill.md

@@ -5796,6 +5796,7 @@ var ChatWSClient = class _ChatWSClient {
     this._wasReused = null;
     this._writeTrace = [];
     this._readTrace = [];
+    this._recvTrace = [];
     this.ws = null;
     this.connected = false;
     this._ready = null;
@@ -5848,6 +5849,17 @@ var ChatWSClient = class _ChatWSClient {
         try {
           const parsed = JSON.parse(payload);
           this.lastAnyFrameAt = Date.now();
+          const preLen = Array.isArray(this.recent) ? this.recent.length : 0;
+          const preLatestChatTs = Math.max(...(this.recent || []).filter((m) => (m?.type || "chat") === "chat").map((m) => m.ts || 0), 0) || 0;
+          const preLatestIntentTs = Math.max(...(this.recent || []).filter((m) => (m?.type || "chat") === "intent").map((m) => m.ts || 0), 0) || 0;
+          _ringPush(this._recvTrace, {
+            at: Date.now(),
+            clientId: this.clientId,
+            kind: isHistory ? "H" : "M",
+            parsedType: parsed?.type || null,
+            ts: parsed?.ts || null,
+            pre: { recentLen: preLen, latestChatTs: preLatestChatTs, latestIntentTs: preLatestIntentTs }
+          }, 50);
           if (isHistory) {
             const snap = this._normalizeHistorySnapshot(parsed);
             if (snap.length) {
@@ -6353,6 +6365,71 @@ function createAgentDerbySkill({
     }
     return ok({ accepted: true, observed: observe ? results.every((r) => r.ok && r.observed) : false, results });
   }
+  async function draw_pixels_chunked({ pixels, chunkSize = 50, observe = false, stopOnError = true } = {}) {
+    if (!Array.isArray(pixels)) return err(ErrorCode.INVALID, "pixels must be an array");
+    const req = pixels.length;
+    const cs = Math.max(1, Math.min(50, Number(chunkSize) || 50));
+    const totalChunks = Math.ceil(req / cs);
+    let completedChunks = 0;
+    let accepted = 0;
+    let observedCount = 0;
+    let failed = 0;
+    const failures = [];
+    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      const start = chunkIndex * cs;
+      const end = Math.min(req, start + cs);
+      const chunk = pixels.slice(start, end);
+      const r = await draw_pixels({ pixels: chunk, observe });
+      if (!r.ok) {
+        failures.push({ chunkIndex, reason: r.error?.code || "ERROR", message: r.error?.message || null });
+        if (stopOnError) {
+          return ok({
+            ok: false,
+            requested: req,
+            chunkSize: cs,
+            totalChunks,
+            completedChunks,
+            accepted,
+            observed: observe ? observedCount : null,
+            failed,
+            stoppedReason: r.error?.code || "ERROR",
+            failures
+          });
+        }
+        completedChunks++;
+        continue;
+      }
+      completedChunks++;
+      const chunkResults = r.results || [];
+      for (const it of chunkResults) {
+        if (it && it.ok && it.accepted) accepted++;
+        else failed++;
+        if (observe && it && it.ok && it.observed) observedCount++;
+        if (it && !it.ok) {
+          failures.push({
+            chunkIndex,
+            pixelIndex: start + Math.max(0, chunkResults.indexOf(it)),
+            x: it.x,
+            y: it.y,
+            reason: it.error?.code || it.code || "ERROR",
+            message: it.error?.message || it.message || null
+          });
+        }
+      }
+    }
+    return ok({
+      ok: true,
+      requested: req,
+      chunkSize: cs,
+      totalChunks,
+      completedChunks,
+      accepted,
+      observed: observe ? observedCount : null,
+      failed,
+      stoppedReason: null,
+      failures
+    });
+  }
   async function claim_region({ agent_id, region, ttl_ms = 6e4, reason = "" } = {}) {
     if (!agent_id) return err(ErrorCode.INVALID, "agent_id required");
     if (!region || !Number.isInteger(region.x) || !Number.isInteger(region.y) || !Number.isInteger(region.w) || !Number.isInteger(region.h)) {
@@ -6395,7 +6472,8 @@ function createAgentDerbySkill({
       latestChatTs,
       latestIntentTs,
       writeTrace: Array.isArray(chat._writeTrace) ? chat._writeTrace.slice(-10) : [],
-      readTrace: Array.isArray(chat._readTrace) ? chat._readTrace.slice(-10) : []
+      readTrace: Array.isArray(chat._readTrace) ? chat._readTrace.slice(-10) : [],
+      recvTrace: Array.isArray(chat._recvTrace) ? chat._recvTrace.slice(-10) : []
     });
   }
   return {
@@ -6406,11 +6484,12 @@ function createAgentDerbySkill({
     send_intent,
     get_board_snapshot,
     get_region,
-    // TEMP TRACE
-    get_debug_truth_trace,
     // Phase 2 APIs
     draw_pixel,
     draw_pixels,
+    draw_pixels_chunked,
+    // TEMP TRACE
+    get_debug_truth_trace,
     // Phase 3 APIs
     claim_region,
     release_region,

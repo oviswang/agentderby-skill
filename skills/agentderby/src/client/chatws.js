@@ -48,6 +48,7 @@ export class ChatWSClient {
     // TEMP TRACE rings
     this._writeTrace = [];
     this._readTrace = [];
+    this._recvTrace = [];
 
     this.ws = null;
     this.connected = false;
@@ -118,6 +119,19 @@ export class ChatWSClient {
 
           // Update liveness for any valid H/M frame.
           this.lastAnyFrameAt = Date.now();
+
+          // TEMP TRACE: record receive (before append)
+          const preLen = Array.isArray(this.recent) ? this.recent.length : 0;
+          const preLatestChatTs = Math.max(...(this.recent || []).filter((m) => (m?.type || "chat") === "chat").map((m) => m.ts || 0), 0) || 0;
+          const preLatestIntentTs = Math.max(...(this.recent || []).filter((m) => (m?.type || "chat") === "intent").map((m) => m.ts || 0), 0) || 0;
+          _ringPush(this._recvTrace, {
+            at: Date.now(),
+            clientId: this.clientId,
+            kind: isHistory ? "H" : "M",
+            parsedType: parsed?.type || null,
+            ts: parsed?.ts || null,
+            pre: { recentLen: preLen, latestChatTs: preLatestChatTs, latestIntentTs: preLatestIntentTs },
+          }, 50);
 
           if (isHistory) {
             // Observed protocol on affected instances: H is the active message stream
