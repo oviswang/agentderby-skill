@@ -60,6 +60,11 @@ type Server struct {
 	geoipCountryCache map[string]string // ip string -> country code
 	geoipHTTP *http.Client
 
+	// chatws per-connection debug (TEMP)
+	chatDebugMu sync.Mutex
+	chatDebugNextID uint64
+	chatDebug map[int]*chatConnDebug
+
 	// --- Phase 3: coordination (in-memory + TTL only; not durable) ---
 	coordMu sync.Mutex
 	claims map[string]*RegionClaim
@@ -88,6 +93,44 @@ type AgentPresence struct {
 	LastSeenTS int64 `json:"last_seen_ts"`
 }
 
+// --- ChatWS TEMP per-connection debug ---
+
+type chatConnDebug struct {
+	connId string
+	label string
+	remote string
+	query string
+	headers map[string]string
+	slot int
+	enabled bool
+
+	// replay stats
+	replayCount int
+	replayMaxTS int64
+	replayChatCount int
+	replayIntentCount int
+
+	// live delivery stats (since connect)
+	liveDropCount int
+	liveChatCount int
+	liveIntentCount int
+	liveChatMaxTS int64
+	liveIntentMaxTS int64
+
+	// delivered frame counters
+	hChat int
+	hIntent int
+	mChat int
+	mIntent int
+	hChatMaxTS int64
+	hIntentMaxTS int64
+	mChatMaxTS int64
+	mIntentMaxTS int64
+
+	connectedAt int64
+	lastFanoutAt int64
+}
+
 func NewServer(img draw.Image, count int, enableWL bool, whitelist map[string]uint16, record draw.Image) *Server {
 		sv := &Server{
 		RWMutex:   sync.RWMutex{},
@@ -109,6 +152,7 @@ func NewServer(img draw.Image, count int, enableWL bool, whitelist map[string]ui
 		geoipHTTP: &http.Client{Timeout: 2 * time.Second},
 		claims: map[string]*RegionClaim{},
 		presence: map[string]*AgentPresence{},
+		chatDebug: map[int]*chatConnDebug{},
 	}
 	// GeoIP: external lookup (api.country.is) with in-memory caching; no raw IP persisted/broadcast.
 	go sv.broadcastLoop()
@@ -194,6 +238,10 @@ func (sv *Server) HandleChatSocket(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	// TEMP debug toggle
+	label := req.URL.Query().Get("debugConn")
+	debugEnabled := label != ""
+
 	// Reserve a slot briefly under lock, but do NOT hold lock during websocket upgrade.
 	sv.Lock()
 	i := sv.getChatConnIndex()
@@ -205,6 +253,24 @@ func (sv *Server) HandleChatSocket(w http.ResponseWriter, req *http.Request) {
 	// Reserve the slot with a placeholder to prevent races.
 	sv.chatClients[i] = make(chan []byte, 1)
 	sv.Unlock()
+
+	// Assign a per-connection id (even if debug not enabled, for internal mapping)
+	sv.chatDebugMu.Lock()
+	sv.chatDebugNextID++
+	cid := fmt.Sprintf("chatws_%d", sv.chatDebugNextID)
+	sv.chatDebugMu.Unlock()
+
+	// capture minimal request metadata
+	hdrs := map[string]string{}
+	for _, hk := range []string{"User-Agent", "X-Forwarded-For", "X-Real-IP"} {
+		if v := req.Header.Get(hk); v != "" {
+			hdrs[hk] = v
+		}
+	}
+
+	if debugEnabled {
+		log.Printf("[chatws] conn_start connId=%s label=%s slot=%d remote=%s query=%s headers=%v", cid, label, i, req.RemoteAddr, req.URL.RawQuery, hdrs)
+	}
 
 	conn, err := upgrader.Upgrade(w, req, nil)
 	if err != nil {
@@ -229,8 +295,17 @@ func (sv *Server) HandleChatSocket(w http.ResponseWriter, req *http.Request) {
 	sv.chatClients[i] = ch
 	sv.Unlock()
 
+	// register debug record
+	sv.chatDebugMu.Lock()
+	sv.chatDebug[i] = &chatConnDebug{connId: cid, label: label, remote: req.RemoteAddr, query: req.URL.RawQuery, headers: hdrs, slot: i, enabled: debugEnabled, connectedAt: time.Now().UnixMilli()}
+	sv.chatDebugMu.Unlock()
+
+	if debugEnabled {
+		log.Printf("[chatws] attached connId=%s label=%s slot=%d", cid, label, i)
+	}
+
 	go sv.chatReadLoop(conn, i, cc, maskedIP, ipHash)
-	go sv.chatWriteLoop(conn, ch)
+	go sv.chatWriteLoop(conn, i, ch)
 }
 
 // --- Chat: trusted client IP + coarse country (no raw IP persisted/broadcast) ---
@@ -492,19 +567,109 @@ func (sv *Server) getChatConnIndex() int {
 	return -1
 }
 
-func (sv *Server) chatWriteLoop(conn *websocket.Conn, ch chan []byte) {
+func (sv *Server) chatWriteLoop(conn *websocket.Conn, slot int, ch chan []byte) {
 	// on connect: send history snapshot
 	sv.chatMu.Lock()
 	sv.loadChatHistoryLocked()
 	h := make([][]byte, len(sv.chatHistory))
 	copy(h, sv.chatHistory)
 	sv.chatMu.Unlock()
+	// replay stats (TEMP debug)
+	replayCount := 0
+	replayMaxTS := int64(0)
+	replayChatCount := 0
+	replayIntentCount := 0
 	for _, ln := range h {
+		replayCount++
+		// best-effort parse for ts/type
+		var mm map[string]interface{}
+		if err := json.Unmarshal(ln, &mm); err == nil {
+			if tv, ok := mm["ts"].(float64); ok {
+				ts := int64(tv)
+				if ts > replayMaxTS {
+					replayMaxTS = ts
+				}
+			}
+			tp, _ := mm["type"].(string)
+			if tp == "intent" {
+				replayIntentCount++
+			} else {
+				replayChatCount++
+			}
+		}
 		_ = conn.WriteMessage(websocket.TextMessage, append([]byte("H "), ln...))
 	}
 
+	// store replay debug
+	sv.chatDebugMu.Lock()
+	if d := sv.chatDebug[slot]; d != nil {
+		d.replayCount = replayCount
+		d.replayMaxTS = replayMaxTS
+		d.replayChatCount = replayChatCount
+		d.replayIntentCount = replayIntentCount
+		if d.enabled {
+			log.Printf("[chatws] replay connId=%s label=%s slot=%d count=%d maxTs=%d chat=%d intent=%d", d.connId, d.label, slot, replayCount, replayMaxTS, replayChatCount, replayIntentCount)
+		}
+	}
+	sv.chatDebugMu.Unlock()
+
 	for {
 		if p, ok := <-ch; ok {
+			// frame delivery counters (TEMP debug)
+			if len(p) > 2 {
+				kind := string(p[:2]) // "H " or "M "
+				var mm map[string]interface{}
+				if err := json.Unmarshal(p[2:], &mm); err == nil {
+					tp, _ := mm["type"].(string)
+					var ts int64
+					if tv, ok := mm["ts"].(float64); ok {
+						ts = int64(tv)
+					}
+					sv.chatDebugMu.Lock()
+					if d := sv.chatDebug[slot]; d != nil {
+						d.lastFanoutAt = time.Now().UnixMilli()
+						if kind == "H " {
+							if tp == "intent" {
+								d.hIntent++
+								if ts > d.hIntentMaxTS {
+									d.hIntentMaxTS = ts
+								}
+							} else {
+								d.hChat++
+								if ts > d.hChatMaxTS {
+									d.hChatMaxTS = ts
+								}
+							}
+						} else if kind == "M " {
+							if tp == "intent" {
+								d.mIntent++
+								if ts > d.mIntentMaxTS {
+									d.mIntentMaxTS = ts
+								}
+							} else {
+								d.mChat++
+								if ts > d.mChatMaxTS {
+									d.mChatMaxTS = ts
+								}
+							}
+							// live aggregate stats
+							if tp == "intent" {
+								d.liveIntentCount++
+								if ts > d.liveIntentMaxTS {
+									d.liveIntentMaxTS = ts
+								}
+							} else {
+								d.liveChatCount++
+								if ts > d.liveChatMaxTS {
+									d.liveChatMaxTS = ts
+								}
+							}
+						}
+					}
+					sv.chatDebugMu.Unlock()
+				}
+			}
+
 			_ = conn.WriteMessage(websocket.TextMessage, p)
 		} else {
 			break
@@ -589,13 +754,29 @@ func (sv *Server) chatBroadcastLoop() {
 				close(sv.chatClients[i])
 				sv.chatClients[i] = nil
 			}
+			sv.chatDebugMu.Lock()
+			d := sv.chatDebug[i]
+			delete(sv.chatDebug, i)
+			sv.chatDebugMu.Unlock()
+			if d != nil && d.enabled {
+				log.Printf("[chatws] conn_close connId=%s label=%s slot=%d", d.connId, d.label, i)
+			}
 		case p := <-sv.chatMsgs:
-			for _, ch := range sv.chatClients {
+			for i, ch := range sv.chatClients {
 				if ch != nil {
 					select {
 					case ch <- p:
+						// ok
 					default:
 						// Fix C: slow client. Drop this one message but keep the client attached.
+						sv.chatDebugMu.Lock()
+						if d := sv.chatDebug[i]; d != nil {
+							d.liveDropCount++
+							if d.enabled {
+								log.Printf("[chatws] drop connId=%s label=%s slot=%d drops=%d", d.connId, d.label, i, d.liveDropCount)
+							}
+						}
+						sv.chatDebugMu.Unlock()
 					}
 				}
 			}
