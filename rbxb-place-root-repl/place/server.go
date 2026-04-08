@@ -766,6 +766,31 @@ func (sv *Server) chatBroadcastLoop() {
 				log.Printf("[chatws] conn_close connId=%s label=%s slot=%d", d.connId, d.label, i)
 			}
 		case p := <-sv.chatMsgs:
+			// TEMP: live message proof logging (only if debug conns exist)
+			sv.chatDebugMu.Lock()
+			labels := make([]string, 0, 4)
+			for _, d := range sv.chatDebug {
+				if d != nil && d.enabled && d.label != "" {
+					labels = append(labels, d.label)
+				}
+			}
+			sv.chatDebugMu.Unlock()
+			if len(labels) > 0 {
+				// best-effort parse type/ts
+				msgType := ""
+				var ts int64
+				if len(p) > 2 {
+					var mm map[string]interface{}
+					if err := json.Unmarshal(p[2:], &mm); err == nil {
+						msgType, _ = mm["type"].(string)
+						if tv, ok := mm["ts"].(float64); ok {
+							ts = int64(tv)
+						}
+					}
+				}
+				log.Printf("[chatws] live_msg instanceId=%s pid=%d type=%s ts=%d debugConns=%s", sv.instanceId, os.Getpid(), msgType, ts, strings.Join(labels, ","))
+			}
+
 			for i, ch := range sv.chatClients {
 				if ch != nil {
 					select {
