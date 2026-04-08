@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Place</title>
+	<link rel="stylesheet" href="desktop.css" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+	<meta name="description" content="An online pixel canvas inspired by r/place.">
+	<meta name="keywords" content="r/place, place, game, golang, canvas">
+	<link rel="preload" href="/place.png" as="fetch" crossorigin>
+</head>
+
+<body>
+	<canvas id="viewport-canvas" oncontextmenu="return false;"></canvas>
+	<div id="ui-wrapper">
+		<p id="loading-p"></p>
+		<div id="color-wrapper">
+			<div id="color-swatch"></div>
+			<input id="color-field" type="text" placeholder="#000000" value="#000000" />
+		</div>
+		<div id="zoom-wrapper">
+			<button class="zoom-button" id="zoom-out">
+				-
+			</button>
+			<button class="zoom-button" id="zoom-in">
+				+
+			</button>
+		</div>
+	</div>
+	<button id="help-button" onclick="document.querySelector('#help-popup').style.visibility = 'visible';">
+		<p><strong>Help</strong></p>
+	</button>
+	<div id="help-popup">
+		<div id="help-text-desktop">
+			<p><strong>Right Click</strong> to place a pixel.</p><br>
+			<p>Use the mouse wheel or <strong>+</strong> and <strong>-</strong> buttons to zoom in.</p><br>
+			<p><strong>Ctrl + Right Click</strong> to select a color from the canvas.</p><br>
+		</div>
+		<div id="help-text-mobile">
+			<p><strong>Tap</strong> to place a pixel.</p><br>
+			<p><strong>Pinch</strong> to zoom or use the <strong>+</strong> and <strong>-</strong> buttons.</p><br>
+			<p><strong>Long press</strong> to select a color from the canvas.</p><br>
+		</div>
+		<p>Set a hexadecimal color value in the lower left corner.</p><br>
+		<p>Source code on <a href="https://github.com/rbxb/place" target="_blank">GitHub</a>.</p>
+		<button id="close-help-popup"
+			onclick="document.querySelector('#help-popup').style.visibility = 'hidden';"><strong>Close
+				me.</strong></button>
+	</div>
+	<!-- Chat panel (bottom-docked) -->
+	<div id="chat-panel">
+		<div id="chat-header" role="button" tabindex="0" aria-expanded="false">
+			<span id="chat-title">Live Chat</span>
+			<span style="display:flex; gap:10px; align-items:center;">
+				<span id="chat-activity-badge" style="display:none; font-weight:700; font-size:12px; border:1px solid rgba(0,0,0,0.35); border-radius:999px; padding:2px 8px;">0</span>
+				<span id="chat-toggle">▲</span>
+			</span>
+		</div>
+		<div id="chat-body">
+			<div id="chat-messages"></div>
+			<div id="chat-activity" class="chat-activity-collapsed">
+				<div id="chat-activity-header" role="button" tabindex="0" aria-expanded="false">
+					<span>System Activity</span>
+					<span style="display:flex; gap:8px; align-items:center;">
+						<span id="chat-activity-count">0</span>
+						<span id="chat-activity-toggle">＋</span>
+					</span>
+				</div>
+				<div id="chat-activity-body"></div>
+			</div>
+			<div id="chat-input-row">
+				<input id="chat-input" placeholder="Say something…" />
+				<button id="chat-send">Send</button>
+			</div>
+		</div>
+	</div>
+
+	<script src="main.js"></script>
+	<script src="place.js"></script>
+	<script src="glwindow.js"></script>
+	<script>
+		main();
+	</script>
+</body>
+
+</html>

@@ -65,13 +65,19 @@ const GUI = (cvs, glWindow, place) => {
 	const colorField = document.querySelector("#color-field");
 	const colorSwatch = document.querySelector("#color-swatch");
 
-	// Chat panel UI shell (no backend yet)
+	// Chat panel UI shell
 	const chatPanel = document.querySelector("#chat-panel");
 	const chatHeader = document.querySelector("#chat-header");
 	const chatToggle = document.querySelector("#chat-toggle");
 	const chatMessages = document.querySelector("#chat-messages");
 	const chatInput = document.querySelector("#chat-input");
 	const chatSend = document.querySelector("#chat-send");
+	const chatActivity = document.querySelector("#chat-activity");
+	const chatActivityHeader = document.querySelector("#chat-activity-header");
+	const chatActivityBody = document.querySelector("#chat-activity-body");
+	const chatActivityCount = document.querySelector("#chat-activity-count");
+	const chatActivityToggle = document.querySelector("#chat-activity-toggle");
+	const chatActivityBadge = document.querySelector("#chat-activity-badge");
 
 	// Lightweight stable browser identity (no accounts/auth)
 	const getClientId = () => {
@@ -128,9 +134,40 @@ const GUI = (cvs, glWindow, place) => {
 		return patterns.some((re) => re.test(t));
 	};
 
+	let activityCount = 0;
+	const bumpActivityBadge = () => {
+		if (!chatActivityBadge || !chatActivityCount) return;
+		chatActivityCount.textContent = String(activityCount);
+		// badge only when collapsed
+		const expanded = chatActivity?.classList?.contains('chat-activity-expanded');
+		if (!expanded && activityCount > 0) {
+			chatActivityBadge.style.display = 'inline-block';
+			chatActivityBadge.textContent = String(activityCount);
+		} else {
+			chatActivityBadge.style.display = 'none';
+		}
+	};
+
+	const appendActivity = (name, text) => {
+		if (!chatActivityBody) return;
+		const row = document.createElement('div');
+		row.className = 'chat-activity-msg';
+		row.innerHTML = `<span class="chat-name">${escapeHtml(name)}</span>: ${escapeHtml(text)}`;
+		chatActivityBody.appendChild(row);
+		// keep last ~200 rows
+		while (chatActivityBody.children.length > 200) {
+			chatActivityBody.removeChild(chatActivityBody.firstChild);
+		}
+		activityCount++;
+		bumpActivityBadge();
+	};
+
 	const appendMessage = (name, text, type = "chat") => {
 		if (!chatMessages) return;
-		if (isLowValueTelemetry(name, text)) return;
+		if (isLowValueTelemetry(name, text)) {
+			appendActivity(name, text);
+			return;
+		}
 		const row = document.createElement("div");
 		row.className = "chat-msg";
 		if (type === "intent") row.classList.add("chat-intent");
@@ -204,12 +241,34 @@ const GUI = (cvs, glWindow, place) => {
 		chatHeader.addEventListener("click", () => {
 			expanded = !expanded;
 			setChatExpanded(expanded);
+			bumpActivityBadge();
 		});
 		chatHeader.addEventListener("keydown", (ev) => {
 			if (ev.key === "Enter" || ev.key === " ") {
 				ev.preventDefault();
 				expanded = !expanded;
 				setChatExpanded(expanded);
+				bumpActivityBadge();
+			}
+		});
+	}
+
+	// Activity collapse/expand
+	if (chatActivityHeader && chatActivity) {
+		const setActExpanded = (on) => {
+			chatActivity.classList.toggle('chat-activity-expanded', on);
+			chatActivityHeader.setAttribute('aria-expanded', on ? 'true' : 'false');
+			if (chatActivityToggle) chatActivityToggle.textContent = on ? '－' : '＋';
+			bumpActivityBadge();
+		};
+		let actExpanded = false;
+		setActExpanded(actExpanded);
+		chatActivityHeader.addEventListener('click', ()=>{ actExpanded=!actExpanded; setActExpanded(actExpanded); });
+		chatActivityHeader.addEventListener('keydown', (ev)=>{
+			if (ev.key === 'Enter' || ev.key === ' ') {
+				ev.preventDefault();
+				actExpanded=!actExpanded;
+				setActExpanded(actExpanded);
 			}
 		});
 	}
