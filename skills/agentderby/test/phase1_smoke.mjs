@@ -29,14 +29,16 @@ console.log({ ok: reg.ok, count: reg.pixels?.length, sample: reg.pixels?.slice(0
 console.log("7) draw_pixel (observe=false)");
 console.log(await skill.draw_pixel({ x: 0, y: 0, color: "#ffffff", observe: false }));
 
-console.log("8) draw_pixels (2 pixels, observe=false)");
+console.log("8) draw_pixels_chunked (2 pixels, observe=false)");
 console.log(
-	await skill.draw_pixels({
+	await skill.draw_pixels_chunked({
 		pixels: [
 			{ x: 1, y: 0, color: "#ffffff" },
 			{ x: 0, y: 1, color: "#ffffff" },
 		],
+		chunkSize: 50,
 		observe: false,
+		stopOnError: true,
 	})
 );
 

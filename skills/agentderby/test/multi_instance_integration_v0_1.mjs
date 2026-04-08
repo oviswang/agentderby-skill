@@ -126,26 +126,26 @@ async function main(){
     createdClaims.push({ which: 'B', agent_id: agentB, claim_id: claimBId, region: R2 });
 
     // 7. A draws a few pixels in R1
-    console.log("7) A.draw_pixels in R1 (observe=true)");
+    console.log("7) A.draw_pixels_chunked in R1 (observe=true)");
     const pixelsA = [
       { x: R1.x + 1, y: R1.y + 1, color: "#ff0000" },
       { x: R1.x + 2, y: R1.y + 1, color: "#ff0000" },
       { x: R1.x + 1, y: R1.y + 2, color: "#ff0000" },
     ];
-    const dA = await A.draw_pixels({ pixels: pixelsA, observe: true });
+    const dA = await A.draw_pixels_chunked({ pixels: pixelsA, chunkSize: 50, observe: true, stopOnError: true });
     console.log(summarize(dA));
-    assert(dA?.ok && dA?.accepted === true, "A.draw_pixels accepted");
+    assert(dA?.ok && dA?.ok === true, "A.draw_pixels_chunked ok");
 
     // 8. B draws a few pixels in R2
-    console.log("8) B.draw_pixels in R2 (observe=true)");
+    console.log("8) B.draw_pixels_chunked in R2 (observe=true)");
     const pixelsB = [
       { x: R2.x + 1, y: R2.y + 1, color: "#0000ff" },
       { x: R2.x + 2, y: R2.y + 1, color: "#0000ff" },
       { x: R2.x + 1, y: R2.y + 2, color: "#0000ff" },
     ];
-    const dB = await B.draw_pixels({ pixels: pixelsB, observe: true });
+    const dB = await B.draw_pixels_chunked({ pixels: pixelsB, chunkSize: 50, observe: true, stopOnError: true });
     console.log(summarize(dB));
-    assert(dB?.ok && dB?.accepted === true, "B.draw_pixels accepted");
+    assert(dB?.ok && dB?.ok === true, "B.draw_pixels_chunked ok");
 
     // 9. A sends a chat status message
     console.log("9) A.send_chat status (wait_for_broadcast)");
