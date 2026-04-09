@@ -5740,6 +5740,7 @@ __export(index_exports, {
   createAgentDerbySkill: () => createAgentDerbySkill,
   phase4: () => coordinator_exports,
   phase5: () => artwork_exports,
+  phase5refine: () => refine_exports,
   temporal: () => temporal_exports
 });
 module.exports = __toCommonJS(index_exports);
@@ -6821,6 +6822,24 @@ function jaccard(a, b) {
   const uni = (/* @__PURE__ */ new Set([...A, ...B])).size;
   return uni ? inter / uni : 0;
 }
+function top1Color(r) {
+  return r?.dominantColors?.[0]?.color || null;
+}
+function isBarrier(r) {
+  const fill = r.fillRatio ?? 0;
+  const rcr = r.temporal?.recentChangeRate;
+  const stab = r.temporal?.stabilityScore;
+  if (fill < 0.05) return true;
+  if (fill > 0.9 && rcr != null && rcr < 2e-3 && stab != null && stab > 0.9) return true;
+  return false;
+}
+function stageGroup(s) {
+  if (s === "damaged" || s === "contested") return "conflict";
+  if (s === "in_progress" || s === "seeded") return "work";
+  if (s === "nearly_done") return "near";
+  if (s === "finished") return "done";
+  return "other";
+}
 function mergeBbox(b, r) {
   const x1 = Math.min(b.x, r.x);
   const y1 = Math.min(b.y, r.y);
@@ -6838,6 +6857,7 @@ function clusterRegions({ regionSummaries }) {
     if (visited.has(k0)) continue;
     visited.add(k0);
     if (!compatibleStage(r.stage)) continue;
+    if (isBarrier(r)) continue;
     const queue = [r];
     const members = [r];
     let bbox = { x: r.x, y: r.y, w: r.w, h: r.h };
@@ -6850,7 +6870,14 @@ function clusterRegions({ regionSummaries }) {
         const styleSim = jaccard(cur.styleTags || [], nr.styleTags || []);
         const stageOk = !(cur.stage === "empty" || nr.stage === "empty");
         const colorOk = true;
-        if (stageOk && colorOk && (styleSim >= 0.25 || cur.styleTags?.includes("geometric") && nr.styleTags?.includes("geometric"))) {
+        const c1 = top1Color(cur);
+        const c2 = top1Color(nr);
+        const topColorMatch = c1 && c2 && c1 === c2;
+        const sg1 = stageGroup(cur.stage);
+        const sg2 = stageGroup(nr.stage);
+        const stageCompat = sg1 === sg2 || sg1 === "conflict" && sg2 === "conflict" || sg1 === "work" && sg2 === "near" || sg1 === "near" && sg2 === "work";
+        const styleCompat = styleSim >= 0.25 || topColorMatch && styleSim >= 0.1 || cur.styleTags?.includes("geometric") && nr.styleTags?.includes("geometric") && styleSim >= 0.1;
+        if (stageOk && stageCompat && colorOk && styleCompat && !isBarrier(nr)) {
           visited.add(nk);
           queue.push(nr);
           members.push(nr);
@@ -6858,7 +6885,7 @@ function clusterRegions({ regionSummaries }) {
         }
       }
     }
-    if (members.length >= 3) {
+    if (members.length >= 2) {
       const styleCounts = /* @__PURE__ */ new Map();
       const colorCounts = /* @__PURE__ */ new Map();
       let riskSum = 0;
@@ -6945,6 +6972,7 @@ function frontierPatchesForGoal({ goal, clusters, regionSummaries }) {
   const patches = [];
   for (const r of topRegions) {
     const size = 16;
+    const frontierType = goal.goalType === "repair" ? "damaged_hotspot" : goal.goalType === "protect" ? "protection_edge" : goal.goalType === "complete" ? "finishing_edge" : "expansion_boundary";
     patches.push({
       patchId: `${r.regionId}_front0`,
       regionId: r.regionId,
@@ -6953,7 +6981,8 @@ function frontierPatchesForGoal({ goal, clusters, regionSummaries }) {
       w: Math.min(size, r.w),
       h: Math.min(size, r.h),
       actionType: goal.goalType === "repair" ? "repair" : goal.goalType === "protect" ? "protect" : goal.goalType === "complete" ? "refine" : "fill",
-      reason: [`cluster=${cluster.clusterId}`, `goal=${goal.goalType}`, `regionRisk=${(r.riskScore ?? 0).toFixed(2)}`]
+      frontierType,
+      reason: [`cluster=${cluster.clusterId}`, `goal=${goal.goalType}`, `frontierType=${frontierType}`, `regionRisk=${(r.riskScore ?? 0).toFixed(2)}`]
     });
   }
   return patches;
@@ -6967,10 +6996,141 @@ async function phase5Demo({ baseUrl, snapshotIntervalMs = 1200 }) {
   hist.addFrameFromPng({ pngBytes: s2.bytes, ts: Date.now() });
   const regionSummaries = hist.computeTemporalSummaries();
   const clusters = clusterRegions({ regionSummaries });
-  const goals = goalsForClusters({ clusters }).slice(0, 3);
-  const teamAssignment = goals.length ? assignTeam({ goal: goals[0] }) : null;
+  const goals = goalsForClusters({ clusters }).slice(0, 6);
+  const teamAssignments = goals.slice(0, 2).map((g) => assignTeam({ goal: g }));
   const frontier = goals.flatMap((g) => frontierPatchesForGoal({ goal: g, clusters, regionSummaries })).slice(0, 6);
-  return { baseUrl, board: { width: hist.latest().width, height: hist.latest().height, regionSize: 32, frames: hist.frames.length }, clusters: clusters.slice(0, 6), goals, teamAssignment, frontierPatches: frontier.slice(0, 3) };
+  return { baseUrl, board: { width: hist.latest().width, height: hist.latest().height, regionSize: 32, frames: hist.frames.length }, clusters: clusters.slice(0, 10), goals: goals.slice(0, 3), teamAssignments, frontierPatches: frontier.slice(0, 6) };
+}
+
+// src/phase5/refine.js
+var refine_exports = {};
+__export(refine_exports, {
+  coarseAndRefined: () => coarseAndRefined,
+  refineClustersPaletteSplit: () => refineClustersPaletteSplit
+});
+function rgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [n >> 16 & 255, n >> 8 & 255, n & 255];
+}
+function dist(a, b) {
+  const dr = a[0] - b[0];
+  const dg = a[1] - b[1];
+  const db = a[2] - b[2];
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+function regionKey2(r) {
+  const i = Math.floor(r.x / r.w);
+  const j = Math.floor(r.y / r.h);
+  return `${i}_${j}`;
+}
+function neighborsKeys(r) {
+  const i = Math.floor(r.x / r.w);
+  const j = Math.floor(r.y / r.h);
+  return [`${i - 1}_${j}`, `${i + 1}_${j}`, `${i}_${j - 1}`, `${i}_${j + 1}`];
+}
+function topColorsVec(r, k = 3) {
+  return (r.dominantColors || []).slice(0, k).map((d) => d.color);
+}
+function paletteDistance(r1, r2) {
+  const a = topColorsVec(r1);
+  const b = topColorsVec(r2);
+  if (!a.length || !b.length) return 999;
+  const A = a.map(rgb);
+  const B = b.map(rgb);
+  let sum = 0;
+  for (const va of A) {
+    let md = Infinity;
+    for (const vb of B) md = Math.min(md, dist(va, vb));
+    sum += md;
+  }
+  return sum / A.length;
+}
+function refineClustersPaletteSplit({ regionSummaries, coarseClusters, paletteThreshold = 60 }) {
+  const byGrid = new Map(regionSummaries.map((r) => [regionKey2(r), r]));
+  const refined = [];
+  for (const c of coarseClusters) {
+    const keys = new Set(c.regionIds.map((rid) => {
+      const r = regionSummaries.find((x) => x.regionId === rid);
+      return r ? regionKey2(r) : null;
+    }).filter(Boolean));
+    const visited = /* @__PURE__ */ new Set();
+    let part = 0;
+    for (const k0 of keys) {
+      if (visited.has(k0)) continue;
+      visited.add(k0);
+      const seed = byGrid.get(k0);
+      if (!seed) continue;
+      const queue = [seed];
+      const members = [seed];
+      let bbox = { x: seed.x, y: seed.y, w: seed.w, h: seed.h };
+      while (queue.length) {
+        const cur = queue.pop();
+        for (const nk of neighborsKeys(cur)) {
+          if (!keys.has(nk) || visited.has(nk)) continue;
+          const nr = byGrid.get(nk);
+          if (!nr) continue;
+          const pd = paletteDistance(cur, nr);
+          if (pd <= paletteThreshold) {
+            visited.add(nk);
+            queue.push(nr);
+            members.push(nr);
+            const x1 = Math.min(bbox.x, nr.x);
+            const y1 = Math.min(bbox.y, nr.y);
+            const x2 = Math.max(bbox.x + bbox.w, nr.x + nr.w);
+            const y2 = Math.max(bbox.y + bbox.h, nr.y + nr.h);
+            bbox = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+          }
+        }
+      }
+      if (members.length >= 2) {
+        const styleCounts = /* @__PURE__ */ new Map();
+        const colorCounts = /* @__PURE__ */ new Map();
+        const stageCounts = /* @__PURE__ */ new Map();
+        let riskSum = 0;
+        for (const m of members) {
+          for (const t of m.styleTags || []) styleCounts.set(t, (styleCounts.get(t) || 0) + 1);
+          for (const dc of m.dominantColors || []) colorCounts.set(dc.color, (colorCounts.get(dc.color) || 0) + dc.count);
+          stageCounts.set(m.stage, (stageCounts.get(m.stage) || 0) + 1);
+          riskSum += m.riskScore ?? 0;
+        }
+        const dominantStyles = [...styleCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t]) => t);
+        const dominantColors = [...colorCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([cc]) => cc);
+        const stage = [...stageCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "in_progress";
+        const riskScore = members.length ? riskSum / members.length : 0;
+        refined.push({
+          clusterId: `${c.clusterId}.${part++}`,
+          parentClusterId: c.clusterId,
+          regionIds: members.map((m) => m.regionId),
+          bbox,
+          dominantStyles,
+          dominantColors,
+          stage,
+          riskScore,
+          splitReason: `paletteSplit(threshold=${paletteThreshold})`
+        });
+      }
+    }
+    const kids = refined.filter((r) => r.parentClusterId === c.clusterId);
+    if (!kids.length) {
+      refined.push({
+        clusterId: `${c.clusterId}.0`,
+        parentClusterId: c.clusterId,
+        regionIds: c.regionIds,
+        bbox: c.bbox,
+        dominantStyles: c.dominantStyles,
+        dominantColors: c.dominantColors,
+        stage: c.stage,
+        riskScore: c.riskScore,
+        splitReason: `paletteSplit(threshold=${paletteThreshold})_no_split`
+      });
+    }
+  }
+  return refined;
+}
+function coarseAndRefined({ regionSummaries, paletteThreshold = 60 }) {
+  const coarse = clusterRegions({ regionSummaries });
+  const refined = refineClustersPaletteSplit({ regionSummaries, coarseClusters: coarse, paletteThreshold });
+  return { coarse, refined };
 }
 
 // src/index.js
@@ -7074,15 +7234,15 @@ function createAgentDerbySkill({
     if (!Number.isInteger(x) || !Number.isInteger(y)) {
       return err(ErrorCode.INVALID, "x/y must be integers");
     }
-    const rgb = parseHexColor(color);
-    if (!rgb) return err(ErrorCode.INVALID, "color must be #RRGGBB");
+    const rgb2 = parseHexColor(color);
+    if (!rgb2) return err(ErrorCode.INVALID, "color must be #RRGGBB");
     try {
       await board.awaitReady();
       if (board.allowDraw !== true) {
         return err(ErrorCode.REJECTED, "drawing not allowed (whitelist/key)");
       }
       await limiter.wait();
-      const accepted = board.sendPixel({ x, y, ...rgb });
+      const accepted = board.sendPixel({ x, y, ...rgb2 });
       if (!accepted) return err(ErrorCode.NETWORK, "board websocket not connected or draw not allowed");
       if (!observe) {
         return ok({ accepted: true, observed: false });
@@ -7255,6 +7415,7 @@ function createAgentDerbySkill({
   createAgentDerbySkill,
   phase4,
   phase5,
+  phase5refine,
   temporal
 });
 //# sourceMappingURL=index.cjs.map
