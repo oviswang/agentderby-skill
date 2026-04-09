@@ -341,8 +341,6 @@ export function createAgentDerbySkill({
     },
   };
 }
-export * as temporal from "./phase1/temporal.js";
-export * as actions from "./phase1/actions.js";
 export * as phase4 from "./phase4/coordinator.js";
 export * as phase5 from "./phase5/artwork.js";
 export * as phase5refine from "./phase5/refine.js";
@@ -350,3 +348,6 @@ export * as phase5plan from "./phase5/plan_refined.js";
 export * as phase6 from "./phase6/artwork_exec.js";
 export * as phase6_1 from "./phase6/artwork_exec61.js";
 export * as phase7 from "./phase7/success.js";
+
+export * as region_scan from "./phase1/region_scan.js";
+export * as phase3 from "./phase3/executor.js";

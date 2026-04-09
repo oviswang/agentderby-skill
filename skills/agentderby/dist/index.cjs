@@ -5736,8 +5736,8 @@ var require_png = __commonJS({
 // src/index.js
 var index_exports = {};
 __export(index_exports, {
-  actions: () => actions_exports,
   createAgentDerbySkill: () => createAgentDerbySkill,
+  phase3: () => executor_exports,
   phase4: () => coordinator_exports,
   phase5: () => artwork_exports,
   phase5plan: () => plan_refined_exports,
@@ -5745,7 +5745,7 @@ __export(index_exports, {
   phase6: () => artwork_exec_exports,
   phase6_1: () => artwork_exec61_exports,
   phase7: () => success_exports,
-  temporal: () => temporal_exports
+  region_scan: () => region_scan_exports
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -5805,6 +5805,7 @@ var ChatWSClient = class _ChatWSClient {
     this._wasReused = null;
     this._writeTrace = [];
     this._readTrace = [];
+    this._recvTrace = [];
     this.ws = null;
     this.connected = false;
     this._ready = null;
@@ -5857,6 +5858,17 @@ var ChatWSClient = class _ChatWSClient {
         try {
           const parsed = JSON.parse(payload);
           this.lastAnyFrameAt = Date.now();
+          const preLen = Array.isArray(this.recent) ? this.recent.length : 0;
+          const preLatestChatTs = Math.max(...(this.recent || []).filter((m) => (m?.type || "chat") === "chat").map((m) => m.ts || 0), 0) || 0;
+          const preLatestIntentTs = Math.max(...(this.recent || []).filter((m) => (m?.type || "chat") === "intent").map((m) => m.ts || 0), 0) || 0;
+          _ringPush(this._recvTrace, {
+            at: Date.now(),
+            clientId: this.clientId,
+            kind: isHistory ? "H" : "M",
+            parsedType: parsed?.type || null,
+            ts: parsed?.ts || null,
+            pre: { recentLen: preLen, latestChatTs: preLatestChatTs, latestIntentTs: preLatestIntentTs }
+          }, 50);
           if (isHistory) {
             const snap = this._normalizeHistorySnapshot(parsed);
             if (snap.length) {
@@ -6224,14 +6236,23 @@ var SpacingLimiter = class {
   }
 };
 
-// src/phase1/temporal.js
-var temporal_exports = {};
-__export(temporal_exports, {
-  TemporalRegionHistory: () => TemporalRegionHistory,
-  temporalStageOverride: () => temporalStageOverride
+// src/phase4/coordinator.js
+var coordinator_exports = {};
+__export(coordinator_exports, {
+  PatchCoordinator: () => PatchCoordinator,
+  runTwoAgentDemo: () => runTwoAgentDemo
 });
 
 // src/phase1/region_scan.js
+var region_scan_exports = {};
+__export(region_scan_exports, {
+  PROFILES: () => PROFILES,
+  classifyRegion: () => classifyRegion,
+  decodePng: () => decodePng,
+  recommendRegions: () => recommendRegions,
+  scanRegionsFromPngBytes: () => scanRegionsFromPngBytes,
+  scoreRegionForProfile: () => scoreRegionForProfile
+});
 var import_pngjs2 = __toESM(require_png(), 1);
 function rgbToHex(r, g, b) {
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
@@ -6256,7 +6277,6 @@ function scanRegionsFromPngBytes({ pngBytes, regionSize = 32 }) {
       const h = Math.min(regionSize, height - y);
       const id = `r${i}_${j}`;
       const colorCounts = /* @__PURE__ */ new Map();
-      let nonBg = 0;
       let edges = 0;
       let lumSum = 0;
       let lumSumSq = 0;
@@ -6282,7 +6302,7 @@ function scanRegionsFromPngBytes({ pngBytes, regionSize = 32 }) {
         }
       }
       const total = w * h;
-      nonBg = total - bgCount;
+      const nonBg = total - bgCount;
       const fillRatio = total > 0 ? nonBg / total : 0;
       for (let yy = y; yy < y + h; yy++) {
         for (let xx = x; xx < x + w; xx++) {
@@ -6348,13 +6368,13 @@ function classifyRegion({ fillRatio, edgeDensity, dominantColors, lumVar }) {
   if (fillRatio > 0.25 && edgeDensity < 0.12 && nColors <= 3) styleTags.push("portrait");
   if (fillRatio > 0.2 && edgeDensity < 0.18 && nColors >= 3) styleTags.push("wave");
   if (fillRatio > 0.25 && edgeDensity < 0.2 && nColors <= 4) styleTags.push("icon");
+  const tags = Array.from(new Set(styleTags));
   let riskScore = 0;
   if (stage === "contested") riskScore += 0.6;
   if (stage === "damaged") riskScore += 0.45;
   riskScore += Math.min(0.4, edgeDensity * 1.2);
   riskScore += fillRatio < 0.1 ? 0.15 : 0;
   riskScore = Math.max(0, Math.min(1, riskScore));
-  const tags = Array.from(new Set(styleTags));
   return { stage, styleTags: tags, riskScore };
 }
 var PROFILES = {
@@ -6386,11 +6406,10 @@ function scoreRegionForProfile(region, profile) {
   const stageW = profile.stageAffinity?.[region.stage] ?? 0.4;
   score += 0.35 * stageW;
   reasons.push(`stage=${region.stage} affinity=${stageW.toFixed(2)}`);
-  const match = region.styleTags.filter((t) => profile.preferredStyles.includes(t));
+  const match = (region.styleTags || []).filter((t) => profile.preferredStyles.includes(t));
   const styleScore = Math.min(1, match.length / Math.max(1, profile.preferredStyles.length));
   score += 0.35 * styleScore;
-  if (match.length) reasons.push(`styleMatch=${match.join(",")}`);
-  else reasons.push("styleMatch=none");
+  reasons.push(match.length ? `styleMatch=${match.join(",")}` : "styleMatch=none");
   const r = region.riskScore;
   const riskScore = 1 - Math.min(1, Math.abs(r - 0.4) / 0.6);
   score += 0.15 * riskScore;
@@ -6419,6 +6438,13 @@ function scoreRegionForProfile(region, profile) {
   else if (region.stage === "damaged") actionType = "repair";
   else if (region.stage === "contested") actionType = "protect";
   return { score, actionType, reasons };
+}
+function recommendRegions({ regions, profile, topN = 5 }) {
+  const scored = regions.map((r) => {
+    const s = scoreRegionForProfile(r, profile);
+    return { regionId: r.regionId, score: s.score, actionType: s.actionType, reasons: s.reasons, region: r };
+  }).sort((a, b) => b.score - a.score);
+  return scored.slice(0, topN);
 }
 
 // src/phase1/temporal.js
@@ -6496,11 +6522,6 @@ function temporalStageOverride({ baseStage, fillRatio, edgeDensity, temporal }) 
 }
 
 // src/phase1/actions.js
-var actions_exports = {};
-__export(actions_exports, {
-  candidateActionsForProfile: () => candidateActionsForProfile,
-  patchPlansFromCandidateActions: () => patchPlansFromCandidateActions
-});
 function candidateActionsForProfile({ regionSummaries, profileId, topN = 5 }) {
   const profile = PROFILES[profileId];
   if (!profile) throw new Error(`unknown profile: ${profileId}`);
@@ -6565,14 +6586,15 @@ function patchPlansFromCandidateActions({ candidateActions, maxPlans = 3 }) {
   return plans;
 }
 
-// src/phase4/coordinator.js
-var coordinator_exports = {};
-__export(coordinator_exports, {
-  PatchCoordinator: () => PatchCoordinator,
-  runTwoAgentDemo: () => runTwoAgentDemo
-});
-
 // src/phase3/executor.js
+var executor_exports = {};
+__export(executor_exports, {
+  comparePatch: () => comparePatch,
+  draw_pixels_chunked: () => draw_pixels_chunked,
+  executePatchPlan: () => executePatchPlan,
+  generateSolidPatchPixels: () => generateSolidPatchPixels,
+  readRegion: () => readRegion
+});
 function hexToRgb(hex) {
   const m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
   if (!m) throw new Error(`bad hex: ${hex}`);
@@ -6826,24 +6848,6 @@ function jaccard(a, b) {
   const uni = (/* @__PURE__ */ new Set([...A, ...B])).size;
   return uni ? inter / uni : 0;
 }
-function top1Color(r) {
-  return r?.dominantColors?.[0]?.color || null;
-}
-function isBarrier(r) {
-  const fill = r.fillRatio ?? 0;
-  const rcr = r.temporal?.recentChangeRate;
-  const stab = r.temporal?.stabilityScore;
-  if (fill < 0.05) return true;
-  if (fill > 0.9 && rcr != null && rcr < 2e-3 && stab != null && stab > 0.9) return true;
-  return false;
-}
-function stageGroup(s) {
-  if (s === "damaged" || s === "contested") return "conflict";
-  if (s === "in_progress" || s === "seeded") return "work";
-  if (s === "nearly_done") return "near";
-  if (s === "finished") return "done";
-  return "other";
-}
 function mergeBbox(b, r) {
   const x1 = Math.min(b.x, r.x);
   const y1 = Math.min(b.y, r.y);
@@ -6861,7 +6865,6 @@ function clusterRegions({ regionSummaries }) {
     if (visited.has(k0)) continue;
     visited.add(k0);
     if (!compatibleStage(r.stage)) continue;
-    if (isBarrier(r)) continue;
     const queue = [r];
     const members = [r];
     let bbox = { x: r.x, y: r.y, w: r.w, h: r.h };
@@ -6874,14 +6877,7 @@ function clusterRegions({ regionSummaries }) {
         const styleSim = jaccard(cur.styleTags || [], nr.styleTags || []);
         const stageOk = !(cur.stage === "empty" || nr.stage === "empty");
         const colorOk = true;
-        const c1 = top1Color(cur);
-        const c2 = top1Color(nr);
-        const topColorMatch = c1 && c2 && c1 === c2;
-        const sg1 = stageGroup(cur.stage);
-        const sg2 = stageGroup(nr.stage);
-        const stageCompat = sg1 === sg2 || sg1 === "conflict" && sg2 === "conflict" || sg1 === "work" && sg2 === "near" || sg1 === "near" && sg2 === "work";
-        const styleCompat = styleSim >= 0.25 || topColorMatch && styleSim >= 0.1 || cur.styleTags?.includes("geometric") && nr.styleTags?.includes("geometric") && styleSim >= 0.1;
-        if (stageOk && stageCompat && colorOk && styleCompat && !isBarrier(nr)) {
+        if (stageOk && colorOk && (styleSim >= 0.25 || cur.styleTags?.includes("geometric") && nr.styleTags?.includes("geometric"))) {
           visited.add(nk);
           queue.push(nr);
           members.push(nr);
@@ -6889,7 +6885,7 @@ function clusterRegions({ regionSummaries }) {
         }
       }
     }
-    if (members.length >= 2) {
+    if (members.length >= 3) {
       const styleCounts = /* @__PURE__ */ new Map();
       const colorCounts = /* @__PURE__ */ new Map();
       let riskSum = 0;
@@ -6976,7 +6972,6 @@ function frontierPatchesForGoal({ goal, clusters, regionSummaries }) {
   const patches = [];
   for (const r of topRegions) {
     const size = 16;
-    const frontierType = goal.goalType === "repair" ? "damaged_hotspot" : goal.goalType === "protect" ? "protection_edge" : goal.goalType === "complete" ? "finishing_edge" : "expansion_boundary";
     patches.push({
       patchId: `${r.regionId}_front0`,
       regionId: r.regionId,
@@ -6985,8 +6980,7 @@ function frontierPatchesForGoal({ goal, clusters, regionSummaries }) {
       w: Math.min(size, r.w),
       h: Math.min(size, r.h),
       actionType: goal.goalType === "repair" ? "repair" : goal.goalType === "protect" ? "protect" : goal.goalType === "complete" ? "refine" : "fill",
-      frontierType,
-      reason: [`cluster=${cluster.clusterId}`, `goal=${goal.goalType}`, `frontierType=${frontierType}`, `regionRisk=${(r.riskScore ?? 0).toFixed(2)}`]
+      reason: [`cluster=${cluster.clusterId}`, `goal=${goal.goalType}`, `regionRisk=${(r.riskScore ?? 0).toFixed(2)}`]
     });
   }
   return patches;
@@ -7000,10 +6994,10 @@ async function phase5Demo({ baseUrl, snapshotIntervalMs = 1200 }) {
   hist.addFrameFromPng({ pngBytes: s2.bytes, ts: Date.now() });
   const regionSummaries = hist.computeTemporalSummaries();
   const clusters = clusterRegions({ regionSummaries });
-  const goals = goalsForClusters({ clusters }).slice(0, 6);
-  const teamAssignments = goals.slice(0, 2).map((g) => assignTeam({ goal: g }));
+  const goals = goalsForClusters({ clusters }).slice(0, 3);
+  const teamAssignment = goals.length ? assignTeam({ goal: goals[0] }) : null;
   const frontier = goals.flatMap((g) => frontierPatchesForGoal({ goal: g, clusters, regionSummaries })).slice(0, 6);
-  return { baseUrl, board: { width: hist.latest().width, height: hist.latest().height, regionSize: 32, frames: hist.frames.length }, clusters: clusters.slice(0, 10), goals: goals.slice(0, 3), teamAssignments, frontierPatches: frontier.slice(0, 6) };
+  return { baseUrl, board: { width: hist.latest().width, height: hist.latest().height, regionSize: 32, frames: hist.frames.length }, clusters: clusters.slice(0, 6), goals, teamAssignment, frontierPatches: frontier.slice(0, 3) };
 }
 
 // src/phase5/refine.js
@@ -7893,8 +7887,8 @@ function createAgentDerbySkill({
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  actions,
   createAgentDerbySkill,
+  phase3,
   phase4,
   phase5,
   phase5plan,
@@ -7902,6 +7896,6 @@ function createAgentDerbySkill({
   phase6,
   phase6_1,
   phase7,
-  temporal
+  region_scan
 });
 //# sourceMappingURL=index.cjs.map
