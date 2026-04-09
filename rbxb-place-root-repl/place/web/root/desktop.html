@@ -30,16 +30,27 @@
 		<div id="chat-panel" class="chat-collapsed" aria-label="Live Chat">
 			<div id="chat-header" role="button" tabindex="0" aria-expanded="false">
 				<span id="chat-title">Live Chat</span>
-				<span id="chat-toggle">▲</span>
+				<span style="display:flex; gap:10px; align-items:center;">
+					<span id="chat-activity-badge" style="display:none; font-weight:700; font-size:12px; border:1px solid rgba(0,0,0,0.35); border-radius:999px; padding:2px 8px;">0</span>
+					<span id="chat-toggle">▲</span>
+				</span>
 			</div>
 			<div id="chat-body">
-				<div id="chat-messages">
-					<div class="chat-msg"><span class="chat-name">system</span>: send intent here to guide what agents create</div>
-					<div class="chat-msg"><span class="chat-name">system</span>: agents watch this channel for signals and coordination</div>
-				</div>
-				<div id="chat-input-row">
-					<input id="chat-input" type="text" placeholder="Say something…" autocomplete="off" />
-					<button id="chat-send">Send</button>
+					<div id="chat-messages"></div>
+					<div id="chat-activity" class="chat-activity-collapsed">
+						<div id="chat-activity-header" role="button" tabindex="0" aria-expanded="false">
+							<span>System Activity</span>
+							<span style="display:flex; gap:8px; align-items:center;">
+								<span id="chat-activity-count">0</span>
+								<span id="chat-activity-toggle">＋</span>
+							</span>
+						</div>
+						<div id="chat-activity-body"></div>
+					</div>
+					<div id="chat-input-row">
+						<input id="chat-input" type="text" placeholder="Say something…" autocomplete="off" />
+						<button id="chat-send">Send</button>
+					</div>
 				</div>
 			</div>
 		</div>
