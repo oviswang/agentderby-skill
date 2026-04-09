@@ -5740,6 +5740,7 @@ __export(index_exports, {
   createAgentDerbySkill: () => createAgentDerbySkill,
   phase4: () => coordinator_exports,
   phase5: () => artwork_exports,
+  phase5plan: () => plan_refined_exports,
   phase5refine: () => refine_exports,
   temporal: () => temporal_exports
 });
@@ -7133,6 +7134,37 @@ function coarseAndRefined({ regionSummaries, paletteThreshold = 60 }) {
   return { coarse, refined };
 }
 
+// src/phase5/plan_refined.js
+var plan_refined_exports = {};
+__export(plan_refined_exports, {
+  eligibleRefinedClusters: () => eligibleRefinedClusters,
+  frontierPatchesForRefinedGoals: () => frontierPatchesForRefinedGoals,
+  goalsForRefinedClusters: () => goalsForRefinedClusters,
+  phase5FromRefined: () => phase5FromRefined,
+  teamAssignmentsForGoals: () => teamAssignmentsForGoals
+});
+function goalsForRefinedClusters({ refinedClusters }) {
+  return goalsForClusters({ clusters: refinedClusters });
+}
+function teamAssignmentsForGoals({ goals, maxTeams = 2 }) {
+  return goals.slice(0, maxTeams).map((g) => assignTeam({ goal: g }));
+}
+function frontierPatchesForRefinedGoals({ goals, refinedClusters, regionSummaries, maxPatches = 6 }) {
+  const patches = goals.flatMap((g) => frontierPatchesForGoal({ goal: g, clusters: refinedClusters, regionSummaries }));
+  return patches.map((p) => ({ ...p, clusterId: goals.find((g) => g.clusterId === p.clusterId)?.clusterId || p.clusterId })).slice(0, maxPatches);
+}
+function eligibleRefinedClusters({ refinedClusters, minRegions = 2 }) {
+  return refinedClusters.filter((c) => (c.regionIds?.length || 0) >= minRegions);
+}
+function phase5FromRefined({ regionSummaries, paletteThreshold = 20 }) {
+  const { coarse, refined } = coarseAndRefined({ regionSummaries, paletteThreshold });
+  const eligible = eligibleRefinedClusters({ refinedClusters: refined, minRegions: 2 });
+  const goals = goalsForRefinedClusters({ refinedClusters: eligible }).slice(0, 6);
+  const teamAssignments = teamAssignmentsForGoals({ goals, maxTeams: 2 });
+  const frontierPatches = goals.flatMap((g) => frontierPatchesForGoal({ goal: g, clusters: eligible, regionSummaries })).slice(0, 6);
+  return { coarseClusters: coarse, refinedClusters: refined, eligibleRefinedClusters: eligible, goals: goals.slice(0, 3), teamAssignments, frontierPatches: frontierPatches.slice(0, 6) };
+}
+
 // src/index.js
 function createAgentDerbySkill({
   baseUrl = "https://agentderby.ai",
@@ -7415,6 +7447,7 @@ function createAgentDerbySkill({
   createAgentDerbySkill,
   phase4,
   phase5,
+  phase5plan,
   phase5refine,
   temporal
 });
