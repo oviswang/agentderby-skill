@@ -5605,7 +5605,7 @@ var require_png = __commonJS({
     var Parser = require_parser_async();
     var Packer = require_packer_async();
     var PNGSync = require_png_sync();
-    var PNG2 = exports2.PNG = function(options) {
+    var PNG3 = exports2.PNG = function(options) {
       Stream.call(this);
       options = options || {};
       this.width = options.width | 0;
@@ -5634,9 +5634,9 @@ var require_png = __commonJS({
       this._parser.on("close", this._handleClose.bind(this));
       this._packer.on("error", this.emit.bind(this, "error"));
     };
-    util.inherits(PNG2, Stream);
-    PNG2.sync = PNGSync;
-    PNG2.prototype.pack = function() {
+    util.inherits(PNG3, Stream);
+    PNG3.sync = PNGSync;
+    PNG3.prototype.pack = function() {
       if (!this.data || !this.data.length) {
         this.emit("error", "No data provided");
         return this;
@@ -5648,7 +5648,7 @@ var require_png = __commonJS({
       );
       return this;
     };
-    PNG2.prototype.parse = function(data, callback) {
+    PNG3.prototype.parse = function(data, callback) {
       if (callback) {
         let onParsed, onError;
         onParsed = function(parsedData) {
@@ -5666,27 +5666,27 @@ var require_png = __commonJS({
       this.end(data);
       return this;
     };
-    PNG2.prototype.write = function(data) {
+    PNG3.prototype.write = function(data) {
       this._parser.write(data);
       return true;
     };
-    PNG2.prototype.end = function(data) {
+    PNG3.prototype.end = function(data) {
       this._parser.end(data);
     };
-    PNG2.prototype._metadata = function(metadata) {
+    PNG3.prototype._metadata = function(metadata) {
       this.width = metadata.width;
       this.height = metadata.height;
       this.emit("metadata", metadata);
     };
-    PNG2.prototype._gamma = function(gamma) {
+    PNG3.prototype._gamma = function(gamma) {
       this.gamma = gamma;
     };
-    PNG2.prototype._handleClose = function() {
+    PNG3.prototype._handleClose = function() {
       if (!this._parser.writable && !this._packer.readable) {
         this.emit("close");
       }
     };
-    PNG2.bitblt = function(src, dst, srcX, srcY, width, height, deltaX, deltaY) {
+    PNG3.bitblt = function(src, dst, srcX, srcY, width, height, deltaX, deltaY) {
       srcX |= 0;
       srcY |= 0;
       width |= 0;
@@ -5708,11 +5708,11 @@ var require_png = __commonJS({
         );
       }
     };
-    PNG2.prototype.bitblt = function(dst, srcX, srcY, width, height, deltaX, deltaY) {
-      PNG2.bitblt(this, dst, srcX, srcY, width, height, deltaX, deltaY);
+    PNG3.prototype.bitblt = function(dst, srcX, srcY, width, height, deltaX, deltaY) {
+      PNG3.bitblt(this, dst, srcX, srcY, width, height, deltaX, deltaY);
       return this;
     };
-    PNG2.adjustGamma = function(src) {
+    PNG3.adjustGamma = function(src) {
       if (src.gamma) {
         for (let y = 0; y < src.height; y++) {
           for (let x = 0; x < src.width; x++) {
@@ -5727,8 +5727,8 @@ var require_png = __commonJS({
         src.gamma = 0;
       }
     };
-    PNG2.prototype.adjustGamma = function() {
-      PNG2.adjustGamma(this);
+    PNG3.prototype.adjustGamma = function() {
+      PNG3.adjustGamma(this);
     };
   }
 });
@@ -5736,7 +5736,12 @@ var require_png = __commonJS({
 // src/index.js
 var index_exports = {};
 __export(index_exports, {
-  createAgentDerbySkill: () => createAgentDerbySkill
+  actions: () => actions_exports,
+  createAgentDerbySkill: () => createAgentDerbySkill,
+  phase4: () => coordinator_exports,
+  phase5: () => artwork_exports,
+  phase5refine: () => refine_exports,
+  temporal: () => temporal_exports
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -5796,7 +5801,6 @@ var ChatWSClient = class _ChatWSClient {
     this._wasReused = null;
     this._writeTrace = [];
     this._readTrace = [];
-    this._recvTrace = [];
     this.ws = null;
     this.connected = false;
     this._ready = null;
@@ -5849,17 +5853,6 @@ var ChatWSClient = class _ChatWSClient {
         try {
           const parsed = JSON.parse(payload);
           this.lastAnyFrameAt = Date.now();
-          const preLen = Array.isArray(this.recent) ? this.recent.length : 0;
-          const preLatestChatTs = Math.max(...(this.recent || []).filter((m) => (m?.type || "chat") === "chat").map((m) => m.ts || 0), 0) || 0;
-          const preLatestIntentTs = Math.max(...(this.recent || []).filter((m) => (m?.type || "chat") === "intent").map((m) => m.ts || 0), 0) || 0;
-          _ringPush(this._recvTrace, {
-            at: Date.now(),
-            clientId: this.clientId,
-            kind: isHistory ? "H" : "M",
-            parsedType: parsed?.type || null,
-            ts: parsed?.ts || null,
-            pre: { recentLen: preLen, latestChatTs: preLatestChatTs, latestIntentTs: preLatestIntentTs }
-          }, 50);
           if (isHistory) {
             const snap = this._normalizeHistorySnapshot(parsed);
             if (snap.length) {
@@ -6227,6 +6220,919 @@ var SpacingLimiter = class {
   }
 };
 
+// src/phase1/temporal.js
+var temporal_exports = {};
+__export(temporal_exports, {
+  TemporalRegionHistory: () => TemporalRegionHistory,
+  temporalStageOverride: () => temporalStageOverride
+});
+
+// src/phase1/region_scan.js
+var import_pngjs2 = __toESM(require_png(), 1);
+function rgbToHex(r, g, b) {
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
+function luminance(r, g, b) {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function decodePng(pngBytes) {
+  const png = import_pngjs2.PNG.sync.read(pngBytes);
+  return { png, width: png.width, height: png.height };
+}
+function scanRegionsFromPngBytes({ pngBytes, regionSize = 32 }) {
+  const { png, width, height } = decodePng(pngBytes);
+  const regions = [];
+  const rx = Math.ceil(width / regionSize);
+  const ry = Math.ceil(height / regionSize);
+  for (let j = 0; j < ry; j++) {
+    for (let i = 0; i < rx; i++) {
+      const x = i * regionSize;
+      const y = j * regionSize;
+      const w = Math.min(regionSize, width - x);
+      const h = Math.min(regionSize, height - y);
+      const id = `r${i}_${j}`;
+      const colorCounts = /* @__PURE__ */ new Map();
+      let nonBg = 0;
+      let edges = 0;
+      let lumSum = 0;
+      let lumSumSq = 0;
+      for (let yy = y; yy < y + h; yy++) {
+        for (let xx = x; xx < x + w; xx++) {
+          const idx = (yy * width + xx) * 4;
+          const r = png.data[idx];
+          const g = png.data[idx + 1];
+          const b = png.data[idx + 2];
+          const hex = rgbToHex(r, g, b);
+          colorCounts.set(hex, (colorCounts.get(hex) || 0) + 1);
+          const lum = luminance(r, g, b);
+          lumSum += lum;
+          lumSumSq += lum * lum;
+        }
+      }
+      let bgColor = null;
+      let bgCount = -1;
+      for (const [c, n] of colorCounts.entries()) {
+        if (n > bgCount) {
+          bgCount = n;
+          bgColor = c;
+        }
+      }
+      const total = w * h;
+      nonBg = total - bgCount;
+      const fillRatio = total > 0 ? nonBg / total : 0;
+      for (let yy = y; yy < y + h; yy++) {
+        for (let xx = x; xx < x + w; xx++) {
+          const idx = (yy * width + xx) * 4;
+          const r = png.data[idx];
+          const g = png.data[idx + 1];
+          const b = png.data[idx + 2];
+          const cur = r << 16 | g << 8 | b;
+          if (xx + 1 < x + w) {
+            const idx2 = (yy * width + (xx + 1)) * 4;
+            const c2 = png.data[idx2] << 16 | png.data[idx2 + 1] << 8 | png.data[idx2 + 2];
+            if (c2 !== cur) edges++;
+          }
+          if (yy + 1 < y + h) {
+            const idx2 = ((yy + 1) * width + xx) * 4;
+            const c2 = png.data[idx2] << 16 | png.data[idx2 + 1] << 8 | png.data[idx2 + 2];
+            if (c2 !== cur) edges++;
+          }
+        }
+      }
+      const maxEdges = (w - 1) * h + (h - 1) * w;
+      const edgeDensity = maxEdges > 0 ? edges / maxEdges : 0;
+      const dominantColors = Array.from(colorCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([color, count]) => ({ color, count, pct: total ? count / total : 0 }));
+      const lumMean = total ? lumSum / total : 0;
+      const lumVar = total ? Math.max(0, lumSumSq / total - lumMean * lumMean) : 0;
+      const recentChangeRate = null;
+      const { stage, styleTags, riskScore } = classifyRegion({ fillRatio, edgeDensity, dominantColors, lumVar });
+      regions.push({
+        regionId: id,
+        x,
+        y,
+        w,
+        h,
+        dominantColors,
+        fillRatio,
+        edgeDensity,
+        recentChangeRate,
+        stage,
+        styleTags,
+        riskScore
+      });
+    }
+  }
+  return { width, height, regionSize, regions };
+}
+function classifyRegion({ fillRatio, edgeDensity, dominantColors, lumVar }) {
+  let stage = "in_progress";
+  if (fillRatio < 0.02) stage = "empty";
+  else if (fillRatio < 0.12) stage = "seeded";
+  else if (fillRatio < 0.65) stage = "in_progress";
+  else if (fillRatio < 0.9) stage = "nearly_done";
+  else stage = "finished";
+  if (fillRatio > 0.5 && edgeDensity > 0.25) stage = "damaged";
+  if (fillRatio > 0.65 && edgeDensity > 0.35) stage = "contested";
+  const styleTags = [];
+  const nColors = dominantColors?.length || 0;
+  const topPct = dominantColors?.[0]?.pct ?? 0;
+  if (edgeDensity > 0.22 && fillRatio > 0.25) styleTags.push("text_like");
+  if (edgeDensity > 0.18 && nColors >= 3) styleTags.push("geometric");
+  if (lumVar > 900 && fillRatio > 0.2) styleTags.push("starry");
+  if (nColors >= 4 && topPct < 0.55 && fillRatio > 0.25) styleTags.push("abstract");
+  if (fillRatio > 0.35 && edgeDensity < 0.08) styleTags.push("landscape");
+  if (fillRatio > 0.25 && edgeDensity < 0.12 && nColors <= 3) styleTags.push("portrait");
+  if (fillRatio > 0.2 && edgeDensity < 0.18 && nColors >= 3) styleTags.push("wave");
+  if (fillRatio > 0.25 && edgeDensity < 0.2 && nColors <= 4) styleTags.push("icon");
+  let riskScore = 0;
+  if (stage === "contested") riskScore += 0.6;
+  if (stage === "damaged") riskScore += 0.45;
+  riskScore += Math.min(0.4, edgeDensity * 1.2);
+  riskScore += fillRatio < 0.1 ? 0.15 : 0;
+  riskScore = Math.max(0, Math.min(1, riskScore));
+  const tags = Array.from(new Set(styleTags));
+  return { stage, styleTags: tags, riskScore };
+}
+var PROFILES = {
+  "wave-restorer": {
+    id: "wave-restorer",
+    preferredStyles: ["wave", "landscape", "geometric"],
+    preferredPalette: ["#0b3d91", "#1e90ff", "#00c2ff", "#ffffff", "#111111"],
+    preferredRoles: ["repair", "refine", "protect"],
+    stageAffinity: { damaged: 1, contested: 0.9, in_progress: 0.7, seeded: 0.4, nearly_done: 0.6, finished: 0.2, empty: 0.3 }
+  },
+  "starry-finisher": {
+    id: "starry-finisher",
+    preferredStyles: ["starry", "abstract"],
+    preferredPalette: ["#0a0a1a", "#111133", "#2d2d7a", "#f8f8ff", "#ffd27d"],
+    preferredRoles: ["fill", "refine", "protect"],
+    stageAffinity: { nearly_done: 1, in_progress: 0.8, seeded: 0.5, finished: 0.4, damaged: 0.6, contested: 0.5, empty: 0.2 }
+  },
+  "portrait-refiner": {
+    id: "portrait-refiner",
+    preferredStyles: ["portrait", "icon", "text_like"],
+    preferredPalette: ["#000000", "#ffffff", "#f2c9a0", "#c68642", "#8d5524"],
+    preferredRoles: ["refine", "repair", "protect"],
+    stageAffinity: { in_progress: 1, nearly_done: 0.9, finished: 0.6, seeded: 0.5, damaged: 0.8, contested: 0.7, empty: 0.2 }
+  }
+};
+function scoreRegionForProfile(region, profile) {
+  const reasons = [];
+  let score = 0;
+  const stageW = profile.stageAffinity?.[region.stage] ?? 0.4;
+  score += 0.35 * stageW;
+  reasons.push(`stage=${region.stage} affinity=${stageW.toFixed(2)}`);
+  const match = region.styleTags.filter((t) => profile.preferredStyles.includes(t));
+  const styleScore = Math.min(1, match.length / Math.max(1, profile.preferredStyles.length));
+  score += 0.35 * styleScore;
+  if (match.length) reasons.push(`styleMatch=${match.join(",")}`);
+  else reasons.push("styleMatch=none");
+  const r = region.riskScore;
+  const riskScore = 1 - Math.min(1, Math.abs(r - 0.4) / 0.6);
+  score += 0.15 * riskScore;
+  reasons.push(`risk=${r.toFixed(2)}`);
+  if (profile.id === "wave-restorer") {
+    const repairish = region.stage === "damaged" || region.stage === "contested";
+    score += repairish ? 0.15 : 0;
+    if (repairish) reasons.push("needs_repair");
+  }
+  if (profile.id === "starry-finisher") {
+    const finishish = region.stage === "nearly_done" || region.stage === "finished";
+    score += finishish ? 0.08 : 0;
+    if (finishish) reasons.push("finish_candidate");
+  }
+  if (profile.id === "portrait-refiner") {
+    const refineish = region.edgeDensity > 0.12 && region.fillRatio > 0.25;
+    score += refineish ? 0.1 : 0;
+    if (refineish) reasons.push("detail_edges");
+  }
+  score = Math.max(0, Math.min(1, score));
+  let actionType = "wait";
+  if (region.stage === "empty") actionType = "seed";
+  else if (region.stage === "seeded") actionType = "fill";
+  else if (region.stage === "in_progress") actionType = "refine";
+  else if (region.stage === "nearly_done") actionType = "protect";
+  else if (region.stage === "damaged") actionType = "repair";
+  else if (region.stage === "contested") actionType = "protect";
+  return { score, actionType, reasons };
+}
+
+// src/phase1/temporal.js
+function nowMs() {
+  return Date.now();
+}
+var TemporalRegionHistory = class {
+  constructor({ regionSize = 32, maxFrames = 5 } = {}) {
+    this.regionSize = regionSize;
+    this.maxFrames = maxFrames;
+    this.frames = [];
+  }
+  addFrameFromPng({ pngBytes, ts = nowMs() } = {}) {
+    const scan = scanRegionsFromPngBytes({ pngBytes, regionSize: this.regionSize });
+    const regionsById = new Map(scan.regions.map((r) => [r.regionId, r]));
+    this.frames.push({ ts, width: scan.width, height: scan.height, regionsById });
+    while (this.frames.length > this.maxFrames) this.frames.shift();
+    return { ts, width: scan.width, height: scan.height, regionSize: scan.regionSize, regions: scan.regions.length };
+  }
+  hasAtLeast(n) {
+    return this.frames.length >= n;
+  }
+  latest() {
+    return this.frames[this.frames.length - 1] || null;
+  }
+  previous() {
+    return this.frames.length >= 2 ? this.frames[this.frames.length - 2] : null;
+  }
+  computeTemporalSummaries() {
+    const cur = this.latest();
+    const prev = this.previous();
+    if (!cur) return [];
+    const dtMs = prev ? Math.max(1, cur.ts - prev.ts) : null;
+    const out = [];
+    for (const [id, r] of cur.regionsById.entries()) {
+      let changedPixels = null;
+      let recentChangeRate = null;
+      let stabilityScore = null;
+      if (prev) {
+        const p = prev.regionsById.get(id);
+        if (p) {
+          const dFill = Math.abs((r.fillRatio ?? 0) - (p.fillRatio ?? 0));
+          const dEdge = Math.abs((r.edgeDensity ?? 0) - (p.edgeDensity ?? 0));
+          const proxy = Math.min(1, dFill * 2 + dEdge * 1.5);
+          const regionPx = r.w * r.h;
+          changedPixels = Math.round(proxy * regionPx);
+          recentChangeRate = changedPixels / regionPx / (dtMs / 1e3);
+          stabilityScore = Math.max(0, Math.min(1, 1 - proxy));
+        }
+      }
+      out.push({
+        ...r,
+        temporal: {
+          dtMs,
+          changedPixels,
+          recentChangeRate,
+          stabilityScore
+        }
+      });
+    }
+    return out;
+  }
+};
+function temporalStageOverride({ baseStage, fillRatio, edgeDensity, temporal }) {
+  let stage = baseStage;
+  const rcr = temporal?.recentChangeRate;
+  const stab = temporal?.stabilityScore;
+  if (rcr != null) {
+    if ((edgeDensity ?? 0) > 0.25 && rcr > 0.03) stage = "contested";
+    else if ((edgeDensity ?? 0) > 0.22 && rcr > 0.015) stage = "damaged";
+    if ((fillRatio ?? 0) > 0.9 && rcr < 2e-3 && (stab ?? 0) > 0.9) stage = "finished";
+    else if ((fillRatio ?? 0) > 0.75 && rcr < 0.01) stage = "nearly_done";
+  }
+  return stage;
+}
+
+// src/phase1/actions.js
+var actions_exports = {};
+__export(actions_exports, {
+  candidateActionsForProfile: () => candidateActionsForProfile,
+  patchPlansFromCandidateActions: () => patchPlansFromCandidateActions
+});
+function candidateActionsForProfile({ regionSummaries, profileId, topN = 5 }) {
+  const profile = PROFILES[profileId];
+  if (!profile) throw new Error(`unknown profile: ${profileId}`);
+  const normalized = regionSummaries.map((r) => {
+    const baseStage = r.stage;
+    const stage = temporalStageOverride({ baseStage, fillRatio: r.fillRatio, edgeDensity: r.edgeDensity, temporal: r.temporal });
+    return { ...r, stage, baseStage };
+  });
+  const scored = normalized.map((r) => {
+    const s = scoreRegionForProfile(r, profile);
+    const stability = r.temporal?.stabilityScore;
+    const rcr = r.temporal?.recentChangeRate;
+    let expectedGain = 0.1;
+    if (s.actionType === "repair") expectedGain = 0.35;
+    else if (s.actionType === "refine") expectedGain = 0.25;
+    else if (s.actionType === "fill") expectedGain = 0.2;
+    else if (s.actionType === "protect") expectedGain = 0.18;
+    else if (s.actionType === "seed") expectedGain = 0.12;
+    if (stability != null && stability < 0.3) expectedGain *= 0.6;
+    if (stability != null && stability > 0.85 && r.stage === "nearly_done") expectedGain *= 1.2;
+    const reasons = [...s.reasons];
+    if (rcr != null) reasons.push(`rcr=${rcr.toFixed(4)}/s`);
+    if (stability != null) reasons.push(`stability=${stability.toFixed(2)}`);
+    if (r.baseStage !== r.stage) reasons.push(`temporalStage:->`);
+    return {
+      regionId: r.regionId,
+      x: r.x,
+      y: r.y,
+      w: r.w,
+      h: r.h,
+      score: s.score,
+      actionType: s.actionType,
+      expectedGain,
+      reasons,
+      _region: r
+    };
+  }).sort((a, b) => b.score - a.score).slice(0, topN);
+  return scored.map(({ _region, ...rest }) => rest);
+}
+function patchPlansFromCandidateActions({ candidateActions, maxPlans = 3 }) {
+  const plans = [];
+  for (let i = 0; i < Math.min(maxPlans, candidateActions.length); i++) {
+    const a = candidateActions[i];
+    const size = 16;
+    let px = a.x;
+    let py = a.y;
+    if (["repair", "refine", "protect"].includes(a.actionType)) {
+      px = a.x + Math.floor((a.w - size) / 2);
+      py = a.y + Math.floor((a.h - size) / 2);
+    }
+    plans.push({
+      patchId: `${a.regionId}_p${i}`,
+      x: px,
+      y: py,
+      w: Math.min(size, a.w),
+      h: Math.min(size, a.h),
+      actionType: a.actionType,
+      expectedGain: a.expectedGain,
+      reason: a.reasons.slice(0, 4)
+    });
+  }
+  return plans;
+}
+
+// src/phase4/coordinator.js
+var coordinator_exports = {};
+__export(coordinator_exports, {
+  PatchCoordinator: () => PatchCoordinator,
+  runTwoAgentDemo: () => runTwoAgentDemo
+});
+
+// src/phase3/executor.js
+function hexToRgb(hex) {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) throw new Error(`bad hex: ${hex}`);
+  const n = parseInt(m[1], 16);
+  return { r: n >> 16 & 255, g: n >> 8 & 255, b: n & 255 };
+}
+async function readRegion({ baseUrl, x, y, w, h }) {
+  const snap = await fetchBoardSnapshot({ baseUrl });
+  const { region } = regionFromPngBytes({ pngBytes: snap.bytes, x, y, w, h });
+  return { ts: Date.now(), region };
+}
+function generateSolidPatchPixels({ x, y, w, h, color = "#ffffff" }) {
+  const pixels = [];
+  for (let yy = y; yy < y + h; yy++) {
+    for (let xx = x; xx < x + w; xx++) {
+      pixels.push({ x: xx, y: yy, color });
+    }
+  }
+  return pixels;
+}
+async function draw_pixels_chunked({ board, pixels, chunkSize = 50, stopOnError = true }) {
+  let accepted = 0;
+  let firstError = null;
+  for (let i = 0; i < pixels.length; i += chunkSize) {
+    const chunk = pixels.slice(i, i + chunkSize);
+    for (const p of chunk) {
+      const { r, g, b } = hexToRgb(p.color);
+      const ok2 = board.sendPixel({ x: p.x, y: p.y, r, g, b });
+      if (ok2) accepted++;
+      else {
+        firstError = firstError || "send_rejected";
+        if (stopOnError) return { accepted, firstError };
+      }
+    }
+  }
+  return { accepted, firstError };
+}
+function comparePatch({ requestedPixels, afterRegion }) {
+  const map = /* @__PURE__ */ new Map();
+  for (const p of afterRegion.pixels) map.set(`${p.x},${p.y}`, p.color.toLowerCase());
+  let matched = 0;
+  for (const p of requestedPixels) {
+    const got = map.get(`${p.x},${p.y}`);
+    if (got && got === p.color.toLowerCase()) matched++;
+  }
+  const matchRatio = requestedPixels.length ? matched / requestedPixels.length : 0;
+  return { matched, matchRatio };
+}
+async function executePatchPlan({ baseUrl, boardWsUrl, patchPlan, color = "#ffffff", chunkSize = 50 }) {
+  const board = new BoardWSClient({ url: boardWsUrl });
+  await board.connect();
+  await board.awaitReady({ timeoutMs: 4e3 });
+  const allowDraw = board.allowDraw;
+  const before = await readRegion({ baseUrl, x: patchPlan.x, y: patchPlan.y, w: patchPlan.w, h: patchPlan.h });
+  const requestedPixels = generateSolidPatchPixels({ x: patchPlan.x, y: patchPlan.y, w: patchPlan.w, h: patchPlan.h, color });
+  let accepted = 0;
+  let stoppedReason = null;
+  if (!allowDraw) {
+    stoppedReason = "draw_not_allowed";
+  } else {
+    const res = await draw_pixels_chunked({ board, pixels: requestedPixels, chunkSize, stopOnError: true });
+    accepted = res.accepted;
+    if (res.firstError) stoppedReason = res.firstError;
+  }
+  const after = await readRegion({ baseUrl, x: patchPlan.x, y: patchPlan.y, w: patchPlan.w, h: patchPlan.h });
+  const { matched, matchRatio } = comparePatch({ requestedPixels, afterRegion: after.region });
+  let overwritten = false;
+  let status = "failed";
+  if (accepted > 0) {
+    if (matchRatio >= 0.9) status = "success";
+    else if (matchRatio >= 0.5) status = "partial";
+    else {
+      overwritten = true;
+      status = "overwritten";
+    }
+  } else {
+    status = "failed";
+  }
+  board.close();
+  return {
+    patchId: patchPlan.patchId,
+    regionId: patchPlan.regionId,
+    x: patchPlan.x,
+    y: patchPlan.y,
+    w: patchPlan.w,
+    h: patchPlan.h,
+    allowDraw,
+    requestedPixels: requestedPixels.length,
+    accepted,
+    matched,
+    matchRatio,
+    overwritten,
+    status,
+    stoppedReason,
+    beforeSample: before.region.pixels.slice(0, 12),
+    afterSample: after.region.pixels.slice(0, 12)
+  };
+}
+
+// src/phase4/coordinator.js
+function patchKey(p) {
+  return `${p.x},${p.y},${p.w},${p.h}`;
+}
+var PatchCoordinator = class {
+  constructor() {
+    this.reserved = /* @__PURE__ */ new Map();
+    this.occupied = /* @__PURE__ */ new Map();
+  }
+  canAssign(patch, agentId) {
+    const k = patchKey(patch);
+    const r = this.reserved.get(k);
+    const o = this.occupied.get(k);
+    return (!r || r === agentId) && (!o || o.agentId === agentId);
+  }
+  reserve(patch, agentId) {
+    const k = patchKey(patch);
+    if (!this.canAssign(patch, agentId)) return false;
+    this.reserved.set(k, agentId);
+    return true;
+  }
+  markOccupied(patch, agentId, status) {
+    const k = patchKey(patch);
+    this.occupied.set(k, { agentId, status, ts: Date.now() });
+  }
+  release(patch, agentId) {
+    const k = patchKey(patch);
+    if (this.reserved.get(k) === agentId) this.reserved.delete(k);
+  }
+  assignNonConflictingPatches({ candidateActionsByAgent, maxPlansPerAgent = 3 }) {
+    const assignments = {};
+    const agentIds = Object.keys(candidateActionsByAgent);
+    const plansByAgent = {};
+    for (const agentId of agentIds) {
+      const acts = candidateActionsByAgent[agentId];
+      const plans = patchPlansFromCandidateActions({ candidateActions: acts, maxPlans: maxPlansPerAgent }).map((p, i) => ({
+        ...p,
+        regionId: acts[i]?.regionId
+      }));
+      plansByAgent[agentId] = plans;
+    }
+    for (const agentId of agentIds) {
+      let picked = null;
+      for (const p of plansByAgent[agentId]) {
+        if (this.reserve(p, agentId)) {
+          picked = p;
+          break;
+        }
+      }
+      assignments[agentId] = {
+        patch: picked,
+        conflicted: picked ? false : true,
+        tried: plansByAgent[agentId].map(patchKey)
+      };
+    }
+    return assignments;
+  }
+  expansionCandidate(patch) {
+    const right = { ...patch, patchId: `${patch.patchId}_expR`, x: patch.x + patch.w };
+    const down = { ...patch, patchId: `${patch.patchId}_expD`, y: patch.y + patch.h };
+    return [right, down];
+  }
+  relocationCandidate({ agentId, candidateActions }) {
+    const plans = patchPlansFromCandidateActions({ candidateActions, maxPlans: 8 }).map((p, i) => ({
+      ...p,
+      regionId: candidateActions[i]?.regionId
+    }));
+    for (const p of plans) {
+      const k = patchKey(p);
+      const occ = this.occupied.get(k);
+      if (occ && occ.agentId === agentId && (occ.status === "overwritten" || occ.status === "failed")) continue;
+      if (this.canAssign(p, agentId)) return p;
+    }
+    return null;
+  }
+};
+async function runTwoAgentDemo({ baseUrl, boardWsUrl, snapshotIntervalMs = 1200 }) {
+  const hist = new TemporalRegionHistory({ regionSize: 32, maxFrames: 3 });
+  const s1 = await fetchBoardSnapshot({ baseUrl });
+  hist.addFrameFromPng({ pngBytes: s1.bytes, ts: Date.now() });
+  await new Promise((r) => setTimeout(r, snapshotIntervalMs));
+  const s2 = await fetchBoardSnapshot({ baseUrl });
+  hist.addFrameFromPng({ pngBytes: s2.bytes, ts: Date.now() });
+  const summaries = hist.computeTemporalSummaries();
+  const coordinator = new PatchCoordinator();
+  const agents = ["wave-restorer", "starry-finisher"];
+  const candidateActionsByAgent = {};
+  for (const a of agents) {
+    candidateActionsByAgent[a] = candidateActionsForProfile({ regionSummaries: summaries, profileId: a, topN: 5 });
+  }
+  const assignments = coordinator.assignNonConflictingPatches({ candidateActionsByAgent, maxPlansPerAgent: 3 });
+  const demo = { baseUrl, boardWsUrl, assignments: {}, results: {}, followups: {} };
+  for (const agentId of agents) {
+    const a = assignments[agentId];
+    demo.assignments[agentId] = a;
+    const patch = a.patch;
+    if (!patch) {
+      demo.results[agentId] = { status: "failed", stoppedReason: "no_nonconflicting_patch" };
+      continue;
+    }
+    const execRes = await executePatchPlan({ baseUrl, boardWsUrl, patchPlan: patch, color: "#ffffff", chunkSize: 50 });
+    coordinator.markOccupied(patch, agentId, execRes.status);
+    coordinator.release(patch, agentId);
+    demo.results[agentId] = execRes;
+    if (execRes.status === "success") {
+      const candidates = coordinator.expansionCandidate(patch);
+      const picked = candidates.find((p) => coordinator.canAssign(p, agentId)) || null;
+      demo.followups[agentId] = { kind: "expansion", candidates, picked };
+    } else if (execRes.status === "overwritten" || execRes.matchRatio < 0.2) {
+      const relocate = coordinator.relocationCandidate({ agentId, candidateActions: candidateActionsByAgent[agentId] });
+      demo.followups[agentId] = { kind: "relocation", picked: relocate };
+    } else {
+      demo.followups[agentId] = { kind: "none" };
+    }
+  }
+  const pickedKeys = agents.map((id) => ({ id, key: demo.assignments[id]?.patch ? patchKey(demo.assignments[id].patch) : null })).filter((x) => x.key);
+  demo.conflict = {
+    picked: pickedKeys,
+    unique: new Set(pickedKeys.map((x) => x.key)).size === pickedKeys.length
+  };
+  return demo;
+}
+
+// src/phase5/artwork.js
+var artwork_exports = {};
+__export(artwork_exports, {
+  assignTeam: () => assignTeam,
+  clusterRegions: () => clusterRegions,
+  frontierPatchesForGoal: () => frontierPatchesForGoal,
+  goalsForClusters: () => goalsForClusters,
+  phase5Demo: () => phase5Demo
+});
+function regionKey(r) {
+  const i = Math.floor(r.x / r.w);
+  const j = Math.floor(r.y / r.h);
+  return `${i}_${j}`;
+}
+function neighborsOf(r) {
+  const i = Math.floor(r.x / r.w);
+  const j = Math.floor(r.y / r.h);
+  return [
+    `${i - 1}_${j}`,
+    `${i + 1}_${j}`,
+    `${i}_${j - 1}`,
+    `${i}_${j + 1}`
+  ];
+}
+function jaccard(a, b) {
+  const A = new Set(a);
+  const B = new Set(b);
+  const inter = [...A].filter((x) => B.has(x)).length;
+  const uni = (/* @__PURE__ */ new Set([...A, ...B])).size;
+  return uni ? inter / uni : 0;
+}
+function top1Color(r) {
+  return r?.dominantColors?.[0]?.color || null;
+}
+function isBarrier(r) {
+  const fill = r.fillRatio ?? 0;
+  const rcr = r.temporal?.recentChangeRate;
+  const stab = r.temporal?.stabilityScore;
+  if (fill < 0.05) return true;
+  if (fill > 0.9 && rcr != null && rcr < 2e-3 && stab != null && stab > 0.9) return true;
+  return false;
+}
+function stageGroup(s) {
+  if (s === "damaged" || s === "contested") return "conflict";
+  if (s === "in_progress" || s === "seeded") return "work";
+  if (s === "nearly_done") return "near";
+  if (s === "finished") return "done";
+  return "other";
+}
+function mergeBbox(b, r) {
+  const x1 = Math.min(b.x, r.x);
+  const y1 = Math.min(b.y, r.y);
+  const x2 = Math.max(b.x + b.w, r.x + r.w);
+  const y2 = Math.max(b.y + b.h, r.y + r.h);
+  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+}
+function clusterRegions({ regionSummaries }) {
+  const byKey = new Map(regionSummaries.map((r) => [regionKey(r), r]));
+  const visited = /* @__PURE__ */ new Set();
+  const clusters = [];
+  const compatibleStage = (s) => s === "in_progress" || s === "nearly_done" || s === "damaged" || s === "contested" || s === "finished";
+  for (const r of regionSummaries) {
+    const k0 = regionKey(r);
+    if (visited.has(k0)) continue;
+    visited.add(k0);
+    if (!compatibleStage(r.stage)) continue;
+    if (isBarrier(r)) continue;
+    const queue = [r];
+    const members = [r];
+    let bbox = { x: r.x, y: r.y, w: r.w, h: r.h };
+    while (queue.length) {
+      const cur = queue.pop();
+      for (const nk of neighborsOf(cur)) {
+        if (visited.has(nk)) continue;
+        const nr = byKey.get(nk);
+        if (!nr) continue;
+        const styleSim = jaccard(cur.styleTags || [], nr.styleTags || []);
+        const stageOk = !(cur.stage === "empty" || nr.stage === "empty");
+        const colorOk = true;
+        const c1 = top1Color(cur);
+        const c2 = top1Color(nr);
+        const topColorMatch = c1 && c2 && c1 === c2;
+        const sg1 = stageGroup(cur.stage);
+        const sg2 = stageGroup(nr.stage);
+        const stageCompat = sg1 === sg2 || sg1 === "conflict" && sg2 === "conflict" || sg1 === "work" && sg2 === "near" || sg1 === "near" && sg2 === "work";
+        const styleCompat = styleSim >= 0.25 || topColorMatch && styleSim >= 0.1 || cur.styleTags?.includes("geometric") && nr.styleTags?.includes("geometric") && styleSim >= 0.1;
+        if (stageOk && stageCompat && colorOk && styleCompat && !isBarrier(nr)) {
+          visited.add(nk);
+          queue.push(nr);
+          members.push(nr);
+          bbox = mergeBbox(bbox, nr);
+        }
+      }
+    }
+    if (members.length >= 2) {
+      const styleCounts = /* @__PURE__ */ new Map();
+      const colorCounts = /* @__PURE__ */ new Map();
+      let riskSum = 0;
+      const stageCounts = /* @__PURE__ */ new Map();
+      for (const m of members) {
+        for (const t of m.styleTags || []) styleCounts.set(t, (styleCounts.get(t) || 0) + 1);
+        for (const dc of m.dominantColors || []) colorCounts.set(dc.color, (colorCounts.get(dc.color) || 0) + dc.count);
+        riskSum += m.riskScore ?? 0;
+        stageCounts.set(m.stage, (stageCounts.get(m.stage) || 0) + 1);
+      }
+      const dominantStyles = [...styleCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t]) => t);
+      const dominantColors = [...colorCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c]) => c);
+      const stage = [...stageCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "in_progress";
+      const riskScore = members.length ? riskSum / members.length : 0;
+      clusters.push({
+        clusterId: `c${clusters.length}`,
+        regionIds: members.map((x) => x.regionId),
+        bbox,
+        dominantStyles,
+        dominantColors,
+        stage,
+        riskScore
+      });
+    }
+  }
+  return clusters;
+}
+function goalsForClusters({ clusters }) {
+  const goals = [];
+  for (const c of clusters) {
+    let goalType = "expand";
+    let priority = 0.5;
+    let preferredRoles = ["fill", "refine"];
+    const reasons = [];
+    if (c.stage === "damaged" || c.stage === "contested") {
+      goalType = "repair";
+      priority = Math.min(1, 0.6 + c.riskScore * 0.4);
+      preferredRoles = ["repair", "protect", "refine"];
+      reasons.push(`stage=${c.stage}`);
+      reasons.push(`risk=${c.riskScore.toFixed(2)}`);
+    } else if (c.stage === "nearly_done") {
+      goalType = "complete";
+      priority = 0.75;
+      preferredRoles = ["refine", "protect", "fill"];
+      reasons.push("nearly_done cluster");
+    } else if (c.stage === "finished") {
+      goalType = "protect";
+      priority = 0.65;
+      preferredRoles = ["protect"];
+      reasons.push("finished cluster");
+    } else {
+      goalType = "expand";
+      priority = 0.55;
+      preferredRoles = ["fill", "refine"];
+      reasons.push("in_progress cluster");
+    }
+    goals.push({ clusterId: c.clusterId, goalType, priority, preferredRoles, reasons });
+  }
+  goals.sort((a, b) => b.priority - a.priority);
+  return goals;
+}
+function assignTeam({ goal, agentIds = ["wave-restorer", "starry-finisher", "portrait-refiner"] }) {
+  const roles = goal.preferredRoles;
+  const pick = [];
+  for (const role of roles) {
+    const agent = agentIds.find((id) => PROFILES[id]?.preferredRoles?.includes(role) && !pick.find((p) => p.agentId === id));
+    if (agent) pick.push({ agentId: agent, role });
+    if (pick.length >= 2) break;
+  }
+  if (pick.length < 2) {
+    for (const id of agentIds) {
+      if (!pick.find((p) => p.agentId === id)) pick.push({ agentId: id, role: roles[pick.length] || "refine" });
+      if (pick.length >= 2) break;
+    }
+  }
+  return { goalClusterId: goal.clusterId, goalType: goal.goalType, members: pick };
+}
+function frontierPatchesForGoal({ goal, clusters, regionSummaries }) {
+  const cluster = clusters.find((c) => c.clusterId === goal.clusterId);
+  if (!cluster) return [];
+  const inCluster = regionSummaries.filter((r) => cluster.regionIds.includes(r.regionId));
+  inCluster.sort((a, b) => (b.riskScore ?? 0) - (a.riskScore ?? 0));
+  const topRegions = inCluster.slice(0, 3);
+  const patches = [];
+  for (const r of topRegions) {
+    const size = 16;
+    const frontierType = goal.goalType === "repair" ? "damaged_hotspot" : goal.goalType === "protect" ? "protection_edge" : goal.goalType === "complete" ? "finishing_edge" : "expansion_boundary";
+    patches.push({
+      patchId: `${r.regionId}_front0`,
+      regionId: r.regionId,
+      x: r.x + Math.floor((r.w - size) / 2),
+      y: r.y + Math.floor((r.h - size) / 2),
+      w: Math.min(size, r.w),
+      h: Math.min(size, r.h),
+      actionType: goal.goalType === "repair" ? "repair" : goal.goalType === "protect" ? "protect" : goal.goalType === "complete" ? "refine" : "fill",
+      frontierType,
+      reason: [`cluster=${cluster.clusterId}`, `goal=${goal.goalType}`, `frontierType=${frontierType}`, `regionRisk=${(r.riskScore ?? 0).toFixed(2)}`]
+    });
+  }
+  return patches;
+}
+async function phase5Demo({ baseUrl, snapshotIntervalMs = 1200 }) {
+  const hist = new TemporalRegionHistory({ regionSize: 32, maxFrames: 3 });
+  const s1 = await fetchBoardSnapshot({ baseUrl });
+  hist.addFrameFromPng({ pngBytes: s1.bytes, ts: Date.now() });
+  await new Promise((r) => setTimeout(r, snapshotIntervalMs));
+  const s2 = await fetchBoardSnapshot({ baseUrl });
+  hist.addFrameFromPng({ pngBytes: s2.bytes, ts: Date.now() });
+  const regionSummaries = hist.computeTemporalSummaries();
+  const clusters = clusterRegions({ regionSummaries });
+  const goals = goalsForClusters({ clusters }).slice(0, 6);
+  const teamAssignments = goals.slice(0, 2).map((g) => assignTeam({ goal: g }));
+  const frontier = goals.flatMap((g) => frontierPatchesForGoal({ goal: g, clusters, regionSummaries })).slice(0, 6);
+  return { baseUrl, board: { width: hist.latest().width, height: hist.latest().height, regionSize: 32, frames: hist.frames.length }, clusters: clusters.slice(0, 10), goals: goals.slice(0, 3), teamAssignments, frontierPatches: frontier.slice(0, 6) };
+}
+
+// src/phase5/refine.js
+var refine_exports = {};
+__export(refine_exports, {
+  coarseAndRefined: () => coarseAndRefined,
+  refineClustersPaletteSplit: () => refineClustersPaletteSplit
+});
+function rgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [n >> 16 & 255, n >> 8 & 255, n & 255];
+}
+function dist(a, b) {
+  const dr = a[0] - b[0];
+  const dg = a[1] - b[1];
+  const db = a[2] - b[2];
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+function regionKey2(r) {
+  const i = Math.floor(r.x / r.w);
+  const j = Math.floor(r.y / r.h);
+  return `${i}_${j}`;
+}
+function neighborsKeys(r) {
+  const i = Math.floor(r.x / r.w);
+  const j = Math.floor(r.y / r.h);
+  return [`${i - 1}_${j}`, `${i + 1}_${j}`, `${i}_${j - 1}`, `${i}_${j + 1}`];
+}
+function topColorsVec(r, k = 3) {
+  return (r.dominantColors || []).slice(0, k).map((d) => d.color);
+}
+function paletteDistance(r1, r2) {
+  const a = topColorsVec(r1);
+  const b = topColorsVec(r2);
+  if (!a.length || !b.length) return 999;
+  const A = a.map(rgb);
+  const B = b.map(rgb);
+  let sum = 0;
+  for (const va of A) {
+    let md = Infinity;
+    for (const vb of B) md = Math.min(md, dist(va, vb));
+    sum += md;
+  }
+  return sum / A.length;
+}
+function refineClustersPaletteSplit({ regionSummaries, coarseClusters, paletteThreshold = 60 }) {
+  const byGrid = new Map(regionSummaries.map((r) => [regionKey2(r), r]));
+  const refined = [];
+  for (const c of coarseClusters) {
+    const keys = new Set(c.regionIds.map((rid) => {
+      const r = regionSummaries.find((x) => x.regionId === rid);
+      return r ? regionKey2(r) : null;
+    }).filter(Boolean));
+    const visited = /* @__PURE__ */ new Set();
+    let part = 0;
+    for (const k0 of keys) {
+      if (visited.has(k0)) continue;
+      visited.add(k0);
+      const seed = byGrid.get(k0);
+      if (!seed) continue;
+      const queue = [seed];
+      const members = [seed];
+      let bbox = { x: seed.x, y: seed.y, w: seed.w, h: seed.h };
+      while (queue.length) {
+        const cur = queue.pop();
+        for (const nk of neighborsKeys(cur)) {
+          if (!keys.has(nk) || visited.has(nk)) continue;
+          const nr = byGrid.get(nk);
+          if (!nr) continue;
+          const pd = paletteDistance(cur, nr);
+          if (pd <= paletteThreshold) {
+            visited.add(nk);
+            queue.push(nr);
+            members.push(nr);
+            const x1 = Math.min(bbox.x, nr.x);
+            const y1 = Math.min(bbox.y, nr.y);
+            const x2 = Math.max(bbox.x + bbox.w, nr.x + nr.w);
+            const y2 = Math.max(bbox.y + bbox.h, nr.y + nr.h);
+            bbox = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+          }
+        }
+      }
+      if (members.length >= 2) {
+        const styleCounts = /* @__PURE__ */ new Map();
+        const colorCounts = /* @__PURE__ */ new Map();
+        const stageCounts = /* @__PURE__ */ new Map();
+        let riskSum = 0;
+        for (const m of members) {
+          for (const t of m.styleTags || []) styleCounts.set(t, (styleCounts.get(t) || 0) + 1);
+          for (const dc of m.dominantColors || []) colorCounts.set(dc.color, (colorCounts.get(dc.color) || 0) + dc.count);
+          stageCounts.set(m.stage, (stageCounts.get(m.stage) || 0) + 1);
+          riskSum += m.riskScore ?? 0;
+        }
+        const dominantStyles = [...styleCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t]) => t);
+        const dominantColors = [...colorCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([cc]) => cc);
+        const stage = [...stageCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "in_progress";
+        const riskScore = members.length ? riskSum / members.length : 0;
+        refined.push({
+          clusterId: `${c.clusterId}.${part++}`,
+          parentClusterId: c.clusterId,
+          regionIds: members.map((m) => m.regionId),
+          bbox,
+          dominantStyles,
+          dominantColors,
+          stage,
+          riskScore,
+          splitReason: `paletteSplit(threshold=${paletteThreshold})`
+        });
+      }
+    }
+    const kids = refined.filter((r) => r.parentClusterId === c.clusterId);
+    if (!kids.length) {
+      refined.push({
+        clusterId: `${c.clusterId}.0`,
+        parentClusterId: c.clusterId,
+        regionIds: c.regionIds,
+        bbox: c.bbox,
+        dominantStyles: c.dominantStyles,
+        dominantColors: c.dominantColors,
+        stage: c.stage,
+        riskScore: c.riskScore,
+        splitReason: `paletteSplit(threshold=${paletteThreshold})_no_split`
+      });
+    }
+  }
+  return refined;
+}
+function coarseAndRefined({ regionSummaries, paletteThreshold = 60 }) {
+  const coarse = clusterRegions({ regionSummaries });
+  const refined = refineClustersPaletteSplit({ regionSummaries, coarseClusters: coarse, paletteThreshold });
+  return { coarse, refined };
+}
+
 // src/index.js
 function createAgentDerbySkill({
   baseUrl = "https://agentderby.ai",
@@ -6328,15 +7234,15 @@ function createAgentDerbySkill({
     if (!Number.isInteger(x) || !Number.isInteger(y)) {
       return err(ErrorCode.INVALID, "x/y must be integers");
     }
-    const rgb = parseHexColor(color);
-    if (!rgb) return err(ErrorCode.INVALID, "color must be #RRGGBB");
+    const rgb2 = parseHexColor(color);
+    if (!rgb2) return err(ErrorCode.INVALID, "color must be #RRGGBB");
     try {
       await board.awaitReady();
       if (board.allowDraw !== true) {
         return err(ErrorCode.REJECTED, "drawing not allowed (whitelist/key)");
       }
       await limiter.wait();
-      const accepted = board.sendPixel({ x, y, ...rgb });
+      const accepted = board.sendPixel({ x, y, ...rgb2 });
       if (!accepted) return err(ErrorCode.NETWORK, "board websocket not connected or draw not allowed");
       if (!observe) {
         return ok({ accepted: true, observed: false });
@@ -6365,7 +7271,7 @@ function createAgentDerbySkill({
     }
     return ok({ accepted: true, observed: observe ? results.every((r) => r.ok && r.observed) : false, results });
   }
-  async function draw_pixels_chunked({ pixels, chunkSize = 50, observe = false, stopOnError = true } = {}) {
+  async function draw_pixels_chunked2({ pixels, chunkSize = 50, observe = false, stopOnError = true } = {}) {
     if (!Array.isArray(pixels)) return err(ErrorCode.INVALID, "pixels must be an array");
     const req = pixels.length;
     const cs = Math.max(1, Math.min(50, Number(chunkSize) || 50));
@@ -6487,7 +7393,7 @@ function createAgentDerbySkill({
     // Phase 2 APIs
     draw_pixel,
     draw_pixels,
-    draw_pixels_chunked,
+    draw_pixels_chunked: draw_pixels_chunked2,
     // TEMP TRACE
     get_debug_truth_trace,
     // Phase 3 APIs
@@ -6505,6 +7411,11 @@ function createAgentDerbySkill({
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  createAgentDerbySkill
+  actions,
+  createAgentDerbySkill,
+  phase4,
+  phase5,
+  phase5refine,
+  temporal
 });
 //# sourceMappingURL=index.cjs.map
