@@ -349,3 +349,4 @@ export * as phase5refine from "./phase5/refine.js";
 export * as phase5plan from "./phase5/plan_refined.js";
 export * as phase6 from "./phase6/artwork_exec.js";
 export * as phase6_1 from "./phase6/artwork_exec61.js";
+export * as phase7 from "./phase7/success.js";
