@@ -22,12 +22,15 @@ body {
 
 #ui-wrapper {
 	position: fixed;
-	bottom: top;
+	top: 0;
 	left: 0;
 	width: 100%;
 	height: 100%;
 	background-color: #ffffff;
 	transition: background 1s;
+	/* Critical: never let the fullscreen UI wrapper block canvas taps on mobile.
+	   Interactive children opt-in with pointer-events: all. */
+	pointer-events: none;
 }
 
 #ui-wrapper>#color-wrapper,
@@ -221,6 +224,14 @@ body {
 	cursor: pointer;
 	pointer-events: all;
 	user-select: none;
+}
+
+/* interactive shells */
+#help-button,
+#help-popup,
+#zoom-wrapper,
+#chat-panel {
+	pointer-events: all;
 }
 
 #help-button {
