@@ -5738,6 +5738,7 @@ var index_exports = {};
 __export(index_exports, {
   actions: () => actions_exports,
   createAgentDerbySkill: () => createAgentDerbySkill,
+  phase4: () => coordinator_exports,
   temporal: () => temporal_exports
 });
 module.exports = __toCommonJS(index_exports);
@@ -6558,6 +6559,236 @@ function patchPlansFromCandidateActions({ candidateActions, maxPlans = 3 }) {
   return plans;
 }
 
+// src/phase4/coordinator.js
+var coordinator_exports = {};
+__export(coordinator_exports, {
+  PatchCoordinator: () => PatchCoordinator,
+  runTwoAgentDemo: () => runTwoAgentDemo
+});
+
+// src/phase3/executor.js
+function hexToRgb(hex) {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) throw new Error(`bad hex: ${hex}`);
+  const n = parseInt(m[1], 16);
+  return { r: n >> 16 & 255, g: n >> 8 & 255, b: n & 255 };
+}
+async function readRegion({ baseUrl, x, y, w, h }) {
+  const snap = await fetchBoardSnapshot({ baseUrl });
+  const { region } = regionFromPngBytes({ pngBytes: snap.bytes, x, y, w, h });
+  return { ts: Date.now(), region };
+}
+function generateSolidPatchPixels({ x, y, w, h, color = "#ffffff" }) {
+  const pixels = [];
+  for (let yy = y; yy < y + h; yy++) {
+    for (let xx = x; xx < x + w; xx++) {
+      pixels.push({ x: xx, y: yy, color });
+    }
+  }
+  return pixels;
+}
+async function draw_pixels_chunked({ board, pixels, chunkSize = 50, stopOnError = true }) {
+  let accepted = 0;
+  let firstError = null;
+  for (let i = 0; i < pixels.length; i += chunkSize) {
+    const chunk = pixels.slice(i, i + chunkSize);
+    for (const p of chunk) {
+      const { r, g, b } = hexToRgb(p.color);
+      const ok2 = board.sendPixel({ x: p.x, y: p.y, r, g, b });
+      if (ok2) accepted++;
+      else {
+        firstError = firstError || "send_rejected";
+        if (stopOnError) return { accepted, firstError };
+      }
+    }
+  }
+  return { accepted, firstError };
+}
+function comparePatch({ requestedPixels, afterRegion }) {
+  const map = /* @__PURE__ */ new Map();
+  for (const p of afterRegion.pixels) map.set(`${p.x},${p.y}`, p.color.toLowerCase());
+  let matched = 0;
+  for (const p of requestedPixels) {
+    const got = map.get(`${p.x},${p.y}`);
+    if (got && got === p.color.toLowerCase()) matched++;
+  }
+  const matchRatio = requestedPixels.length ? matched / requestedPixels.length : 0;
+  return { matched, matchRatio };
+}
+async function executePatchPlan({ baseUrl, boardWsUrl, patchPlan, color = "#ffffff", chunkSize = 50 }) {
+  const board = new BoardWSClient({ url: boardWsUrl });
+  await board.connect();
+  await board.awaitReady({ timeoutMs: 4e3 });
+  const allowDraw = board.allowDraw;
+  const before = await readRegion({ baseUrl, x: patchPlan.x, y: patchPlan.y, w: patchPlan.w, h: patchPlan.h });
+  const requestedPixels = generateSolidPatchPixels({ x: patchPlan.x, y: patchPlan.y, w: patchPlan.w, h: patchPlan.h, color });
+  let accepted = 0;
+  let stoppedReason = null;
+  if (!allowDraw) {
+    stoppedReason = "draw_not_allowed";
+  } else {
+    const res = await draw_pixels_chunked({ board, pixels: requestedPixels, chunkSize, stopOnError: true });
+    accepted = res.accepted;
+    if (res.firstError) stoppedReason = res.firstError;
+  }
+  const after = await readRegion({ baseUrl, x: patchPlan.x, y: patchPlan.y, w: patchPlan.w, h: patchPlan.h });
+  const { matched, matchRatio } = comparePatch({ requestedPixels, afterRegion: after.region });
+  let overwritten = false;
+  let status = "failed";
+  if (accepted > 0) {
+    if (matchRatio >= 0.9) status = "success";
+    else if (matchRatio >= 0.5) status = "partial";
+    else {
+      overwritten = true;
+      status = "overwritten";
+    }
+  } else {
+    status = "failed";
+  }
+  board.close();
+  return {
+    patchId: patchPlan.patchId,
+    regionId: patchPlan.regionId,
+    x: patchPlan.x,
+    y: patchPlan.y,
+    w: patchPlan.w,
+    h: patchPlan.h,
+    allowDraw,
+    requestedPixels: requestedPixels.length,
+    accepted,
+    matched,
+    matchRatio,
+    overwritten,
+    status,
+    stoppedReason,
+    beforeSample: before.region.pixels.slice(0, 12),
+    afterSample: after.region.pixels.slice(0, 12)
+  };
+}
+
+// src/phase4/coordinator.js
+function patchKey(p) {
+  return `${p.x},${p.y},${p.w},${p.h}`;
+}
+var PatchCoordinator = class {
+  constructor() {
+    this.reserved = /* @__PURE__ */ new Map();
+    this.occupied = /* @__PURE__ */ new Map();
+  }
+  canAssign(patch, agentId) {
+    const k = patchKey(patch);
+    const r = this.reserved.get(k);
+    const o = this.occupied.get(k);
+    return (!r || r === agentId) && (!o || o.agentId === agentId);
+  }
+  reserve(patch, agentId) {
+    const k = patchKey(patch);
+    if (!this.canAssign(patch, agentId)) return false;
+    this.reserved.set(k, agentId);
+    return true;
+  }
+  markOccupied(patch, agentId, status) {
+    const k = patchKey(patch);
+    this.occupied.set(k, { agentId, status, ts: Date.now() });
+  }
+  release(patch, agentId) {
+    const k = patchKey(patch);
+    if (this.reserved.get(k) === agentId) this.reserved.delete(k);
+  }
+  assignNonConflictingPatches({ candidateActionsByAgent, maxPlansPerAgent = 3 }) {
+    const assignments = {};
+    const agentIds = Object.keys(candidateActionsByAgent);
+    const plansByAgent = {};
+    for (const agentId of agentIds) {
+      const acts = candidateActionsByAgent[agentId];
+      const plans = patchPlansFromCandidateActions({ candidateActions: acts, maxPlans: maxPlansPerAgent }).map((p, i) => ({
+        ...p,
+        regionId: acts[i]?.regionId
+      }));
+      plansByAgent[agentId] = plans;
+    }
+    for (const agentId of agentIds) {
+      let picked = null;
+      for (const p of plansByAgent[agentId]) {
+        if (this.reserve(p, agentId)) {
+          picked = p;
+          break;
+        }
+      }
+      assignments[agentId] = {
+        patch: picked,
+        conflicted: picked ? false : true,
+        tried: plansByAgent[agentId].map(patchKey)
+      };
+    }
+    return assignments;
+  }
+  expansionCandidate(patch) {
+    const right = { ...patch, patchId: `${patch.patchId}_expR`, x: patch.x + patch.w };
+    const down = { ...patch, patchId: `${patch.patchId}_expD`, y: patch.y + patch.h };
+    return [right, down];
+  }
+  relocationCandidate({ agentId, candidateActions }) {
+    const plans = patchPlansFromCandidateActions({ candidateActions, maxPlans: 8 }).map((p, i) => ({
+      ...p,
+      regionId: candidateActions[i]?.regionId
+    }));
+    for (const p of plans) {
+      const k = patchKey(p);
+      const occ = this.occupied.get(k);
+      if (occ && occ.agentId === agentId && (occ.status === "overwritten" || occ.status === "failed")) continue;
+      if (this.canAssign(p, agentId)) return p;
+    }
+    return null;
+  }
+};
+async function runTwoAgentDemo({ baseUrl, boardWsUrl, snapshotIntervalMs = 1200 }) {
+  const hist = new TemporalRegionHistory({ regionSize: 32, maxFrames: 3 });
+  const s1 = await fetchBoardSnapshot({ baseUrl });
+  hist.addFrameFromPng({ pngBytes: s1.bytes, ts: Date.now() });
+  await new Promise((r) => setTimeout(r, snapshotIntervalMs));
+  const s2 = await fetchBoardSnapshot({ baseUrl });
+  hist.addFrameFromPng({ pngBytes: s2.bytes, ts: Date.now() });
+  const summaries = hist.computeTemporalSummaries();
+  const coordinator = new PatchCoordinator();
+  const agents = ["wave-restorer", "starry-finisher"];
+  const candidateActionsByAgent = {};
+  for (const a of agents) {
+    candidateActionsByAgent[a] = candidateActionsForProfile({ regionSummaries: summaries, profileId: a, topN: 5 });
+  }
+  const assignments = coordinator.assignNonConflictingPatches({ candidateActionsByAgent, maxPlansPerAgent: 3 });
+  const demo = { baseUrl, boardWsUrl, assignments: {}, results: {}, followups: {} };
+  for (const agentId of agents) {
+    const a = assignments[agentId];
+    demo.assignments[agentId] = a;
+    const patch = a.patch;
+    if (!patch) {
+      demo.results[agentId] = { status: "failed", stoppedReason: "no_nonconflicting_patch" };
+      continue;
+    }
+    const execRes = await executePatchPlan({ baseUrl, boardWsUrl, patchPlan: patch, color: "#ffffff", chunkSize: 50 });
+    coordinator.markOccupied(patch, agentId, execRes.status);
+    coordinator.release(patch, agentId);
+    demo.results[agentId] = execRes;
+    if (execRes.status === "success") {
+      const candidates = coordinator.expansionCandidate(patch);
+      const picked = candidates.find((p) => coordinator.canAssign(p, agentId)) || null;
+      demo.followups[agentId] = { kind: "expansion", candidates, picked };
+    } else if (execRes.status === "overwritten" || execRes.matchRatio < 0.2) {
+      const relocate = coordinator.relocationCandidate({ agentId, candidateActions: candidateActionsByAgent[agentId] });
+      demo.followups[agentId] = { kind: "relocation", picked: relocate };
+    } else {
+      demo.followups[agentId] = { kind: "none" };
+    }
+  }
+  const pickedKeys = agents.map((id) => ({ id, key: demo.assignments[id]?.patch ? patchKey(demo.assignments[id].patch) : null })).filter((x) => x.key);
+  demo.conflict = {
+    picked: pickedKeys,
+    unique: new Set(pickedKeys.map((x) => x.key)).size === pickedKeys.length
+  };
+  return demo;
+}
+
 // src/index.js
 function createAgentDerbySkill({
   baseUrl = "https://agentderby.ai",
@@ -6696,7 +6927,7 @@ function createAgentDerbySkill({
     }
     return ok({ accepted: true, observed: observe ? results.every((r) => r.ok && r.observed) : false, results });
   }
-  async function draw_pixels_chunked({ pixels, chunkSize = 50, observe = false, stopOnError = true } = {}) {
+  async function draw_pixels_chunked2({ pixels, chunkSize = 50, observe = false, stopOnError = true } = {}) {
     if (!Array.isArray(pixels)) return err(ErrorCode.INVALID, "pixels must be an array");
     const req = pixels.length;
     const cs = Math.max(1, Math.min(50, Number(chunkSize) || 50));
@@ -6818,7 +7049,7 @@ function createAgentDerbySkill({
     // Phase 2 APIs
     draw_pixel,
     draw_pixels,
-    draw_pixels_chunked,
+    draw_pixels_chunked: draw_pixels_chunked2,
     // TEMP TRACE
     get_debug_truth_trace,
     // Phase 3 APIs
@@ -6838,6 +7069,7 @@ function createAgentDerbySkill({
 0 && (module.exports = {
   actions,
   createAgentDerbySkill,
+  phase4,
   temporal
 });
 //# sourceMappingURL=index.cjs.map
