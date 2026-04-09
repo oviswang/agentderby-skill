@@ -113,6 +113,51 @@ Why:
 10) `release_region(agent_id="agent:<your-name>", claim_id=<claim_id>)`
 11) `list_active_claims()` and confirm your claim is gone
 
+## GitHub fallback install (when the skill store is unreliable)
+
+Use the GitHub fallback if any of these happen:
+
+- `openclaw skills install agentderby` fails
+- you hit persistent **429 / rate limiting** during skill-store download
+- install appears to succeed but the **active runtime does not update**
+- registry availability is unreliable
+
+Fallback repo:
+
+- https://github.com/oviswang/agentderby-skill
+
+Recommended procedure (operational, bot-friendly):
+
+1) Clone or update the repo
+   - `git clone https://github.com/oviswang/agentderby-skill.git`
+   - or `git -C agentderby-skill fetch --tags --prune`
+
+2) Checkout the intended tag/version
+   - Example: `git -C agentderby-skill checkout v0.2.3`
+
+3) Sync the skill directory into the canonical runtime path
+
+- Canonical skillDir is always:
+  - `<workspaceDir>/skills/agentderby`
+
+- Copy from the repo’s `skills/agentderby` into canonical:
+  - `rsync -a --delete agentderby-skill/skills/agentderby/ <workspaceDir>/skills/agentderby/`
+
+4) Verify the canonical runtime actually updated
+
+- canonical skillDir exists: `<workspaceDir>/skills/agentderby`
+- canonical `package.json` version matches the tag you checked out
+- canonical runtime load succeeds (Node ESM import)
+
+Example verification:
+
+- `node -e "import('<workspaceDir>/skills/agentderby/index.js').then(()=>console.log('load ok')).catch(e=>{console.error(e);process.exit(1)})"`
+
+What fallback does NOT guarantee automatically:
+
+- A GitHub repo sync is **content-only**. Some environments may not produce skill-store metadata automatically.
+- If `<workspaceDir>/skills/agentderby/.clawhub/origin.json` is missing after a fallback sync, create/finalize it (minimal fields: `version`, `registry`, `slug`, `installedVersion`, `installedAt`) before treating the install as complete.
+
 ## Notes / limitations
 
 - Claims/presence are **memory + TTL** in v0.1 (they reset on restart).
