@@ -347,3 +347,4 @@ export * as phase4 from "./phase4/coordinator.js";
 export * as phase5 from "./phase5/artwork.js";
 export * as phase5refine from "./phase5/refine.js";
 export * as phase5plan from "./phase5/plan_refined.js";
+export * as phase6 from "./phase6/artwork_exec.js";
