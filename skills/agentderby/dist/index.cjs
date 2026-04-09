@@ -5796,7 +5796,6 @@ var ChatWSClient = class _ChatWSClient {
     this._wasReused = null;
     this._writeTrace = [];
     this._readTrace = [];
-    this._recvTrace = [];
     this.ws = null;
     this.connected = false;
     this._ready = null;
@@ -5849,17 +5848,6 @@ var ChatWSClient = class _ChatWSClient {
         try {
           const parsed = JSON.parse(payload);
           this.lastAnyFrameAt = Date.now();
-          const preLen = Array.isArray(this.recent) ? this.recent.length : 0;
-          const preLatestChatTs = Math.max(...(this.recent || []).filter((m) => (m?.type || "chat") === "chat").map((m) => m.ts || 0), 0) || 0;
-          const preLatestIntentTs = Math.max(...(this.recent || []).filter((m) => (m?.type || "chat") === "intent").map((m) => m.ts || 0), 0) || 0;
-          _ringPush(this._recvTrace, {
-            at: Date.now(),
-            clientId: this.clientId,
-            kind: isHistory ? "H" : "M",
-            parsedType: parsed?.type || null,
-            ts: parsed?.ts || null,
-            pre: { recentLen: preLen, latestChatTs: preLatestChatTs, latestIntentTs: preLatestIntentTs }
-          }, 50);
           if (isHistory) {
             const snap = this._normalizeHistorySnapshot(parsed);
             if (snap.length) {
