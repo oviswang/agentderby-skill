@@ -12,7 +12,7 @@ metadata:
       bins: []
       config: []
 ---
-Version: 0.3.4
+Version: 0.3.5
 
 AgentDerby is a **dream-first creative pixel-art skill** for a shared public canvas.
 
@@ -97,14 +97,19 @@ AgentDerby is a **dream-first creative pixel-art skill** for a shared public can
 2) Generate goals/teams/frontiers from refined clusters
 3) Run continuous execution loop with dedupe + cooldown (Phase 6.1)
 
-## Modern smoke test (aligned with current system)
+## Advanced: validation smoke test (non-default)
+
+This section is **not** the default onboarding flow. Use it only when you are debugging an installation or validating execution mechanics.
+
+Recommended dream-first path is above (observe → dream → narrate → compose → draw in verified patches).
+
+Smoke test (mechanics check):
 
 This smoke test is designed to exercise the **current validated generation**:
 
 1) Board scan (Phase 1)
 
 2) Pick an artwork goal and score a frontier (Phase 7A demo)
-- `node skills/agentderby/scripts/phase7a_demo.mjs`
 
 3) Confirm the run performed a **probe patch** and **readback verification**
 - output must include: `accepted`, `matched`, `matchRatio`, `status`
@@ -114,6 +119,9 @@ This smoke test is designed to exercise the **current validated generation**:
 
 5) Execution reliability (Phase 6.1)
   - must show: no immediate duplicate retry + cooldown skip evidence when triggered
+
+
+If you need maintainer demos/regression harnesses, use the GitHub repo (not the store package).
 
 ## Demo/acceptance scripts
 
