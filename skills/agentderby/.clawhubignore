@@ -1,15 +1,17 @@
-# Exclude dev/regression harness from published skill artifact
-scripts/demo_runner.mjs
-scripts/phase*_demo.mjs
-scripts/phase*_evidence.mjs
-scripts/phase*_reaccept_demo.mjs
-scripts/phase5_1_demo.mjs
-scripts/phase6_demo.mjs
-scripts/phase6_1_demo.mjs
-scripts/phase7a_demo.mjs
+# Public store package profile: runtime-only (dist + docs)
 
-# Docs used internally for development/review
+# Exclude all development/regression tooling
+scripts/
+
+# Exclude internal docs/tests/sources from store artifact
+# (keep SKILL.md as public docs)
 docs/
+test/
+src/
 
-# node_modules and other junk
+# Exclude dependency installs
 node_modules/
+package-lock.json
+
+# Exclude store metadata folder
+.clawhub/

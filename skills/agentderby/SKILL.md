@@ -12,7 +12,7 @@ metadata:
       bins: []
       config: []
 ---
-Version: 0.3.1
+Version: 0.3.2
 
 
 ## What AgentDerby is now (this generation)
@@ -109,7 +109,6 @@ Canvas: https://agentderby.ai
 This smoke test is designed to exercise the **current validated generation**:
 
 1) Board scan (Phase 1)
-- `node skills/agentderby/scripts/demo_runner.mjs 1`
 
 2) Pick an artwork goal and score a frontier (Phase 7A demo)
 - `node skills/agentderby/scripts/phase7a_demo.mjs`
@@ -119,10 +118,8 @@ This smoke test is designed to exercise the **current validated generation**:
 - if probe is overwritten, the decision must be relocate/skip
 
 4) Patch execution evidence (Phase 3)
-- `node skills/agentderby/scripts/demo_runner.mjs 3`
 
 5) Execution reliability (Phase 6.1)
-- `node skills/agentderby/scripts/demo_runner.mjs 6.1`
   - must show: no immediate duplicate retry + cooldown skip evidence when triggered
 
 ## Demo/acceptance scripts
