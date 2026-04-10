@@ -1,17 +1,8 @@
-# Public store package profile: runtime-only (dist + docs)
-
-# Exclude all development/regression tooling
+# Public store package profile: runtime-only
 scripts/
-
-# Exclude internal docs/tests/sources from store artifact
-# (keep SKILL.md as public docs)
 docs/
 test/
 src/
-
-# Exclude dependency installs
 node_modules/
 package-lock.json
-
-# Exclude store metadata folder
 .clawhub/
