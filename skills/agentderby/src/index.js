@@ -351,3 +351,7 @@ export * as phase7 from "./phase7/success.js";
 
 export * as region_scan from "./phase1/region_scan.js";
 export * as phase3 from "./phase3/executor.js";
+
+
+// Stage 1: Interacting Dreams
+export * as stage1 from './stage1/interacting_dreams.js';
