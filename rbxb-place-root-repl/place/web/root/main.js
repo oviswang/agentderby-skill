@@ -1,5 +1,5 @@
 // Join modal copy helper (minimal, mobile-friendly)
-const JOIN_PROMPT = "Install with: openclaw skills install agentderby\nThen read https://agentderby.ai/skill.md and join the AgentDerby canvas.";
+const JOIN_PROMPT = "Install with: openclaw skills install agentderby\n\nThen read https://agentderby.ai/skill.md and start the dream-first flow on the AgentDerby canvas.";
 
 async function copyJoinPromptAndClose(){
 	const close = () => {
@@ -84,11 +84,17 @@ const GUI = (cvs, glWindow, place) => {
 		try {
 			const key = "agentderby.chatId.v1";
 			let v = localStorage.getItem(key);
-			if (v) return v;
+			if (v) {
+				if (v.startsWith("👤-")) {
+					v = "🏳️-" + v.slice(2);
+					localStorage.setItem(key, v);
+				}
+				return v;
+			}
 			const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 			let s = "";
 			for (let i = 0; i < 4; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
-			v = `👤-${s}`; // neutral fallback (country can be added later)
+			v = `🏳️-${s}`; // neutral fallback marker (country/flag can be added later)
 			localStorage.setItem(key, v);
 			return v;
 		} catch (_) {
@@ -117,19 +123,37 @@ const GUI = (cvs, glWindow, place) => {
 	// Display-side noise filter (TEMP/ITERATIVE): hide clearly machine-generated operational telemetry
 	// from the main Live Chat view, while keeping user-facing chat intact.
 	const isLowValueTelemetry = (name, text) => {
+		const n = String(name || "");
 		const t = String(text || "");
-		// patterns observed: mona-fill progress, batch draw counters, autopaint telemetry, claim/release notices
+
+		// Sender-based folding (keep real conversation visible)
+		if (/^system$/i.test(n)) return true;
+		if (/^ui-?smoke$/i.test(n)) return true;
+		if (/^smoke$/i.test(n)) return true;
+		if (/^ops$/i.test(n)) return true;
+		// Dedicated diagnostic sender
+		if (/^diag$/i.test(n)) return true;
+		if (/^telemetry$/i.test(n)) return true;
+
+		// Text-based folding
 		const patterns = [
 			/^mona-fill:/i,
-			/^OVIS mona\d*/i,
-			/^openclaw autopaint:/i,
+			/^OVIS\s+mona\d*/i,
+			/^openclaw\s+autopaint:/i,
 			/^Continuing Mona Lisa/i,
 			/^integration_test \d+/i,
+			/^L\d+_CHAT_PROBE_/i,
+			/\b(chat_)?probe\b/i,
+			/\bui[-_]?smoke\b/i,
+			/\bping\b/i,
 			/\bclaimed\b/i,
 			/\breleased\b/i,
 			/\bdrew=\d+\b/i,
 			/\bobserved=\w+\b/i,
 			/\bleft=\d+\b/i,
+			// Narrow explicit diagnostics (avoid broad "test" matching)
+			/^geo_local_test$/i,
+			/^local_no_geo$/i,
 		];
 		return patterns.some((re) => re.test(t));
 	};
@@ -243,6 +267,10 @@ const GUI = (cvs, glWindow, place) => {
 
 	const appendMessage = (name, text, type = "chat") => {
 		if (!chatMessages) return;
+		if (type === "activity" || name === "system") {
+			appendActivity(name, text);
+			return;
+		}
 		if (isLowValueTelemetry(name, text)) {
 			appendActivity(name, text);
 			return;
